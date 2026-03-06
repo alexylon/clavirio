@@ -17,6 +17,7 @@ const ACCENT: Color = Color::Cyan;
 const DIM_TEXT: Color = Color::DarkGray;
 const CORRECT: Color = Color::Rgb(100, 180, 255);
 const INCORRECT: Color = Color::Rgb(255, 170, 60);
+const HINT: Color = Color::Rgb(60, 80, 100);
 
 pub struct Regions {
     header: Rect,
@@ -89,10 +90,19 @@ pub fn draw(
 ) {
     let kbd_rects = build_keyboard_rects(regions.keyboard_area, rows);
 
+    let hint_coord = app
+        .document
+        .as_ref()
+        .and_then(|d| d.expected_char())
+        .and_then(|ch| {
+            let key = KeyCode::Char(ch.to_ascii_uppercase());
+            grid_map.get(&key).copied()
+        });
+
     draw_header(frame, app, regions.header);
     draw_text_panel(frame, app, regions.text_area);
     draw_search_overlay(frame, app, regions.search_area);
-    draw_keyboard(frame, rows, &kbd_rects);
+    draw_keyboard(frame, rows, &kbd_rects, hint_coord);
     draw_key_highlight(frame, app, &kbd_rects, grid_map);
 }
 
@@ -279,7 +289,12 @@ fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(cursor_line).block(block), inner);
 }
 
-fn draw_keyboard(frame: &mut Frame, rows: &[Vec<KeyDef>], kbd_rects: &[Rc<[Rect]>]) {
+fn draw_keyboard(
+    frame: &mut Frame,
+    rows: &[Vec<KeyDef>],
+    kbd_rects: &[Rc<[Rect]>],
+    hint_coord: Option<GridCoord>,
+) {
     for (row_idx, row) in rows.iter().enumerate() {
         let Some(row_rects) = kbd_rects.get(row_idx) else {
             continue;
@@ -290,10 +305,18 @@ fn draw_keyboard(frame: &mut Frame, rows: &[Vec<KeyDef>], kbd_rects: &[Rc<[Rect]
                 continue;
             };
 
+            let is_hint = hint_coord == Some((row_idx, col_idx));
+
+            let border_color = if is_hint { ACCENT } else { DIM_BORDER };
             let block = Block::new()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(DIM_BORDER));
+                .border_style(Style::new().fg(border_color))
+                .style(if is_hint {
+                    Style::new().bg(HINT)
+                } else {
+                    Style::new()
+                });
 
             frame.render_widget(block, cell);
 
