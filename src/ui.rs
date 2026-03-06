@@ -100,8 +100,12 @@ pub fn draw(
         });
 
     draw_header(frame, app, regions.header);
-    draw_text_panel(frame, app, regions.text_area);
-    draw_search_overlay(frame, app, regions.search_area);
+    if app.viewing_history {
+        draw_history(frame, app, regions.text_area);
+    } else {
+        draw_text_panel(frame, app, regions.text_area);
+        draw_search_overlay(frame, app, regions.search_area);
+    }
     draw_keyboard(frame, rows, &kbd_rects, hint_coord);
     draw_key_highlight(frame, app, &kbd_rects, grid_map);
 }
@@ -132,10 +136,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
                 format!("{}", app.correct_count),
                 Style::new().fg(Color::White),
             ),
-            Span::styled(
-                format!("  {mins}:{secs:02}"),
-                Style::new().fg(DIM_TEXT),
-            ),
+            Span::styled(format!("  {mins}:{secs:02}"), Style::new().fg(DIM_TEXT)),
         ])),
         left,
     );
@@ -148,10 +149,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             Style::new().fg(DIM_TEXT),
         ));
     }
-    frame.render_widget(
-        Paragraph::new(Line::from(center_spans)).centered(),
-        center,
-    );
+    frame.render_widget(Paragraph::new(Line::from(center_spans)).centered(), center);
 
     let wpm = app.wpm();
     frame.render_widget(
@@ -177,7 +175,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let panel_height = if app.document.is_none() && app.error.is_none() {
-        (crate::lessons::LESSONS.len() as u16) + 4
+        (crate::lessons::LESSONS.len() as u16) + 5
     } else {
         6
     };
@@ -216,10 +214,11 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                     Span::styled(format!("  {}", lesson.label), Style::new().fg(DIM_TEXT)),
                 ]));
             }
-            frame.render_widget(
-                Paragraph::new(lines).block(block).centered(),
-                inner,
-            );
+            lines.push(Line::from(vec![
+                Span::styled("  h", Style::new().fg(ACCENT).bold()),
+                Span::styled("  History", Style::new().fg(DIM_TEXT)),
+            ]));
+            frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {
             let pct = if app.total_count > 0 {
@@ -253,7 +252,11 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                     if i > 0 {
                         spans.push(Span::styled("  ", Style::new().fg(DIM_TEXT)));
                     }
-                    let label = if *ch == ' ' { "space".to_string() } else { ch.to_string() };
+                    let label = if *ch == ' ' {
+                        "space".to_string()
+                    } else {
+                        ch.to_string()
+                    };
                     spans.push(Span::styled(label, Style::new().fg(INCORRECT).bold()));
                     spans.push(Span::styled(
                         format!(" {acc:.0}%"),
@@ -262,10 +265,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                 }
                 lines.push(Line::from(spans));
             }
-            frame.render_widget(
-                Paragraph::new(lines).block(block).centered(),
-                inner,
-            );
+            frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) => {
             let pos = doc.cursor_position();
@@ -307,13 +307,13 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
 
             let mut lines = vec![Line::from(spans)];
             for upcoming in doc.upcoming_lines(2) {
-                lines.push(Line::from(Span::styled(upcoming, Style::new().fg(DIM_TEXT))));
+                lines.push(Line::from(Span::styled(
+                    upcoming,
+                    Style::new().fg(DIM_TEXT),
+                )));
             }
 
-            frame.render_widget(
-                Paragraph::new(lines).block(block).centered(),
-                inner,
-            );
+            frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
     }
 }
@@ -340,6 +340,87 @@ fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
     ]);
 
     frame.render_widget(Paragraph::new(cursor_line).block(block), inner);
+}
+
+fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
+    let records = &app.history;
+    let show_count = 10;
+    let recent: Vec<_> = records.iter().rev().take(show_count).collect();
+    let panel_h = (recent.len() as u16 + 5).min(area.height);
+
+    let [inner] = Layout::vertical([Constraint::Length(panel_h)])
+        .flex(Flex::Center)
+        .areas(area);
+
+    let block = Block::new()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(DIM_BORDER))
+        .title(Span::styled(" History ", Style::new().fg(ACCENT).bold()))
+        .padding(Padding::new(2, 2, 1, 0));
+
+    let mut lines = Vec::new();
+
+    if recent.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No sessions yet",
+            Style::new().fg(DIM_TEXT),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
+            format!("{:<18} {:>5}  {:>5}  {:>6}", "date", "wpm", "acc", "time"),
+            Style::new().fg(DIM_TEXT),
+        )));
+
+        for r in &recent {
+            let display_ts = if r.timestamp.len() >= 16 {
+                &r.timestamp[..16]
+            } else {
+                &r.timestamp
+            };
+            let mins = (r.duration_secs as u64) / 60;
+            let secs = (r.duration_secs as u64) % 60;
+            let status = if r.completed { "" } else { "*" };
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "{:<18} {:>5.0}  {:>4.0}%  {:>2}:{:02}{}",
+                    display_ts, r.wpm, r.accuracy, mins, secs, status
+                ),
+                Style::new().fg(Color::White),
+            )));
+        }
+
+        // Averages from completed sessions
+        let completed: Vec<_> = records.iter().filter(|r| r.completed).collect();
+        if !completed.is_empty() {
+            let avg_wpm: f64 =
+                completed.iter().map(|r| r.wpm).sum::<f64>() / completed.len() as f64;
+            let avg_acc: f64 =
+                completed.iter().map(|r| r.accuracy).sum::<f64>() / completed.len() as f64;
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Avg: ", Style::new().fg(DIM_TEXT)),
+                Span::styled(format!("{avg_wpm:.0} wpm"), Style::new().fg(ACCENT).bold()),
+                Span::styled("  ", Style::new().fg(DIM_TEXT)),
+                Span::styled(
+                    format!("{avg_acc:.0}% acc"),
+                    Style::new().fg(CORRECT).bold(),
+                ),
+                Span::styled(
+                    format!("  ({} sessions)", completed.len()),
+                    Style::new().fg(DIM_TEXT),
+                ),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Esc to go back  (* = incomplete)",
+        Style::new().fg(DIM_TEXT),
+    )));
+
+    frame.render_widget(Paragraph::new(lines).block(block), inner);
 }
 
 fn draw_keyboard(

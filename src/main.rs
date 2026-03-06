@@ -1,4 +1,5 @@
 mod app;
+mod history;
 mod input;
 mod keyboard;
 mod lessons;

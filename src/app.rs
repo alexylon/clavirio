@@ -1,11 +1,66 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crossterm::event::KeyCode;
 
 use crate::input::{Action, InputEvent, Mode};
+
+fn chrono_now() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let days = secs / 86400;
+    let time = secs % 86400;
+    let h = time / 3600;
+    let m = (time % 3600) / 60;
+    let s = time % 60;
+    // days since 1970-01-01
+    let (y, mo, d) = days_to_ymd(days);
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
+    let mut y = 1970;
+    loop {
+        let year_days = if is_leap(y) { 366 } else { 365 };
+        if days < year_days {
+            break;
+        }
+        days -= year_days;
+        y += 1;
+    }
+    let leap = is_leap(y);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut mo = 0;
+    for (i, &md) in month_days.iter().enumerate() {
+        if days < md {
+            mo = i as u64 + 1;
+            break;
+        }
+        days -= md;
+    }
+    (y, mo, days + 1)
+}
+
+fn is_leap(y: u64) -> bool {
+    y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Progress {
@@ -152,6 +207,8 @@ pub struct App {
     pub start_time: Option<Instant>,
     pub end_time: Option<Instant>,
     pub key_stats: HashMap<char, (u32, u32)>,
+    pub viewing_history: bool,
+    pub history: Vec<crate::history::SessionRecord>,
 }
 
 impl App {
@@ -170,6 +227,8 @@ impl App {
             start_time: None,
             end_time: None,
             key_stats: HashMap::new(),
+            viewing_history: false,
+            history: Vec::new(),
         }
     }
 
@@ -194,6 +253,27 @@ impl App {
             }
             None => 0.0,
         }
+    }
+
+    fn save_history(&self, completed: bool) {
+        if self.total_count == 0 {
+            return;
+        }
+        let elapsed = self.elapsed_secs();
+        let accuracy = if self.total_count > 0 {
+            self.correct_count as f64 / self.total_count as f64 * 100.0
+        } else {
+            0.0
+        };
+        crate::history::save_session(crate::history::SessionRecord {
+            timestamp: chrono_now(),
+            wpm: self.wpm(),
+            accuracy,
+            correct: self.correct_count,
+            total: self.total_count,
+            duration_secs: elapsed,
+            completed,
+        });
     }
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, f32)> {
@@ -295,8 +375,15 @@ impl App {
             }
 
             Mode::MainMenu => {
+                if self.viewing_history {
+                    self.viewing_history = false;
+                    return false;
+                }
                 if self.document.is_none() && self.error.is_none() {
                     return true;
+                }
+                if !self.is_finished() {
+                    self.save_history(false);
                 }
                 self.document = None;
                 self.error = None;
@@ -309,6 +396,11 @@ impl App {
             }
 
             Mode::Typing => match action.key.code {
+                _ if self.viewing_history => {}
+                KeyCode::Char('h') if self.document.is_none() => {
+                    self.history = crate::history::load_history();
+                    self.viewing_history = true;
+                }
                 KeyCode::Char(typed) if self.document.is_none() => {
                     self.try_select_lesson(typed);
                 }
@@ -376,6 +468,7 @@ impl App {
                 doc.advance();
                 if doc.progress == Progress::Finished {
                     self.end_time = Some(Instant::now());
+                    self.save_history(true);
                 }
             }
         } else {
