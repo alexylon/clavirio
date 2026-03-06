@@ -114,6 +114,7 @@ pub struct App {
     pub correct_count: u32,
     pub total_count: u32,
     pub last_correct: bool,
+    pub last_error_char: Option<char>,
     pub highlighted_key: Option<KeyCode>,
     pub highlight_until: Option<Instant>,
     pub start_time: Option<Instant>,
@@ -130,6 +131,7 @@ impl App {
             correct_count: 0,
             total_count: 0,
             last_correct: false,
+            last_error_char: None,
             highlighted_key: None,
             highlight_until: None,
             start_time: None,
@@ -244,6 +246,7 @@ impl App {
         if typed == expected {
             self.correct_count += 1;
             self.last_correct = true;
+            self.last_error_char = None;
             if let Some(doc) = self.document.as_mut() {
                 doc.advance();
                 if doc.progress == Progress::Finished {
@@ -252,6 +255,7 @@ impl App {
             }
         } else {
             self.last_correct = false;
+            self.last_error_char = Some(typed);
         }
 
         self.highlight_until = Some(Instant::now() + std::time::Duration::from_millis(400));

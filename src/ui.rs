@@ -247,10 +247,17 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
 
             let mut chars = remaining.chars();
             if let Some(next_ch) = chars.next() {
-                spans.push(Span::styled(
-                    next_ch.to_string(),
-                    Style::new().fg(Color::Black).bg(Color::White),
-                ));
+                if let Some(err_ch) = app.last_error_char {
+                    spans.push(Span::styled(
+                        err_ch.to_string(),
+                        Style::new().fg(Color::Black).bg(INCORRECT),
+                    ));
+                } else {
+                    spans.push(Span::styled(
+                        next_ch.to_string(),
+                        Style::new().fg(Color::Black).bg(Color::White),
+                    ));
+                }
                 let rest: String = chars.collect();
                 if !rest.is_empty() {
                     spans.push(Span::styled(rest, Style::new().fg(Color::White)));
