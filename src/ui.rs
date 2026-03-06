@@ -241,7 +241,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                     format!("  ({}/{})", app.correct_count, app.total_count),
                     Style::new().fg(DIM_TEXT),
                 ),
-                Span::styled("  Ctrl-F", Style::new().fg(ACCENT)),
+                Span::styled("  r", Style::new().fg(ACCENT).bold()),
+                Span::styled(" restart  ", Style::new().fg(DIM_TEXT)),
+                Span::styled("Ctrl-F", Style::new().fg(ACCENT).bold()),
                 Span::styled(" new file", Style::new().fg(DIM_TEXT)),
             ])];
             let worst = app.worst_keys(5);

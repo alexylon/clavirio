@@ -4,12 +4,13 @@ use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    Quit,
     OpenSearch,
     Search,
     SubmitSearch,
     CancelSearch,
     Typing,
+    Restart,
+    MainMenu,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -73,7 +74,8 @@ fn classify_key(key: &KeyEvent, in_search: &mut bool) -> Mode {
                 *in_search = true;
                 Mode::OpenSearch
             }
-            (KeyCode::Esc, KeyModifiers::NONE) => Mode::Quit,
+            (KeyCode::Char('r'), KeyModifiers::CONTROL) => Mode::Restart,
+            (KeyCode::Esc, KeyModifiers::NONE) => Mode::MainMenu,
             _ => Mode::Typing,
         }
     }

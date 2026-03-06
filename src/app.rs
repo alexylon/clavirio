@@ -62,6 +62,18 @@ impl Document {
         Self::from_text(&content)
     }
 
+    pub fn reset(&mut self) {
+        self.line_idx = 0;
+        self.char_idx = 0;
+        self.current_line = self
+            .lines
+            .iter()
+            .find(|l| !l.is_empty())
+            .cloned()
+            .unwrap_or_default();
+        self.progress = Progress::Active;
+    }
+
     pub fn cursor_position(&self) -> usize {
         self.char_idx
     }
@@ -199,6 +211,24 @@ impl App {
         keys
     }
 
+    pub fn is_finished(&self) -> bool {
+        self.document
+            .as_ref()
+            .is_some_and(|d| d.progress == Progress::Finished)
+    }
+
+    fn restart(&mut self) {
+        if let Some(doc) = self.document.as_mut() {
+            doc.reset();
+        }
+        self.correct_count = 0;
+        self.total_count = 0;
+        self.start_time = None;
+        self.end_time = None;
+        self.key_stats.clear();
+        self.last_error_char = None;
+    }
+
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
         match event {
             InputEvent::Tick => {
@@ -216,8 +246,6 @@ impl App {
 
     fn handle_action(&mut self, action: Action) -> bool {
         match action.mode {
-            Mode::Quit => return true,
-
             Mode::OpenSearch => {
                 self.searching = true;
                 self.file_path_buf.clear();
@@ -260,9 +288,32 @@ impl App {
                 self.file_path_buf.clear();
             }
 
+            Mode::Restart => {
+                if self.document.is_some() {
+                    self.restart();
+                }
+            }
+
+            Mode::MainMenu => {
+                if self.document.is_none() && self.error.is_none() {
+                    return true;
+                }
+                self.document = None;
+                self.error = None;
+                self.correct_count = 0;
+                self.total_count = 0;
+                self.start_time = None;
+                self.end_time = None;
+                self.key_stats.clear();
+                self.last_error_char = None;
+            }
+
             Mode::Typing => match action.key.code {
                 KeyCode::Char(typed) if self.document.is_none() => {
                     self.try_select_lesson(typed);
+                }
+                KeyCode::Char('r') if self.is_finished() => {
+                    self.restart();
                 }
                 KeyCode::Char(typed) if self.last_error_char.is_none() => {
                     self.handle_typed_char(typed);
