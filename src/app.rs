@@ -104,6 +104,14 @@ impl Document {
             }
         }
     }
+
+    pub fn retreat(&mut self) -> bool {
+        if self.char_idx > 0 {
+            self.char_idx -= 1;
+            return true;
+        }
+        false
+    }
 }
 
 pub struct App {
@@ -222,11 +230,21 @@ impl App {
                 self.file_path_buf.clear();
             }
 
-            Mode::Typing => {
-                if let KeyCode::Char(typed) = action.key.code {
+            Mode::Typing => match action.key.code {
+                KeyCode::Char(typed) if self.last_error_char.is_none() => {
                     self.handle_typed_char(typed);
                 }
-            }
+                KeyCode::Backspace => {
+                    if self.last_error_char.is_some() {
+                        self.last_error_char = None;
+                    } else if let Some(doc) = self.document.as_mut() {
+                        if doc.retreat() {
+                            self.correct_count = self.correct_count.saturating_sub(1);
+                        }
+                    }
+                }
+                _ => {}
+            },
         }
         false
     }

@@ -246,18 +246,28 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
             }
 
             let mut chars = remaining.chars();
-            if let Some(next_ch) = chars.next() {
-                if let Some(err_ch) = app.last_error_char {
+            if let Some(err_ch) = app.last_error_char {
+                if let Some(_expected) = chars.next() {
                     spans.push(Span::styled(
                         err_ch.to_string(),
                         Style::new().fg(Color::Black).bg(INCORRECT),
                     ));
-                } else {
+                }
+                if let Some(cursor_ch) = chars.next() {
                     spans.push(Span::styled(
-                        next_ch.to_string(),
+                        cursor_ch.to_string(),
                         Style::new().fg(Color::Black).bg(Color::White),
                     ));
                 }
+                let rest: String = chars.collect();
+                if !rest.is_empty() {
+                    spans.push(Span::styled(rest, Style::new().fg(Color::White)));
+                }
+            } else if let Some(next_ch) = chars.next() {
+                spans.push(Span::styled(
+                    next_ch.to_string(),
+                    Style::new().fg(Color::Black).bg(Color::White),
+                ));
                 let rest: String = chars.collect();
                 if !rest.is_empty() {
                     spans.push(Span::styled(rest, Style::new().fg(Color::White)));
