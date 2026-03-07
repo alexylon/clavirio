@@ -256,11 +256,12 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let panel_height = if app.document.is_none() && app.error.is_none() {
-        (crate::lessons::LESSONS.len() as u16) + 10
+    let ideal_height = if app.document.is_none() && app.error.is_none() {
+        (crate::lessons::LESSONS.len() as u16) + 7
     } else {
         7
     };
+    let panel_height = ideal_height.min(area.height);
     let [inner] = Layout::vertical([Constraint::Length(panel_height)])
         .flex(Flex::Center)
         .areas(area);
@@ -284,28 +285,48 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
 
     match &app.document {
         None => {
+            let lessons = crate::lessons::LESSONS;
+            // padding: 1 top + 1 bottom, borders: 2, hints: 2 (blank + bar)
+            let chrome = 6_u16;
+            let visible_slots = inner.height.saturating_sub(chrome) as usize;
+
+            // Scroll offset so the selected lesson is always visible
+            let scroll =
+                if visible_slots >= lessons.len() || app.selected_lesson < visible_slots / 2 {
+                    0
+                } else if app.selected_lesson + visible_slots / 2 >= lessons.len() {
+                    lessons.len().saturating_sub(visible_slots)
+                } else {
+                    app.selected_lesson.saturating_sub(visible_slots / 2)
+                };
+
+            let max_label = lessons.iter().map(|l| l.label.len()).max().unwrap_or(20);
+
             let mut lines: Vec<Line> = Vec::new();
-            for (i, lesson) in crate::lessons::LESSONS.iter().enumerate() {
+            for (i, lesson) in lessons.iter().enumerate().skip(scroll).take(visible_slots) {
                 let selected = i == app.selected_lesson;
                 let marker = if selected { "▸" } else { " " };
                 let label_fg = if selected { Color::White } else { DIM_TEXT };
                 let marker_fg = if selected { ACCENT } else { DIM_TEXT };
                 lines.push(Line::from(vec![
                     Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
-                    Span::styled(format!("{:<20}", lesson.label), Style::new().fg(label_fg)),
+                    Span::styled(
+                        format!("{:<width$}", lesson.label, width = max_label),
+                        Style::new().fg(label_fg),
+                    ),
                 ]));
             }
             lines.push(Line::from(""));
-            let shortcut = |key: &str, label: &str| {
-                Line::from(vec![
-                    Span::styled(format!("{key:>6}"), Style::new().fg(ACCENT).bold()),
-                    Span::styled(format!("  {label}"), Style::new().fg(DIM_TEXT)),
-                ])
-            };
-            lines.push(shortcut("Enter", "Start lesson"));
-            lines.push(shortcut("h", "History"));
-            lines.push(shortcut("^F", "Open file"));
-            lines.push(shortcut("Esc", "Quit"));
+            lines.push(Line::from(vec![
+                Span::styled("Enter", Style::new().fg(ACCENT)),
+                Span::styled(" start  ", Style::new().fg(DIM_TEXT)),
+                Span::styled("h", Style::new().fg(ACCENT)),
+                Span::styled(" history  ", Style::new().fg(DIM_TEXT)),
+                Span::styled("^F", Style::new().fg(ACCENT)),
+                Span::styled(" open file  ", Style::new().fg(DIM_TEXT)),
+                Span::styled("Esc", Style::new().fg(ACCENT)),
+                Span::styled(" quit", Style::new().fg(DIM_TEXT)),
+            ]));
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {
