@@ -1,131 +1,19 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::input::{Action, InputEvent, Mode};
+use crate::input::InputEvent;
 
 fn chrono_now() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let local_secs = utc_to_local(secs as i64) as u64;
-    let days = local_secs / 86400;
-    let time = local_secs % 86400;
-    let h = time / 3600;
-    let m = (time % 3600) / 60;
-    let s = time % 60;
-    // days since 1970-01-01
-    let (y, mo, d) = days_to_ymd(days);
-    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}")
-}
-
-#[cfg(unix)]
-fn utc_to_local(epoch: i64) -> i64 {
-    use std::mem::MaybeUninit;
-    extern "C" {
-        fn localtime_r(timep: *const i64, result: *mut Tm) -> *mut Tm;
-    }
-    #[repr(C)]
-    struct Tm {
-        tm_sec: i32,
-        tm_min: i32,
-        tm_hour: i32,
-        tm_mday: i32,
-        tm_mon: i32,
-        tm_year: i32,
-        tm_wday: i32,
-        tm_yday: i32,
-        tm_isdst: i32,
-        tm_gmtoff: i64,
-        _tm_zone: *const i8,
-    }
-    let mut tm = MaybeUninit::<Tm>::uninit();
-    unsafe {
-        let ptr = localtime_r(&epoch, tm.as_mut_ptr());
-        if ptr.is_null() {
-            return epoch;
-        }
-        epoch + (*ptr).tm_gmtoff
-    }
-}
-
-#[cfg(windows)]
-fn utc_to_local(epoch: i64) -> i64 {
-    // Windows: use _localtime64_s to get local broken-down time,
-    // then compute offset by diffing against UTC components.
-    // Fallback: just return UTC.
-    extern "C" {
-        fn _localtime64_s(result: *mut CTm, timep: *const i64) -> i32;
-        fn _gmtime64_s(result: *mut CTm, timep: *const i64) -> i32;
-    }
-    #[repr(C)]
-    #[derive(Default)]
-    struct CTm {
-        tm_sec: i32,
-        tm_min: i32,
-        tm_hour: i32,
-        tm_mday: i32,
-        tm_mon: i32,
-        tm_year: i32,
-        tm_wday: i32,
-        tm_yday: i32,
-        tm_isdst: i32,
-    }
-    let mut local = CTm::default();
-    let mut utc = CTm::default();
-    unsafe {
-        if _localtime64_s(&mut local, &epoch) != 0 || _gmtime64_s(&mut utc, &epoch) != 0 {
-            return epoch;
-        }
-    }
-    let local_mins = (local.tm_yday * 24 + local.tm_hour) * 60 + local.tm_min;
-    let utc_mins = (utc.tm_yday * 24 + utc.tm_hour) * 60 + utc.tm_min;
-    let offset_secs = (local_mins - utc_mins) as i64 * 60;
-    epoch + offset_secs
-}
-
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    let mut y = 1970;
-    loop {
-        let year_days = if is_leap(y) { 366 } else { 365 };
-        if days < year_days {
-            break;
-        }
-        days -= year_days;
-        y += 1;
-    }
-    let leap = is_leap(y);
-    let month_days = [
-        31,
-        if leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut mo = 1;
-    for &md in &month_days {
-        if days < md {
-            break;
-        }
-        days -= md;
-        mo += 1;
-    }
-    (y, mo, days + 1)
-}
-
-fn is_leap(y: u64) -> bool {
-    y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400))
+    let now = time::OffsetDateTime::now_utc()
+        .to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC));
+    let format = time::format_description::well_known::Iso8601::DEFAULT;
+    now.format(&format)
+        .map(|s| s[..19].to_string())
+        .unwrap_or_else(|_| "1970-01-01T00:00:00".into())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,6 +28,7 @@ pub struct Document {
     line_idx: usize,
     char_idx: usize,
     pub current_line: String,
+    current_chars: Vec<char>,
     pub progress: Progress,
 }
 
@@ -154,11 +43,13 @@ impl Document {
             .find(|l| !l.is_empty())
             .cloned()
             .unwrap_or_default();
+        let current_chars = first_line.chars().collect();
         Ok(Self {
             lines,
             line_idx: 0,
             char_idx: 0,
             current_line: first_line,
+            current_chars,
             progress: Progress::Active,
         })
     }
@@ -192,6 +83,7 @@ impl Document {
             .find(|l| !l.is_empty())
             .cloned()
             .unwrap_or_default();
+        self.current_chars = self.current_line.chars().collect();
         self.progress = Progress::Active;
     }
 
@@ -200,7 +92,7 @@ impl Document {
     }
 
     pub fn expected_char(&self) -> Option<char> {
-        self.current_line.chars().nth(self.char_idx)
+        self.current_chars.get(self.char_idx).copied()
     }
 
     pub fn upcoming_lines(&self, count: usize) -> Vec<&str> {
@@ -230,13 +122,14 @@ impl Document {
     pub fn advance(&mut self) {
         self.char_idx += 1;
 
-        if self.char_idx >= self.current_line.chars().count() {
+        if self.char_idx >= self.current_chars.len() {
             self.line_idx += 1;
             loop {
                 match self.lines.get(self.line_idx) {
                     Some(line) if !line.is_empty() => {
                         self.char_idx = 0;
                         self.current_line = line.clone();
+                        self.current_chars = self.current_line.chars().collect();
                         self.progress = Progress::Active;
                         return;
                     }
@@ -386,61 +279,56 @@ impl App {
                 }
                 false
             }
-            InputEvent::Press(action) => self.handle_action(action),
+            InputEvent::Press(key) => self.handle_key(key),
         }
     }
 
-    fn handle_action(&mut self, action: Action) -> bool {
-        match action.mode {
-            Mode::OpenSearch => {
+    fn handle_key(&mut self, key: KeyEvent) -> bool {
+        if self.searching {
+            match key.code {
+                KeyCode::Enter => {
+                    self.searching = false;
+                    let path = self.file_path_buf.clone();
+                    self.file_path_buf.clear();
+                    match Document::load(&path) {
+                        Ok(doc) => {
+                            self.document = Some(doc);
+                            self.error = None;
+                            self.correct_count = 0;
+                            self.total_count = 0;
+                            self.start_time = None;
+                            self.end_time = None;
+                            self.key_stats.clear();
+                        }
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                KeyCode::Esc => {
+                    self.searching = false;
+                    self.file_path_buf.clear();
+                }
+                _ if key.modifiers == KeyModifiers::CONTROL => {}
+                KeyCode::Char(c) => self.file_path_buf.push(c),
+                KeyCode::Backspace => {
+                    self.file_path_buf.pop();
+                }
+                _ => {}
+            }
+            return false;
+        }
+
+        match (key.code, key.modifiers) {
+            (KeyCode::Char('f'), KeyModifiers::CONTROL) => {
                 self.searching = true;
                 self.file_path_buf.clear();
                 self.error = None;
             }
-
-            Mode::Search => {
-                if action.key.modifiers == crossterm::event::KeyModifiers::CONTROL {
-                    return false;
-                }
-                match action.key.code {
-                    KeyCode::Char(c) => self.file_path_buf.push(c),
-                    KeyCode::Backspace => {
-                        self.file_path_buf.pop();
-                    }
-                    _ => {}
-                }
-            }
-
-            Mode::SubmitSearch => {
-                self.searching = false;
-                let path = self.file_path_buf.clone();
-                self.file_path_buf.clear();
-                match Document::load(&path) {
-                    Ok(doc) => {
-                        self.document = Some(doc);
-                        self.error = None;
-                        self.correct_count = 0;
-                        self.total_count = 0;
-                        self.start_time = None;
-                        self.end_time = None;
-                        self.key_stats.clear();
-                    }
-                    Err(e) => self.error = Some(e),
-                }
-            }
-
-            Mode::CancelSearch => {
-                self.searching = false;
-                self.file_path_buf.clear();
-            }
-
-            Mode::Restart => {
+            (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                 if self.document.is_some() {
                     self.restart();
                 }
             }
-
-            Mode::MainMenu => {
+            (KeyCode::Esc, KeyModifiers::NONE) => {
                 if self.viewing_history {
                     self.viewing_history = false;
                     return false;
@@ -460,8 +348,7 @@ impl App {
                 self.key_stats.clear();
                 self.last_error_char = None;
             }
-
-            Mode::Typing => match action.key.code {
+            _ => match key.code {
                 _ if self.viewing_history => {}
                 KeyCode::Char('h') if self.document.is_none() => {
                     self.history = crate::history::load_history();

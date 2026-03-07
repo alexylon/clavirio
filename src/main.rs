@@ -18,7 +18,7 @@ use input::run_input_loop;
 use keyboard::{build_keyboard_rows, build_keycode_grid_map};
 use ui::{compute_regions, draw};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;

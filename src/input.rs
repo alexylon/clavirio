@@ -1,33 +1,15 @@
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
 use futures::StreamExt;
 use tokio::sync::mpsc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    OpenSearch,
-    Search,
-    SubmitSearch,
-    CancelSearch,
-    Typing,
-    Restart,
-    MainMenu,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Action {
-    pub key: KeyEvent,
-    pub mode: Mode,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum InputEvent {
-    Press(Action),
+    Press(KeyEvent),
     Tick,
 }
 
 pub async fn run_input_loop(tx: mpsc::UnboundedSender<InputEvent>) {
     let mut stream = EventStream::new();
-    let mut in_search = false;
 
     loop {
         let event = tokio::select! {
@@ -47,36 +29,8 @@ pub async fn run_input_loop(tx: mpsc::UnboundedSender<InputEvent>) {
             Some(Err(_)) | None => break,
         };
 
-        let mode = classify_key(&key, &mut in_search);
-
-        if tx.send(InputEvent::Press(Action { key, mode })).is_err() {
+        if tx.send(InputEvent::Press(key)).is_err() {
             break;
-        }
-    }
-}
-
-fn classify_key(key: &KeyEvent, in_search: &mut bool) -> Mode {
-    if *in_search {
-        match key.code {
-            KeyCode::Enter => {
-                *in_search = false;
-                Mode::SubmitSearch
-            }
-            KeyCode::Esc => {
-                *in_search = false;
-                Mode::CancelSearch
-            }
-            _ => Mode::Search,
-        }
-    } else {
-        match (key.code, key.modifiers) {
-            (KeyCode::Char('f'), KeyModifiers::CONTROL) => {
-                *in_search = true;
-                Mode::OpenSearch
-            }
-            (KeyCode::Char('r'), KeyModifiers::CONTROL) => Mode::Restart,
-            (KeyCode::Esc, KeyModifiers::NONE) => Mode::MainMenu,
-            _ => Mode::Typing,
         }
     }
 }
