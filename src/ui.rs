@@ -12,6 +12,7 @@ use crate::app::{App, Progress};
 use crate::keyboard::*;
 
 const KEYBOARD_ROWS: usize = 5;
+const MAX_WIDTH: u16 = 120;
 const DIM_BORDER: Color = Color::DarkGray;
 const ACCENT: Color = Color::Cyan;
 const DIM_TEXT: Color = Color::DarkGray;
@@ -26,13 +27,23 @@ pub struct Regions {
     keyboard_area: Rect,
 }
 
+fn clamp_width(area: Rect) -> Rect {
+    if area.width <= MAX_WIDTH {
+        return area;
+    }
+    let pad = (area.width - MAX_WIDTH) / 2;
+    Rect::new(area.x + pad, area.y, MAX_WIDTH, area.height)
+}
+
 pub fn compute_regions(area: Rect) -> Regions {
+    let clamped = clamp_width(area);
+
     let [header, body, keyboard_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(5),
         Constraint::Length((KEYBOARD_ROWS as u16) * 4),
     ])
-    .areas(area);
+    .areas(clamped);
 
     let [text_area] = Layout::horizontal([Constraint::Percentage(80)])
         .flex(Flex::Center)
@@ -51,17 +62,32 @@ pub fn compute_regions(area: Rect) -> Regions {
 }
 
 fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
-    let [kbd_inner] = Layout::horizontal([Constraint::Percentage(90)])
-        .flex(Flex::Center)
-        .areas(area);
-
     let row_rects = Layout::new(
         Direction::Vertical,
         vec![Constraint::Ratio(1, KEYBOARD_ROWS as u32); KEYBOARD_ROWS],
     )
-    .split(kbd_inner);
+    .split(area);
 
-    let unit_width = kbd_inner.width / 13;
+    // Largest odd width that fits 13 keys (the widest row) in the area.
+    // Odd cell width → odd inner width (cell - 2 borders) → perfect centering.
+    let raw = area.width / 13;
+    let unit_width = if raw % 2 == 0 {
+        raw.saturating_sub(1).max(1)
+    } else {
+        raw
+    };
+    let raw_wide = unit_width * 3 / 2;
+    let wide_width = if raw_wide % 2 == 0 {
+        raw_wide - 1
+    } else {
+        raw_wide
+    };
+    let raw_space = unit_width * 6;
+    let space_width = if raw_space % 2 == 0 {
+        raw_space - 1
+    } else {
+        raw_space
+    };
 
     rows.iter()
         .enumerate()
@@ -70,8 +96,8 @@ fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
                 .iter()
                 .map(|k| match k.width {
                     KeyWidth::Normal => Constraint::Length(unit_width),
-                    KeyWidth::Wide => Constraint::Length(unit_width * 3 / 2),
-                    KeyWidth::Spacebar => Constraint::Length(unit_width * 6),
+                    KeyWidth::Wide => Constraint::Length(wide_width),
+                    KeyWidth::Spacebar => Constraint::Length(space_width),
                 })
                 .collect();
             Layout::new(Direction::Horizontal, constraints)
