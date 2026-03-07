@@ -142,14 +142,6 @@ impl Document {
             }
         }
     }
-
-    pub fn retreat(&mut self) -> bool {
-        if self.char_idx > 0 {
-            self.char_idx -= 1;
-            return true;
-        }
-        false
-    }
 }
 
 pub struct App {
@@ -168,6 +160,7 @@ pub struct App {
     pub key_stats: HashMap<char, (u32, u32)>,
     pub viewing_history: bool,
     pub history: Vec<crate::history::SessionRecord>,
+    pub selected_lesson: usize,
 }
 
 impl App {
@@ -188,6 +181,7 @@ impl App {
             key_stats: HashMap::new(),
             viewing_history: false,
             history: Vec::new(),
+            selected_lesson: 0,
         }
     }
 
@@ -348,52 +342,58 @@ impl App {
                 self.key_stats.clear();
                 self.last_error_char = None;
             }
-            _ => match key.code {
-                _ if self.viewing_history => {}
-                KeyCode::Char('h') if self.document.is_none() => {
-                    self.history = crate::history::load_history();
-                    self.viewing_history = true;
+            _ if self.viewing_history => {}
+            _ if self.document.is_none() && self.error.is_none() => {
+                self.handle_menu_key(key.code);
+            }
+            (KeyCode::Char('r'), _) if self.is_finished() => {
+                self.restart();
+            }
+            (KeyCode::Char(typed), _) if self.last_error_char.is_none() => {
+                self.handle_typed_char(typed);
+            }
+            (KeyCode::Backspace, _) => {
+                if self.last_error_char.is_some() {
+                    self.last_error_char = None;
                 }
-                KeyCode::Char(typed) if self.document.is_none() => {
-                    self.try_select_lesson(typed);
-                }
-                KeyCode::Char('r') if self.is_finished() => {
-                    self.restart();
-                }
-                KeyCode::Char(typed) if self.last_error_char.is_none() => {
-                    self.handle_typed_char(typed);
-                }
-                KeyCode::Backspace => {
-                    if self.last_error_char.is_some() {
-                        self.last_error_char = None;
-                    } else if let Some(doc) = self.document.as_mut() {
-                        if doc.retreat() {
-                            self.correct_count = self.correct_count.saturating_sub(1);
-                        }
-                    }
-                }
-                _ => {}
-            },
+            }
+            _ => {}
         }
         false
     }
 
-    fn try_select_lesson(&mut self, ch: char) {
-        let lesson = match crate::lessons::LESSONS.iter().find(|l| l.key == ch) {
-            Some(l) => l,
-            None => return,
-        };
-        match Document::from_text(lesson.text) {
-            Ok(doc) => {
-                self.document = Some(doc);
-                self.error = None;
-                self.correct_count = 0;
-                self.total_count = 0;
-                self.start_time = None;
-                self.end_time = None;
-                self.key_stats.clear();
+    fn handle_menu_key(&mut self, code: KeyCode) {
+        let lesson_count = crate::lessons::LESSONS.len();
+        match code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.selected_lesson = self.selected_lesson.saturating_sub(1);
             }
-            Err(e) => self.error = Some(e),
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.selected_lesson + 1 < lesson_count {
+                    self.selected_lesson += 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(lesson) = crate::lessons::LESSONS.get(self.selected_lesson) {
+                    match Document::from_text(lesson.text) {
+                        Ok(doc) => {
+                            self.document = Some(doc);
+                            self.error = None;
+                            self.correct_count = 0;
+                            self.total_count = 0;
+                            self.start_time = None;
+                            self.end_time = None;
+                            self.key_stats.clear();
+                        }
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+            }
+            KeyCode::Char('h') => {
+                self.history = crate::history::load_history();
+                self.viewing_history = true;
+            }
+            _ => {}
         }
     }
 

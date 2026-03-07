@@ -16,20 +16,20 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 
 ## Lessons
 
-| Key | Lesson | Focus |
-|-----|--------|-------|
-| `1` | f j d k | Index fingers |
-| `2` | a s d f j k l ; | Home row |
-| `3` | g h (home row) | Home row complete |
-| `4` | e i r u | Top row reach |
-| `5` | q w e r t y u i o p | Full top row |
-| `6` | z x c v b n m , . | Bottom row |
-| `7` | All Letters | Pangrams |
-| `8` | Capitals & Shift | Mixed case |
-| `9` | 0-9 Numbers | Numbers in context |
-| `a` | Punctuation & Symbols | Special characters |
-| `b` | Common Words | High-frequency words |
-| `c` | Full Paragraphs | Real-world text |
+| # | Lesson | Focus |
+|---|--------|-------|
+| 1 | f j d k | Index fingers |
+| 2 | a s d f j k l ; | Home row |
+| 3 | g h (home row) | Home row complete |
+| 4 | e i r u | Top row reach |
+| 5 | q w e r t y u i o p | Full top row |
+| 6 | z x c v b n m , . | Bottom row |
+| 7 | All Letters | Pangrams |
+| 8 | Capitals & Shift | Mixed case |
+| 9 | 0-9 Numbers | Numbers in context |
+| 10 | Punctuation & Symbols | Special characters |
+| 11 | Common Words | High-frequency words |
+| 12 | Full Paragraphs | Real-world text |
 
 ## Build & Run
 
@@ -53,7 +53,8 @@ On a laptop screen this usually means a maximized terminal window.
 
 | Key | Action |
 |-----|--------|
-| `1`–`9`, `a`–`c` | Select a built-in lesson (main menu) |
+| `↑`/`↓` or `k`/`j` | Navigate lesson menu |
+| `Enter` | Start selected lesson |
 | `h` | View session history (main menu) |
 | `Ctrl-F` | Open file path input |
 | `Ctrl-R` | Restart current text |

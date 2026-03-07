@@ -257,7 +257,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let panel_height = if app.document.is_none() && app.error.is_none() {
-        (crate::lessons::LESSONS.len() as u16) + 9
+        (crate::lessons::LESSONS.len() as u16) + 10
     } else {
         7
     };
@@ -284,21 +284,28 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
 
     match &app.document {
         None => {
-            let menu_item = |key: &str, label: &str, dim: bool| {
-                let label_fg = if dim { DIM_TEXT } else { Color::Gray };
-                Line::from(vec![
-                    Span::styled(format!("{key:>4}"), Style::new().fg(ACCENT).bold()),
-                    Span::styled(format!("  {label:<20}"), Style::new().fg(label_fg)),
-                ])
-            };
             let mut lines: Vec<Line> = Vec::new();
-            for lesson in crate::lessons::LESSONS.iter() {
-                lines.push(menu_item(&lesson.key.to_string(), lesson.label, false));
+            for (i, lesson) in crate::lessons::LESSONS.iter().enumerate() {
+                let selected = i == app.selected_lesson;
+                let marker = if selected { "▸" } else { " " };
+                let label_fg = if selected { Color::White } else { DIM_TEXT };
+                let marker_fg = if selected { ACCENT } else { DIM_TEXT };
+                lines.push(Line::from(vec![
+                    Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                    Span::styled(format!("{:<20}", lesson.label), Style::new().fg(label_fg)),
+                ]));
             }
             lines.push(Line::from(""));
-            lines.push(menu_item("h", "History", true));
-            lines.push(menu_item("^F", "Open file", true));
-            lines.push(menu_item("Esc", "Quit", true));
+            let shortcut = |key: &str, label: &str| {
+                Line::from(vec![
+                    Span::styled(format!("{key:>6}"), Style::new().fg(ACCENT).bold()),
+                    Span::styled(format!("  {label}"), Style::new().fg(DIM_TEXT)),
+                ])
+            };
+            lines.push(shortcut("Enter", "Start lesson"));
+            lines.push(shortcut("h", "History"));
+            lines.push(shortcut("^F", "Open file"));
+            lines.push(shortcut("Esc", "Quit"));
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {
