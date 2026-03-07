@@ -1,4 +1,6 @@
-# ferrotype
+# FerroType
+
+<div align="center"><img src="/assets/screenshot.png" style="width: 800px;" alt="Sofos Code"></div>
 
 A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Practice with built-in lessons or any text file while a virtual keyboard tracks your keystrokes in real time.
 

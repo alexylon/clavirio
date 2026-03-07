@@ -111,34 +111,34 @@ const BOTTOM_ROW: [KeyDef; 12] = [
 
 #[cfg(target_os = "macos")]
 const MODIFIER_ROW: [KeyDef; 7] = [
-    key!(KeyCode::Modifier(ModifierKeyCode::LeftControl), "Ctrl"),
+    key!(KeyCode::Modifier(ModifierKeyCode::LeftControl), "⌃"),
     key!(KeyCode::Modifier(ModifierKeyCode::LeftAlt), "⌥"),
     key!(KeyCode::Modifier(ModifierKeyCode::LeftSuper), "⌘"),
     KeyDef {
         primary: KeyCode::Char(' '),
         secondary: None,
         width: KeyWidth::Spacebar,
-        label: "␣",
+        label: "",
     },
     key!(KeyCode::Modifier(ModifierKeyCode::RightSuper), "⌘"),
     key!(KeyCode::Modifier(ModifierKeyCode::RightAlt), "⌥"),
-    key!(KeyCode::Modifier(ModifierKeyCode::RightControl), "Ctrl"),
+    key!(KeyCode::Modifier(ModifierKeyCode::RightControl), "⌃"),
 ];
 
 #[cfg(not(target_os = "macos"))]
 const MODIFIER_ROW: [KeyDef; 7] = [
-    key!(KeyCode::Modifier(ModifierKeyCode::LeftControl), "Ctrl"),
+    key!(KeyCode::Modifier(ModifierKeyCode::LeftControl), "⌃"),
     key!(KeyCode::Modifier(ModifierKeyCode::LeftSuper), "Win"),
     key!(KeyCode::Modifier(ModifierKeyCode::LeftAlt), "Alt"),
     KeyDef {
         primary: KeyCode::Char(' '),
         secondary: None,
         width: KeyWidth::Spacebar,
-        label: "␣",
+        label: "",
     },
     key!(KeyCode::Modifier(ModifierKeyCode::RightAlt), "Alt"),
     key!(KeyCode::Modifier(ModifierKeyCode::RightSuper), "Win"),
-    key!(KeyCode::Modifier(ModifierKeyCode::RightControl), "Ctrl"),
+    key!(KeyCode::Modifier(ModifierKeyCode::RightControl), "⌃"),
 ];
 
 pub fn build_keyboard_rows() -> Vec<Vec<KeyDef>> {

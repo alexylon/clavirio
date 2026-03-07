@@ -30,7 +30,7 @@ pub fn compute_regions(area: Rect) -> Regions {
     let [header, body, keyboard_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(5),
-        Constraint::Length((KEYBOARD_ROWS as u16) * 3),
+        Constraint::Length((KEYBOARD_ROWS as u16) * 4),
     ])
     .areas(area);
 
@@ -187,7 +187,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         left,
     );
 
-    let mut center_spans = vec![Span::styled("ferrotype", Style::new().fg(ACCENT).bold())];
+    let mut center_spans = vec![Span::styled("FerroType", Style::new().fg(ACCENT).bold())];
     if let Some(doc) = &app.document {
         let (cur, total) = doc.line_progress();
         center_spans.push(Span::styled(
@@ -221,9 +221,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let panel_height = if app.document.is_none() && app.error.is_none() {
-        (crate::lessons::LESSONS.len() as u16) + 8
+        (crate::lessons::LESSONS.len() as u16) + 9
     } else {
-        6
+        7
     };
     let [inner] = Layout::vertical([Constraint::Length(panel_height)])
         .flex(Flex::Center)
@@ -233,7 +233,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::new().fg(DIM_BORDER))
-        .padding(Padding::new(2, 2, 1, 0));
+        .padding(Padding::symmetric(2, 1));
 
     if let Some(ref err) = app.error {
         frame.render_widget(
@@ -408,7 +408,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
     let records = &app.history;
     let show_count = 10;
     let recent: Vec<_> = records.iter().rev().take(show_count).collect();
-    let panel_h = (recent.len() as u16 + 5).min(area.height);
+    let panel_h = (recent.len() as u16 + 6).min(area.height);
 
     let [inner] = Layout::vertical([Constraint::Length(panel_h)])
         .flex(Flex::Center)
@@ -419,7 +419,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
         .border_type(BorderType::Rounded)
         .border_style(Style::new().fg(DIM_BORDER))
         .title(Span::styled(" History ", Style::new().fg(ACCENT).bold()))
-        .padding(Padding::new(2, 2, 1, 0));
+        .padding(Padding::symmetric(2, 1));
 
     let mut lines = Vec::new();
 
@@ -510,27 +510,36 @@ fn draw_keyboard(
                     Style::new()
                 });
 
+            let inner = block.inner(cell);
             frame.render_widget(block, cell);
 
             let label = key_def.label;
-            frame.render_widget(
-                Paragraph::new(Span::styled(label, Style::new().fg(Color::Gray)))
-                    .centered()
-                    .block(Block::new().padding(Padding::top(cell.height.saturating_sub(2) / 2))),
-                cell,
-            );
+            let has_secondary = key_def.secondary.and_then(|s| match s {
+                KeyCode::Char(c) => Some(c),
+                _ => None,
+            });
 
-            if let Some(sec) = key_def.secondary {
-                let sec_label = match sec {
-                    KeyCode::Char(c) => c.to_string(),
-                    _ => String::new(),
-                };
-                if !sec_label.is_empty() {
-                    frame.render_widget(
-                        Paragraph::new(Span::styled(sec_label, Style::new().fg(DIM_TEXT)))
-                            .block(Block::new().padding(Padding::new(2, 0, 0, 0))),
-                        cell,
-                    );
+            let buf = frame.buffer_mut();
+            let label_w = label.chars().count() as u16;
+            let cx = inner.x + inner.width.saturating_sub(label_w) / 2;
+
+            if let Some(sec_char) = has_secondary {
+                // Two-label key: secondary at top, primary at bottom half
+                let cy = inner.y + inner.height.saturating_sub(1);
+                if cx < inner.x + inner.width && cy < inner.y + inner.height {
+                    buf.set_string(cx, cy, label, Style::new().fg(Color::Gray));
+                }
+                let s = sec_char.to_string();
+                let sw = s.chars().count() as u16;
+                let sx = inner.x + inner.width.saturating_sub(sw) / 2;
+                if sx < inner.x + inner.width && inner.y < cy {
+                    buf.set_string(sx, inner.y, &s, Style::new().fg(DIM_TEXT));
+                }
+            } else {
+                // Single-label key
+                let cy = inner.y + inner.height / 2;
+                if cx < inner.x + inner.width && cy < inner.y + inner.height {
+                    buf.set_string(cx, cy, label, Style::new().fg(Color::Gray));
                 }
             }
         }
