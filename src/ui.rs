@@ -256,8 +256,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                 ])
             };
             let mut lines: Vec<Line> = Vec::new();
-            for (i, lesson) in crate::lessons::LESSONS.iter().enumerate() {
-                lines.push(menu_item(&format!("{}", i + 1), lesson.label, false));
+            for lesson in crate::lessons::LESSONS.iter() {
+                lines.push(menu_item(&lesson.key.to_string(), lesson.label, false));
             }
             lines.push(Line::from(""));
             lines.push(menu_item("h", "History", true));

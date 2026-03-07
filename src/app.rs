@@ -492,23 +492,21 @@ impl App {
     }
 
     fn try_select_lesson(&mut self, ch: char) {
-        let idx = match ch.to_digit(10) {
-            Some(d) if d >= 1 => (d - 1) as usize,
-            _ => return,
+        let lesson = match crate::lessons::LESSONS.iter().find(|l| l.key == ch) {
+            Some(l) => l,
+            None => return,
         };
-        if let Some(lesson) = crate::lessons::LESSONS.get(idx) {
-            match Document::from_text(lesson.text) {
-                Ok(doc) => {
-                    self.document = Some(doc);
-                    self.error = None;
-                    self.correct_count = 0;
-                    self.total_count = 0;
-                    self.start_time = None;
-                    self.end_time = None;
-                    self.key_stats.clear();
-                }
-                Err(e) => self.error = Some(e),
+        match Document::from_text(lesson.text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.correct_count = 0;
+                self.total_count = 0;
+                self.start_time = None;
+                self.end_time = None;
+                self.key_stats.clear();
             }
+            Err(e) => self.error = Some(e),
         }
     }
 

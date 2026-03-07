@@ -1,40 +1,68 @@
 pub struct Lesson {
+    pub key: char,
     pub label: &'static str,
     pub text: &'static str,
 }
 
 pub const LESSONS: &[Lesson] = &[
     Lesson {
-        label: "Pangrams",
-        text: "\
-The quick brown fox jumps over the lazy dog
-Pack my box with five dozen liquor jugs
-How vexingly quick daft zebras jump
-The five boxing wizards jump quickly
-Sphinx of black quartz judge my vow",
+        key: '1',
+        label: "f j d k",
+        text: include_str!("../assets/lessons/01_fjdk.txt"),
     },
     Lesson {
-        label: "Home row",
-        text: "\
-add a sad flask half a salad falls
-lads had a glad dash all shall ask
-a flash glass hall had a jag slash
-fall hadask glad sad lad shall add",
+        key: '2',
+        label: "a s d f j k l ;",
+        text: include_str!("../assets/lessons/02_home_row.txt"),
     },
     Lesson {
-        label: "Common words",
-        text: "\
-the quick and simple way to learn is to practice every day
-she said that there was nothing left for them after all
-they would have been right about most of the other things
-some people think it could be done in just a few minutes",
+        key: '3',
+        label: "g h (home row)",
+        text: include_str!("../assets/lessons/03_ghfj.txt"),
     },
     Lesson {
-        label: "Numbers & symbols",
-        text: "\
-order 47 items at $3.50 each for a total of $164.50
-call (555) 123-4567 or email test@example.com today
-the ratio is 3:1 and the score was 89% out of 100%
-use keys [a-z] and {0-9} to type #hash & @mention",
+        key: '4',
+        label: "e i r u",
+        text: include_str!("../assets/lessons/04_eiru.txt"),
+    },
+    Lesson {
+        key: '5',
+        label: "q w e r t y u i o p",
+        text: include_str!("../assets/lessons/05_top_row.txt"),
+    },
+    Lesson {
+        key: '6',
+        label: "z x c v b n m , .",
+        text: include_str!("../assets/lessons/06_bottom_row.txt"),
+    },
+    Lesson {
+        key: '7',
+        label: "All Letters",
+        text: include_str!("../assets/lessons/07_all_keys.txt"),
+    },
+    Lesson {
+        key: '8',
+        label: "Capitals & Shift",
+        text: include_str!("../assets/lessons/08_capitals.txt"),
+    },
+    Lesson {
+        key: '9',
+        label: "0-9 Numbers",
+        text: include_str!("../assets/lessons/09_numbers.txt"),
+    },
+    Lesson {
+        key: 'a',
+        label: "Punctuation & Symbols",
+        text: include_str!("../assets/lessons/10_punctuation.txt"),
+    },
+    Lesson {
+        key: 'b',
+        label: "Common Words",
+        text: include_str!("../assets/lessons/11_common_words.txt"),
+    },
+    Lesson {
+        key: 'c',
+        label: "Full Paragraphs",
+        text: include_str!("../assets/lessons/12_paragraphs.txt"),
     },
 ];
