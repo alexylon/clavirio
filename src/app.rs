@@ -262,16 +262,20 @@ impl App {
         }
     }
 
-    fn restart(&mut self) {
-        if let Some(doc) = self.document.as_mut() {
-            doc.reset();
-        }
+    fn reset_session(&mut self) {
         self.correct_count = 0;
         self.total_count = 0;
         self.start_time = None;
         self.end_time = None;
         self.key_stats.clear();
         self.last_error_char = None;
+    }
+
+    fn restart(&mut self) {
+        if let Some(doc) = self.document.as_mut() {
+            doc.reset();
+        }
+        self.reset_session();
     }
 
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
@@ -300,11 +304,7 @@ impl App {
                         Ok(doc) => {
                             self.document = Some(doc);
                             self.error = None;
-                            self.correct_count = 0;
-                            self.total_count = 0;
-                            self.start_time = None;
-                            self.end_time = None;
-                            self.key_stats.clear();
+                            self.reset_session();
                             self.lesson_name = Path::new(&path)
                                 .file_name()
                                 .and_then(|n| n.to_str())
@@ -352,12 +352,7 @@ impl App {
                 }
                 self.document = None;
                 self.error = None;
-                self.correct_count = 0;
-                self.total_count = 0;
-                self.start_time = None;
-                self.end_time = None;
-                self.key_stats.clear();
-                self.last_error_char = None;
+                self.reset_session();
             }
             _ if self.viewing_history => match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -406,11 +401,7 @@ impl App {
                         Ok(doc) => {
                             self.document = Some(doc);
                             self.error = None;
-                            self.correct_count = 0;
-                            self.total_count = 0;
-                            self.start_time = None;
-                            self.end_time = None;
-                            self.key_stats.clear();
+                            self.reset_session();
                             self.lesson_name = lesson.label.to_string();
                         }
                         Err(e) => self.error = Some(e),
