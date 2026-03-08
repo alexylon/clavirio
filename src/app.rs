@@ -319,6 +319,12 @@ impl App {
                     self.searching = false;
                     self.file_path_buf.clear();
                 }
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.searching = false;
+                    self.file_path_buf.clear();
+                    self.save_on_exit();
+                    return true;
+                }
                 _ if key.modifiers == KeyModifiers::CONTROL => {}
                 KeyCode::Char(c) => self.file_path_buf.push(c),
                 KeyCode::Backspace => {
@@ -339,6 +345,10 @@ impl App {
                 if self.document.is_some() {
                     self.restart();
                 }
+            }
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                self.save_on_exit();
+                return true;
             }
             (KeyCode::Esc, KeyModifiers::NONE) => {
                 if self.viewing_history {

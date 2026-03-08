@@ -63,6 +63,7 @@ On a laptop screen this usually means a maximized terminal window.
 | `h` | View session history (main menu) |
 | `Ctrl-F` | Open file path input |
 | `Ctrl-R` | Restart current text |
-| `Esc` | Back to main menu (saves progress) / quit |
+| `Ctrl-C` | Save and quit immediately |
+| `Esc` | Save and back to menu / quit |
 | `Backspace` | Correct a mistake |
 | `r` | Restart (completion screen) |
