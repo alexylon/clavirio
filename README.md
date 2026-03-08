@@ -7,12 +7,13 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 ## Features
 
 - **12 built-in lessons** — progressive drills from home row basics to full paragraphs, ordered by difficulty
-- **Live stats** — WPM, elapsed time, keystrokes, and line progress update as you type
+- **Live stats** — WPM, accuracy %, elapsed time, keystrokes, and line progress update as you type
 - **Virtual keyboard** — highlights the expected next key, including Shift for capitals and symbols; adapts to macOS and PC layouts
 - **Error feedback** — wrong keystrokes are shown inline and block progress until corrected with Backspace
 - **Completion summary** — final WPM, accuracy percentage, and your weakest keys
-- **Session history** — results saved to `~/.ferrotype/history.json` with per-session averages; incomplete sessions are marked
+- **Session history** — results saved to `~/.ferrotype/history.json` with per-lesson tracking, scrollable history view, and averages across completed sessions
 - **Custom text** — load any text file via `Ctrl-F` or as a CLI argument
+- **Graceful shutdown** — in-progress sessions are saved on SIGTERM/SIGHUP
 
 ## Lessons
 
@@ -53,7 +54,7 @@ On a laptop screen this usually means a maximized terminal window.
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `k`/`j` | Navigate lesson menu |
+| `↑`/`↓` or `k`/`j` | Navigate lesson menu / scroll history |
 | `Enter` | Start selected lesson |
 | `h` | View session history (main menu) |
 | `Ctrl-F` | Open file path input |

@@ -38,6 +38,24 @@ async fn main() -> Result<()> {
     result
 }
 
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
+        let mut hup = signal(SignalKind::hangup()).expect("SIGHUP handler");
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = hup.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        // On Windows, just wait forever — graceful shutdown relies on Esc/Ctrl-C
+        std::future::pending::<()>().await;
+    }
+}
+
 async fn run_app() -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
@@ -50,7 +68,11 @@ async fn run_app() -> Result<()> {
         match app::Document::load(&path) {
             Ok(doc) => {
                 app.document = Some(doc);
-                app.lesson_name = path.rsplit('/').next().unwrap_or(&path).to_string();
+                app.lesson_name = std::path::Path::new(&path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&path)
+                    .to_string();
             }
             Err(e) => app.error = Some(e),
         }
@@ -58,10 +80,6 @@ async fn run_app() -> Result<()> {
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(run_input_loop(tx));
-
-    let mut sigterm =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-    let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()).ok();
 
     terminal.draw(|frame| {
         let regions = compute_regions(frame.area());
@@ -71,8 +89,7 @@ async fn run_app() -> Result<()> {
     loop {
         let event = tokio::select! {
             ev = rx.recv() => ev,
-            _ = async { sigterm.as_mut().unwrap().recv().await }, if sigterm.is_some() => None,
-            _ = async { sighup.as_mut().unwrap().recv().await }, if sighup.is_some() => None,
+            _ = shutdown_signal() => None,
         };
 
         let Some(event) = event else {

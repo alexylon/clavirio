@@ -488,10 +488,8 @@ fn friendly_timestamp(ts: &str) -> String {
 
 fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
     let records = &app.history;
-    let show_count = 10;
-    let recent: Vec<_> = records.iter().rev().take(show_count).collect();
-    let panel_h = (recent.len() as u16 + 6).min(area.height);
 
+    let panel_h = area.height;
     let [inner] = Layout::vertical([Constraint::Length(panel_h)])
         .flex(Flex::Center)
         .areas(area);
@@ -505,12 +503,25 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut lines = Vec::new();
 
-    if recent.is_empty() {
+    if records.is_empty() {
         lines.push(Line::from(Span::styled(
             "No sessions yet",
             Style::new().fg(DIM_TEXT),
         )));
     } else {
+        // chrome: borders 2 + padding 2 + header 1 + avg ~3 + footer 2 = 10
+        let chrome = 10_u16;
+        let visible_slots = inner.height.saturating_sub(chrome) as usize;
+
+        let scroll_pos = app.history_scroll;
+        let scroll = if visible_slots >= records.len() || scroll_pos < visible_slots / 2 {
+            0
+        } else if scroll_pos + visible_slots / 2 >= records.len() {
+            records.len().saturating_sub(visible_slots)
+        } else {
+            scroll_pos.saturating_sub(visible_slots / 2)
+        };
+
         lines.push(Line::from(Span::styled(
             format!(
                 "{:<18} {:>5}  {:>5}  {:>6}  {}",
@@ -519,7 +530,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
             Style::new().fg(DIM_TEXT),
         )));
 
-        for r in &recent {
+        for (i, r) in records.iter().enumerate().skip(scroll).take(visible_slots) {
             let display_ts = friendly_timestamp(&r.timestamp);
             let mins = (r.duration_secs as u64) / 60;
             let secs = (r.duration_secs as u64) % 60;
@@ -529,12 +540,15 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 &r.lesson
             };
+            let selected = i == scroll_pos;
+            let fg = if selected { Color::White } else { DIM_TEXT };
+            let marker = if selected { "▸ " } else { "  " };
             lines.push(Line::from(Span::styled(
                 format!(
-                    "{:<18} {:>5.0}  {:>4.0}%  {:>2}:{:02}{}  {}",
-                    display_ts, r.wpm, r.accuracy, mins, secs, status, lesson_display
+                    "{}{:<18} {:>5.0}  {:>4.0}%  {:>2}:{:02}{}  {}",
+                    marker, display_ts, r.wpm, r.accuracy, mins, secs, status, lesson_display
                 ),
-                Style::new().fg(Color::White),
+                Style::new().fg(fg),
             )));
         }
 
@@ -563,10 +577,14 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "Esc to go back  (* = incomplete)",
-        Style::new().fg(DIM_TEXT),
-    )));
+    lines.push(Line::from(vec![
+        Span::styled("↑↓", Style::new().fg(ACCENT)),
+        Span::styled(" scroll  ", Style::new().fg(DIM_TEXT)),
+        Span::styled("Esc", Style::new().fg(ACCENT)),
+        Span::styled(" back  ", Style::new().fg(DIM_TEXT)),
+        Span::styled("*", Style::new().fg(ACCENT)),
+        Span::styled(" = incomplete", Style::new().fg(DIM_TEXT)),
+    ]));
 
     frame.render_widget(Paragraph::new(lines).block(block), inner);
 }

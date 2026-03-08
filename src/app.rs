@@ -160,6 +160,7 @@ pub struct App {
     pub key_stats: HashMap<char, (u32, u32)>,
     pub viewing_history: bool,
     pub history: Vec<crate::history::SessionRecord>,
+    pub history_scroll: usize,
     pub selected_lesson: usize,
     pub lesson_name: String,
 }
@@ -182,6 +183,7 @@ impl App {
             key_stats: HashMap::new(),
             viewing_history: false,
             history: Vec::new(),
+            history_scroll: 0,
             selected_lesson: 0,
             lesson_name: String::new(),
         }
@@ -302,7 +304,11 @@ impl App {
                             self.start_time = None;
                             self.end_time = None;
                             self.key_stats.clear();
-                            self.lesson_name = path.rsplit('/').next().unwrap_or(&path).to_string();
+                            self.lesson_name = std::path::Path::new(&path)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&path)
+                                .to_string();
                         }
                         Err(e) => self.error = Some(e),
                     }
@@ -352,7 +358,17 @@ impl App {
                 self.key_stats.clear();
                 self.last_error_char = None;
             }
-            _ if self.viewing_history => {}
+            _ if self.viewing_history => match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.history_scroll = self.history_scroll.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if self.history_scroll + 1 < self.history.len() {
+                        self.history_scroll += 1;
+                    }
+                }
+                _ => {}
+            },
             _ if self.document.is_none() && self.error.is_none() => {
                 self.handle_menu_key(key.code);
             }
@@ -402,6 +418,7 @@ impl App {
             }
             KeyCode::Char('h') => {
                 self.history = crate::history::load_history();
+                self.history_scroll = self.history.len().saturating_sub(1);
                 self.viewing_history = true;
             }
             _ => {}
