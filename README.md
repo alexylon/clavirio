@@ -1,5 +1,7 @@
 # Clavirio
 
+*From Latin **clavis** (key) — a terminal typing tutor.*
+
 <div align="center"><img src="/assets/images/screenshot.png" style="width: 800px;" alt="Clavirio"></div>
 
 A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Practice with built-in lessons or any text file while a virtual keyboard tracks your keystrokes in real time.
