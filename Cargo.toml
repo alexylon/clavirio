@@ -3,6 +3,14 @@ name = "ferrotype"
 version = "0.2.2"
 edition = "2021"
 
+authors = ["Alexander Alexandrov"]
+description = "A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking"
+license = "MIT"
+repository = "https://github.com/alexylon/ferrotype"
+documentation = "https://docs.rs/ferrotype"
+keywords = ["typing", "tutor", "keyboard", "tui", "ratatui"]
+categories = ["command-line-utilities"]
+
 [dependencies]
 crossterm = "0.29"
 ratatui = "0.30"
