@@ -163,11 +163,12 @@ pub struct App {
     pub history: Vec<crate::history::SessionRecord>,
     pub history_scroll: usize,
     pub selected_lesson: usize,
-    pub lesson_name: String,
+    pub lesson_id: String,
 }
 
 impl App {
     pub fn new() -> Self {
+        let selected_lesson = crate::history::resume_lesson(crate::lessons::LESSONS);
         Self {
             document: None,
             file_path_buf: String::new(),
@@ -185,8 +186,8 @@ impl App {
             viewing_history: false,
             history: Vec::new(),
             history_scroll: 0,
-            selected_lesson: 0,
-            lesson_name: String::new(),
+            selected_lesson,
+            lesson_id: String::new(),
         }
     }
 
@@ -214,7 +215,7 @@ impl App {
     }
 
     fn save_history(&self, completed: bool) {
-        if self.total_count == 0 {
+        if self.total_count == 0 || self.lesson_id.is_empty() {
             return;
         }
         let elapsed = self.elapsed_secs();
@@ -231,7 +232,7 @@ impl App {
             total: self.total_count,
             duration_secs: elapsed,
             completed,
-            lesson: self.lesson_name.clone(),
+            id: self.lesson_id.clone(),
         });
     }
 
@@ -305,7 +306,7 @@ impl App {
                             self.document = Some(doc);
                             self.error = None;
                             self.reset_session();
-                            self.lesson_name = Path::new(&path)
+                            self.lesson_id = Path::new(&path)
                                 .file_name()
                                 .and_then(|n| n.to_str())
                                 .unwrap_or(&path)
@@ -402,7 +403,7 @@ impl App {
                             self.document = Some(doc);
                             self.error = None;
                             self.reset_session();
-                            self.lesson_name = lesson.label.to_string();
+                            self.lesson_id = lesson.id.to_string();
                         }
                         Err(e) => self.error = Some(e),
                     }
@@ -440,6 +441,8 @@ impl App {
                 if doc.progress == Progress::Finished {
                     self.end_time = Some(Instant::now());
                     self.save_history(true);
+                    self.selected_lesson = (self.selected_lesson + 1)
+                        .min(crate::lessons::LESSONS.len().saturating_sub(1));
                 }
             }
         } else {
@@ -740,6 +743,7 @@ mod tests {
     #[test]
     fn menu_navigation() {
         let mut app = App::new();
+        app.selected_lesson = 0;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, 1);
         app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
@@ -751,6 +755,7 @@ mod tests {
     #[test]
     fn menu_up_at_zero_stays_zero() {
         let mut app = App::new();
+        app.selected_lesson = 0;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Up)));
         assert_eq!(app.selected_lesson, 0);
     }
@@ -760,7 +765,7 @@ mod tests {
         let mut app = App::new();
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
-        assert!(!app.lesson_name.is_empty());
+        assert!(!app.lesson_id.is_empty());
     }
 
     #[test]
@@ -902,7 +907,7 @@ mod tests {
                 total: 11,
                 duration_secs: 60.0,
                 completed: true,
-                lesson: String::new(),
+                id: String::new(),
             },
             crate::history::SessionRecord {
                 timestamp: "t2".into(),
@@ -912,7 +917,7 @@ mod tests {
                 total: 21,
                 duration_secs: 60.0,
                 completed: true,
-                lesson: String::new(),
+                id: String::new(),
             },
         ];
         app.history_scroll = 1;
@@ -952,6 +957,7 @@ mod tests {
     #[test]
     fn j_k_navigate_menu() {
         let mut app = App::new();
+        app.selected_lesson = 0;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('j'))));
         assert_eq!(app.selected_lesson, 1);
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('k'))));
@@ -1034,6 +1040,6 @@ mod tests {
         assert!(!app.searching);
         assert!(app.error.is_none());
         assert!(app.document.is_some());
-        assert_eq!(app.lesson_name, "sample.txt");
+        assert_eq!(app.lesson_id, "sample.txt");
     }
 }

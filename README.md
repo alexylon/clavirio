@@ -12,6 +12,7 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 - **Error feedback** — wrong keystrokes are shown inline and block progress until corrected with Backspace
 - **Completion summary** — final WPM, accuracy percentage, and your weakest keys
 - **Session history** — results saved to `~/.ferrotype/history.json` with per-lesson tracking, scrollable history view, and averages across completed sessions
+- **Progress tracking** — the menu cursor remembers your last lesson: points to it if unfinished, advances to the next if completed
 - **Custom text** — load any text file via `Ctrl-F` or as a CLI argument
 - **Graceful shutdown** — in-progress sessions are saved on SIGTERM/SIGHUP
 
@@ -59,6 +60,6 @@ On a laptop screen this usually means a maximized terminal window.
 | `h` | View session history (main menu) |
 | `Ctrl-F` | Open file path input |
 | `Ctrl-R` | Restart current text |
-| `Esc` | Back to main menu / quit |
+| `Esc` | Back to main menu (saves progress) / quit |
 | `Backspace` | Correct a mistake |
 | `r` | Restart (completion screen) |

@@ -533,11 +533,12 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
             let mins = (r.duration_secs as u64) / 60;
             let secs = (r.duration_secs as u64) % 60;
             let status = if r.completed { "" } else { "*" };
-            let lesson_display = if r.lesson.is_empty() {
-                "—"
-            } else {
-                &r.lesson
-            };
+            let lesson_label = crate::lessons::LESSONS
+                .iter()
+                .find(|l| l.id == r.id)
+                .map(|l| l.label)
+                .unwrap_or(&r.id);
+            let lesson_display = if r.id.is_empty() { "—" } else { lesson_label };
             let selected = i == scroll_pos;
             let fg = if selected { Color::White } else { DIM_TEXT };
             let marker = if selected { "▸ " } else { "  " };

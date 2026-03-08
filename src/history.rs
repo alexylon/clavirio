@@ -12,8 +12,8 @@ pub struct SessionRecord {
     pub duration_secs: f64,
     #[serde(default)]
     pub completed: bool,
-    #[serde(default)]
-    pub lesson: String,
+    #[serde(default, alias = "lesson")]
+    pub id: String,
 }
 
 fn history_path() -> PathBuf {
@@ -44,6 +44,29 @@ pub fn save_session(record: SessionRecord) {
     }
 }
 
+pub fn resume_lesson(lessons: &[crate::lessons::Lesson]) -> usize {
+    resume_lesson_from(&load_history(), lessons)
+}
+
+fn resume_lesson_from(history: &[SessionRecord], lessons: &[crate::lessons::Lesson]) -> usize {
+    for entry in history.iter().rev() {
+        if entry.id.is_empty() {
+            continue;
+        }
+        let idx = lessons
+            .iter()
+            .position(|l| l.id == entry.id || l.label == entry.id);
+        match idx {
+            Some(i) if entry.completed => {
+                return (i + 1).min(lessons.len().saturating_sub(1));
+            }
+            Some(i) => return i,
+            None => continue,
+        }
+    }
+    0
+}
+
 pub fn load_history() -> Vec<SessionRecord> {
     let path = history_path();
     fs::read_to_string(&path)
@@ -66,7 +89,7 @@ mod tests {
             total: 200,
             duration_secs: 120.0,
             completed: true,
-            lesson: "home row".into(),
+            id: "home_row".into(),
         };
         let json = serde_json::to_string(&record).unwrap();
         let deserialized: SessionRecord = serde_json::from_str(&json).unwrap();
@@ -76,7 +99,7 @@ mod tests {
         assert_eq!(deserialized.correct, 195);
         assert_eq!(deserialized.total, 200);
         assert!(deserialized.completed);
-        assert_eq!(deserialized.lesson, "home row");
+        assert_eq!(deserialized.id, "home_row");
     }
 
     #[test]
@@ -92,7 +115,7 @@ mod tests {
         }"#;
         let record: SessionRecord = serde_json::from_str(json).unwrap();
         assert!(!record.completed); // default
-        assert!(record.lesson.is_empty()); // default
+        assert!(record.id.is_empty()); // default
     }
 
     #[test]
@@ -104,8 +127,91 @@ mod tests {
         let records: Vec<SessionRecord> = serde_json::from_str(json).unwrap();
         assert_eq!(records.len(), 2);
         assert!(!records[0].completed);
-        assert!(records[0].lesson.is_empty());
+        assert!(records[0].id.is_empty());
         assert!(records[1].completed);
-        assert_eq!(records[1].lesson, "f j d k");
+        assert_eq!(records[1].id, "f j d k");
+    }
+
+    // --- resume_lesson_from ---
+
+    const TEST_LESSONS: &[crate::lessons::Lesson] = &[
+        crate::lessons::Lesson {
+            id: "fjdk",
+            label: "f j d k",
+            text: "",
+        },
+        crate::lessons::Lesson {
+            id: "home_row",
+            label: "home row",
+            text: "",
+        },
+        crate::lessons::Lesson {
+            id: "ghfj",
+            label: "g h",
+            text: "",
+        },
+    ];
+
+    fn record(id: &str, completed: bool) -> SessionRecord {
+        SessionRecord {
+            timestamp: String::new(),
+            wpm: 0.0,
+            accuracy: 0.0,
+            correct: 0,
+            total: 1,
+            duration_secs: 0.0,
+            completed,
+            id: id.into(),
+        }
+    }
+
+    #[test]
+    fn resume_empty_history_returns_zero() {
+        assert_eq!(resume_lesson_from(&[], TEST_LESSONS), 0);
+    }
+
+    #[test]
+    fn resume_incomplete_lesson_returns_same() {
+        let history = vec![record("fjdk", false)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 0);
+    }
+
+    #[test]
+    fn resume_completed_lesson_returns_next() {
+        let history = vec![record("fjdk", true)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 1);
+    }
+
+    #[test]
+    fn resume_completed_last_lesson_stays_at_last() {
+        let history = vec![record("ghfj", true)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 2);
+    }
+
+    #[test]
+    fn resume_unknown_lesson_returns_zero() {
+        let history = vec![record("unknown", false)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 0);
+    }
+
+    #[test]
+    fn resume_matches_by_label_for_old_history() {
+        let history = vec![record("home row", false)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 1);
+    }
+
+    #[test]
+    fn resume_uses_last_matching_entry() {
+        let history = vec![record("fjdk", true), record("home_row", false)];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 1);
+    }
+
+    #[test]
+    fn resume_skips_file_sessions_to_find_lesson() {
+        let history = vec![
+            record("home_row", true),
+            record("sample.txt", false), // file-based session, not a lesson
+        ];
+        assert_eq!(resume_lesson_from(&history, TEST_LESSONS), 2); // next after home_row
     }
 }

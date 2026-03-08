@@ -68,7 +68,7 @@ async fn run_app() -> Result<()> {
         match app::Document::load(&path) {
             Ok(doc) => {
                 app.document = Some(doc);
-                app.lesson_name = std::path::Path::new(&path)
+                app.lesson_id = std::path::Path::new(&path)
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or(&path)
