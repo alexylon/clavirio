@@ -1,8 +1,10 @@
-# Clavirio
+# clavirio
+
+[www.clavir.io](https://www.clavir.io)
 
 *From Latin **clavis** (key) — a terminal typing tutor.*
 
-<div align="center"><img src="/assets/images/screenshot.png" style="width: 800px;" alt="Clavirio"></div>
+<div align="center"><img src="/assets/images/screenshot.png" style="width: 800px;" alt="clavirio"></div>
 
 A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Practice with built-in lessons or any text file while a virtual keyboard tracks your keystrokes in real time.
 
@@ -53,7 +55,7 @@ cargo run -- sample.txt
 
 ## Terminal Size
 
-Clavirio is a terminal UI application — your terminal window should be large enough to display all elements (text panel, keyboard, stats).
+clavirio is a terminal UI application — your terminal window should be large enough to display all elements (text panel, keyboard, stats).
 On a laptop screen this usually means a maximized terminal window.
 
 ## Controls
