@@ -203,12 +203,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(" ✓ ", Style::new().fg(CORRECT).bold()),
-            Span::styled(
-                format!("{}", app.correct_count),
-                Style::new().fg(Color::White),
-            ),
-            Span::styled(format!("  {mins}:{secs:02}"), Style::new().fg(DIM_TEXT)),
+            Span::styled(format!(" {mins}:{secs:02}"), Style::new().fg(DIM_TEXT)),
             if app.document.is_some() {
                 Span::styled("  Esc", Style::new().fg(ACCENT).bold())
             } else {
@@ -243,20 +238,23 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
-                format!("{acc_pct:.0}%"),
-                Style::new().fg(if has_stats { CORRECT } else { DIM_TEXT }),
-            ),
-            Span::styled("  ", Style::new().fg(DIM_TEXT)),
-            Span::styled(
                 format!("{wpm:.0} wpm"),
                 Style::new().fg(if wpm > 0.0 { ACCENT } else { DIM_TEXT }),
             ),
-            Span::styled("  ", Style::new().fg(DIM_TEXT)),
+            Span::styled("  ✓ ", Style::new().fg(CORRECT).bold()),
+            Span::styled(
+                format!("{}", app.correct_count),
+                Style::new().fg(if has_stats { Color::White } else { DIM_TEXT }),
+            ),
+            Span::styled("  ⌨ ", Style::new().fg(Color::Yellow).bold()),
             Span::styled(
                 format!("{}", app.total_count),
-                Style::new().fg(Color::White),
+                Style::new().fg(if has_stats { Color::White } else { DIM_TEXT }),
             ),
-            Span::styled(" ⌨ ", Style::new().fg(Color::Yellow).bold()),
+            Span::styled(
+                format!("  {acc_pct:.0}% "),
+                Style::new().fg(if has_stats { CORRECT } else { DIM_TEXT }),
+            ),
         ]))
         .right_aligned(),
         right,
