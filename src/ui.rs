@@ -10,14 +10,61 @@ use ratatui::Frame;
 
 use crate::app::{App, Progress};
 use crate::keyboard::*;
+use crate::settings::Theme;
 
 const KEYBOARD_ROWS: usize = 5;
 const MAX_WIDTH: u16 = 120;
-const DIM_BORDER: Color = Color::DarkGray;
-const ACCENT: Color = Color::Cyan;
-const DIM_TEXT: Color = Color::DarkGray;
-const CORRECT: Color = Color::Rgb(100, 180, 255);
-const INCORRECT: Color = Color::Rgb(255, 170, 60);
+
+#[derive(Clone, Copy)]
+pub struct ThemeColors {
+    pub dim_border: Color,
+    pub accent: Color,
+    pub dim_text: Color,
+    pub correct: Color,
+    pub incorrect: Color,
+    pub text: Color,
+    pub key_label: Color,
+    pub cursor_fg: Color,
+    pub cursor_bg: Color,
+    pub finger_label: Color,
+    pub disabled: Color,
+    pub bg: Color,
+}
+
+impl ThemeColors {
+    pub fn from_theme(theme: Theme) -> Self {
+        match theme {
+            Theme::Dark => Self {
+                dim_border: Color::DarkGray,
+                accent: Color::Cyan,
+                dim_text: Color::DarkGray,
+                correct: Color::Rgb(100, 180, 255),
+                incorrect: Color::Rgb(255, 170, 60),
+                text: Color::White,
+                key_label: Color::Gray,
+                cursor_fg: Color::Black,
+                cursor_bg: Color::White,
+                finger_label: Color::Yellow,
+                disabled: Color::Rgb(60, 60, 60),
+                bg: Color::Reset,
+            },
+            Theme::Light => Self {
+                dim_border: Color::Rgb(180, 180, 180),
+                accent: Color::Rgb(0, 120, 180),
+                dim_text: Color::Rgb(140, 140, 140),
+                correct: Color::Rgb(30, 120, 200),
+                incorrect: Color::Rgb(210, 100, 20),
+                text: Color::Black,
+                key_label: Color::Rgb(80, 80, 80),
+                cursor_fg: Color::White,
+                cursor_bg: Color::Rgb(40, 40, 40),
+                finger_label: Color::Rgb(180, 130, 0),
+                disabled: Color::Rgb(200, 200, 200),
+                bg: Color::Rgb(245, 245, 245),
+            },
+        }
+    }
+}
 
 pub struct Regions {
     header: Rect,
@@ -38,7 +85,7 @@ pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     let clamped = clamp_width(area);
 
     let kbd_height = if show_keyboard {
-        (KEYBOARD_ROWS as u16) * 4
+        (KEYBOARD_ROWS as u16) * 4 + 2 // +2 for keyboard border
     } else {
         0
     };
@@ -112,6 +159,28 @@ fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
         .collect()
 }
 
+fn bounding_rect(kbd_rects: &[Rc<[Rect]>]) -> Option<Rect> {
+    let mut min_x = u16::MAX;
+    let mut min_y = u16::MAX;
+    let mut max_x = 0u16;
+    let mut max_y = 0u16;
+    for row in kbd_rects {
+        for cell in row.iter() {
+            if cell.width == 0 || cell.height == 0 {
+                continue;
+            }
+            min_x = min_x.min(cell.x);
+            min_y = min_y.min(cell.y);
+            max_x = max_x.max(cell.x + cell.width);
+            max_y = max_y.max(cell.y + cell.height);
+        }
+    }
+    if min_x >= max_x || min_y >= max_y {
+        return None;
+    }
+    Some(Rect::new(min_x, min_y, max_x - min_x, max_y - min_y))
+}
+
 pub fn draw(
     frame: &mut Frame,
     app: &App,
@@ -119,6 +188,11 @@ pub fn draw(
     rows: &[Vec<KeyDef>],
     grid_map: &HashMap<KeyCode, GridCoord>,
 ) {
+    let tc = ThemeColors::from_theme(app.theme);
+
+    let bg_block = Block::default().style(Style::default().bg(tc.bg));
+    frame.render_widget(bg_block, frame.area());
+
     let on_menu = app.document.is_none() && app.error.is_none() && !app.searching;
 
     let hint_coords: Vec<GridCoord> = if app.show_hints {
@@ -181,16 +255,22 @@ pub fn draw(
     } else {
         None
     };
-    draw_header(frame, app, regions.header, hint_finger);
+    draw_header(frame, app, regions.header, hint_finger, &tc);
     if app.viewing_history {
-        draw_history(frame, app, regions.text_area);
+        draw_history(frame, app, regions.text_area, &tc);
     } else {
-        draw_text_panel(frame, app, regions.text_area);
-        draw_search_overlay(frame, app, regions.search_area);
+        draw_text_panel(frame, app, regions.text_area, &tc);
+        draw_search_overlay(frame, app, regions.search_area, &tc);
     }
 
     if app.show_keyboard {
-        let kbd_rects = build_keyboard_rects(regions.keyboard_area, rows);
+        let keys_area = Rect::new(
+            regions.keyboard_area.x,
+            regions.keyboard_area.y + 1,
+            regions.keyboard_area.width,
+            regions.keyboard_area.height.saturating_sub(2),
+        );
+        let kbd_rects = build_keyboard_rects(keys_area, rows);
         let highlight_coord: Option<GridCoord> = if app.show_hints {
             app.highlighted_key
                 .and_then(|code| grid_map.get(&code))
@@ -198,7 +278,11 @@ pub fn draw(
         } else {
             None
         };
-        let highlight_color = if app.last_correct { CORRECT } else { INCORRECT };
+        let highlight_color = if app.last_correct {
+            tc.correct
+        } else {
+            tc.incorrect
+        };
         draw_keyboard(
             frame,
             rows,
@@ -207,11 +291,18 @@ pub fn draw(
             highlight_coord,
             highlight_color,
             app.show_fingers,
+            &tc,
         );
     }
 }
 
-fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Finger>) {
+fn draw_header(
+    frame: &mut Frame,
+    app: &App,
+    area: Rect,
+    hint_finger: Option<Finger>,
+    tc: &ThemeColors,
+) {
     let [left, center, right] = Layout::horizontal([
         Constraint::Percentage(30),
         Constraint::Min(0),
@@ -222,7 +313,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
     frame.render_widget(
         Block::new()
             .borders(Borders::BOTTOM)
-            .border_style(Style::new().fg(DIM_BORDER)),
+            .border_style(Style::new().fg(tc.dim_border)),
         area,
     );
 
@@ -232,14 +323,14 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!(" {mins}:{secs:02}"), Style::new().fg(DIM_TEXT)),
+            Span::styled(format!(" {mins}:{secs:02}"), Style::new().fg(tc.dim_text)),
             if app.document.is_some() {
-                Span::styled("  Esc", Style::new().fg(ACCENT).bold())
+                Span::styled("  Esc", Style::new().fg(tc.accent).bold())
             } else {
                 Span::raw("")
             },
             if app.document.is_some() {
-                Span::styled(" menu", Style::new().fg(DIM_TEXT))
+                Span::styled(" menu", Style::new().fg(tc.dim_text))
             } else {
                 Span::raw("")
             },
@@ -247,12 +338,12 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
         left,
     );
 
-    let mut center_spans = vec![Span::styled("clavirio", Style::new().fg(ACCENT).bold())];
+    let mut center_spans = vec![Span::styled("clavirio", Style::new().fg(tc.accent).bold())];
     if let Some(doc) = &app.document {
         let (cur, total) = doc.line_progress();
         center_spans.push(Span::styled(
             format!("  {cur}/{total}"),
-            Style::new().fg(DIM_TEXT),
+            Style::new().fg(tc.dim_text),
         ));
     }
     if let Some(finger) = hint_finger {
@@ -265,9 +356,9 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
         };
         center_spans.push(Span::styled(
             format!("  {} ", finger.label()),
-            Style::new().fg(Color::Yellow).bold(),
+            Style::new().fg(tc.finger_label).bold(),
         ));
-        center_spans.push(Span::styled(name, Style::new().fg(DIM_TEXT)));
+        center_spans.push(Span::styled(name, Style::new().fg(tc.dim_text)));
     }
     frame.render_widget(Paragraph::new(Line::from(center_spans)).centered(), center);
 
@@ -282,21 +373,21 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
         Paragraph::new(Line::from(vec![
             Span::styled(
                 format!("{wpm:.0} wpm"),
-                Style::new().fg(if wpm > 0.0 { ACCENT } else { DIM_TEXT }),
+                Style::new().fg(if wpm > 0.0 { tc.accent } else { tc.dim_text }),
             ),
-            Span::styled("  ✓ ", Style::new().fg(CORRECT).bold()),
+            Span::styled("  ✓ ", Style::new().fg(tc.correct).bold()),
             Span::styled(
                 format!("{}", app.correct_count),
-                Style::new().fg(if has_stats { Color::White } else { DIM_TEXT }),
+                Style::new().fg(if has_stats { tc.text } else { tc.dim_text }),
             ),
-            Span::styled("  ⌨ ", Style::new().fg(Color::Yellow).bold()),
+            Span::styled("  ⌨ ", Style::new().fg(tc.finger_label).bold()),
             Span::styled(
                 format!("{}", app.total_count),
-                Style::new().fg(if has_stats { Color::White } else { DIM_TEXT }),
+                Style::new().fg(if has_stats { tc.text } else { tc.dim_text }),
             ),
             Span::styled(
                 format!("  {acc_pct:.0}% "),
-                Style::new().fg(if has_stats { CORRECT } else { DIM_TEXT }),
+                Style::new().fg(if has_stats { tc.correct } else { tc.dim_text }),
             ),
         ]))
         .right_aligned(),
@@ -304,31 +395,36 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect, hint_finger: Option<Fin
     );
 }
 
-fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     if app.searching {
         return;
     }
 
     let ideal_height = if app.document.is_none() && app.error.is_none() {
-        (crate::lessons::LESSONS.len() as u16) + 8
+        (crate::lessons::LESSONS.len() as u16) + 7
     } else {
         7
     };
     let panel_height = ideal_height.min(area.height);
-    let [inner] = Layout::vertical([Constraint::Length(panel_height)])
-        .flex(Flex::Center)
-        .areas(area);
+    let inner = if panel_height >= area.height {
+        area
+    } else {
+        let [r] = Layout::vertical([Constraint::Length(panel_height)])
+            .flex(Flex::Center)
+            .areas(area);
+        r
+    };
 
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(DIM_BORDER))
+        .border_style(Style::new().fg(tc.dim_border))
         .padding(Padding::symmetric(2, 1));
 
     if let Some(ref err) = app.error {
         frame.render_widget(
             Paragraph::new(err.as_str())
-                .style(Style::new().fg(INCORRECT))
+                .style(Style::new().fg(tc.incorrect))
                 .block(block)
                 .centered(),
             inner,
@@ -339,11 +435,10 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
     match &app.document {
         None => {
             let lessons = crate::lessons::LESSONS;
-            // padding: 1 top + 1 bottom, borders: 2, hints: 2 (blank + bar)
-            let chrome = 6_u16;
+            // borders: 2 + padding: 2 + blank: 1 + controls: 1 + settings: 1 = 7
+            let chrome = 7_u16;
             let visible_slots = inner.height.saturating_sub(chrome) as usize;
 
-            // Scroll offset so the selected lesson is always visible
             let scroll =
                 if visible_slots >= lessons.len() || app.selected_lesson < visible_slots / 2 {
                     0
@@ -359,8 +454,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
             for (i, lesson) in lessons.iter().enumerate().skip(scroll).take(visible_slots) {
                 let selected = i == app.selected_lesson;
                 let marker = if selected { "▸" } else { " " };
-                let label_fg = if selected { Color::White } else { DIM_TEXT };
-                let marker_fg = if selected { ACCENT } else { DIM_TEXT };
+                let label_fg = if selected { tc.text } else { tc.dim_text };
+                let marker_fg = if selected { tc.accent } else { tc.dim_text };
                 lines.push(Line::from(vec![
                     Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
                     Span::styled(
@@ -372,26 +467,26 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
             let on_off = |on: bool| if on { "on" } else { "off" };
             lines.push(Line::from(""));
             lines.push(Line::from(vec![
-                Span::styled("Enter", Style::new().fg(ACCENT)),
-                Span::styled(" start  ", Style::new().fg(DIM_TEXT)),
-                Span::styled("h", Style::new().fg(ACCENT)),
-                Span::styled(" history  ", Style::new().fg(DIM_TEXT)),
-                Span::styled("l", Style::new().fg(ACCENT)),
-                Span::styled(format!(" {}  ", app.layout), Style::new().fg(DIM_TEXT)),
-                Span::styled("^F", Style::new().fg(ACCENT)),
-                Span::styled(" file  ", Style::new().fg(DIM_TEXT)),
-                Span::styled("Esc", Style::new().fg(ACCENT)),
-                Span::styled(" quit", Style::new().fg(DIM_TEXT)),
+                Span::styled("Enter", Style::new().fg(tc.accent)),
+                Span::styled(" start  ", Style::new().fg(tc.dim_text)),
+                Span::styled("h", Style::new().fg(tc.accent)),
+                Span::styled(" history  ", Style::new().fg(tc.dim_text)),
+                Span::styled("l", Style::new().fg(tc.accent)),
+                Span::styled(format!(" {}  ", app.layout), Style::new().fg(tc.dim_text)),
+                Span::styled("^F", Style::new().fg(tc.accent)),
+                Span::styled(" file  ", Style::new().fg(tc.dim_text)),
+                Span::styled("Esc", Style::new().fg(tc.accent)),
+                Span::styled(" quit", Style::new().fg(tc.dim_text)),
             ]));
             let fingers_fg = if app.show_hints {
-                DIM_TEXT
+                tc.dim_text
             } else {
-                Color::Rgb(60, 60, 60)
+                tc.disabled
             };
             let fingers_key_fg = if app.show_hints {
-                ACCENT
+                tc.accent
             } else {
-                Color::Rgb(60, 60, 60)
+                tc.disabled
             };
             lines.push(Line::from(vec![
                 Span::styled("1", Style::new().fg(fingers_key_fg)),
@@ -399,16 +494,18 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                     format!(" fingers {}  ", on_off(app.show_fingers)),
                     Style::new().fg(fingers_fg),
                 ),
-                Span::styled("2", Style::new().fg(ACCENT)),
+                Span::styled("2", Style::new().fg(tc.accent)),
                 Span::styled(
                     format!(" hints {}  ", on_off(app.show_hints)),
-                    Style::new().fg(DIM_TEXT),
+                    Style::new().fg(tc.dim_text),
                 ),
-                Span::styled("3", Style::new().fg(ACCENT)),
+                Span::styled("3", Style::new().fg(tc.accent)),
                 Span::styled(
-                    format!(" keyboard {}", on_off(app.show_keyboard)),
-                    Style::new().fg(DIM_TEXT),
+                    format!(" keyboard {}  ", on_off(app.show_keyboard)),
+                    Style::new().fg(tc.dim_text),
                 ),
+                Span::styled("4", Style::new().fg(tc.accent)),
+                Span::styled(format!(" {}", app.theme), Style::new().fg(tc.dim_text)),
             ]));
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
@@ -419,40 +516,37 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                 0.0
             };
             let mut lines = vec![Line::from(vec![
-                Span::styled("Done! ", Style::new().fg(CORRECT).bold()),
+                Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
                 Span::styled(
                     format!("{:.0} wpm", app.wpm()),
-                    Style::new().fg(ACCENT).bold(),
+                    Style::new().fg(tc.accent).bold(),
                 ),
-                Span::styled(
-                    format!("  {:.0}% accuracy", pct),
-                    Style::new().fg(Color::White),
-                ),
+                Span::styled(format!("  {:.0}% accuracy", pct), Style::new().fg(tc.text)),
                 Span::styled(
                     format!("  ({}/{})", app.correct_count, app.total_count),
-                    Style::new().fg(DIM_TEXT),
+                    Style::new().fg(tc.dim_text),
                 ),
-                Span::styled("  r", Style::new().fg(ACCENT).bold()),
-                Span::styled(" restart  ", Style::new().fg(DIM_TEXT)),
-                Span::styled("Ctrl-F", Style::new().fg(ACCENT).bold()),
-                Span::styled(" new file", Style::new().fg(DIM_TEXT)),
+                Span::styled("  r", Style::new().fg(tc.accent).bold()),
+                Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
+                Span::styled("Ctrl-F", Style::new().fg(tc.accent).bold()),
+                Span::styled(" new file", Style::new().fg(tc.dim_text)),
             ])];
             let worst = app.worst_keys(5);
             if !worst.is_empty() {
-                let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(DIM_TEXT))];
+                let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(tc.dim_text))];
                 for (i, (ch, acc)) in worst.iter().enumerate() {
                     if i > 0 {
-                        spans.push(Span::styled("  ", Style::new().fg(DIM_TEXT)));
+                        spans.push(Span::styled("  ", Style::new().fg(tc.dim_text)));
                     }
                     let label = if *ch == ' ' {
                         "space".to_string()
                     } else {
                         ch.to_string()
                     };
-                    spans.push(Span::styled(label, Style::new().fg(INCORRECT).bold()));
+                    spans.push(Span::styled(label, Style::new().fg(tc.incorrect).bold()));
                     spans.push(Span::styled(
                         format!(" {acc:.0}%"),
-                        Style::new().fg(DIM_TEXT),
+                        Style::new().fg(tc.dim_text),
                     ));
                 }
                 lines.push(Line::from(spans));
@@ -471,7 +565,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
 
             let mut spans = Vec::new();
             if !done.is_empty() {
-                spans.push(Span::styled(done, Style::new().fg(CORRECT)));
+                spans.push(Span::styled(done, Style::new().fg(tc.correct)));
             }
 
             let mut chars = remaining.chars();
@@ -479,27 +573,27 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
                 if let Some(_expected) = chars.next() {
                     spans.push(Span::styled(
                         err_ch.to_string(),
-                        Style::new().fg(Color::Black).bg(INCORRECT),
+                        Style::new().fg(tc.cursor_fg).bg(tc.incorrect),
                     ));
                 }
                 if let Some(cursor_ch) = chars.next() {
                     spans.push(Span::styled(
                         cursor_ch.to_string(),
-                        Style::new().fg(Color::Black).bg(Color::White),
+                        Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
                     ));
                 }
                 let rest: String = chars.collect();
                 if !rest.is_empty() {
-                    spans.push(Span::styled(rest, Style::new().fg(Color::White)));
+                    spans.push(Span::styled(rest, Style::new().fg(tc.text)));
                 }
             } else if let Some(next_ch) = chars.next() {
                 spans.push(Span::styled(
                     next_ch.to_string(),
-                    Style::new().fg(Color::Black).bg(Color::White),
+                    Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
                 ));
                 let rest: String = chars.collect();
                 if !rest.is_empty() {
-                    spans.push(Span::styled(rest, Style::new().fg(Color::White)));
+                    spans.push(Span::styled(rest, Style::new().fg(tc.text)));
                 }
             }
 
@@ -507,7 +601,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
             for upcoming in doc.upcoming_lines(2) {
                 lines.push(Line::from(Span::styled(
                     upcoming,
-                    Style::new().fg(DIM_TEXT),
+                    Style::new().fg(tc.dim_text),
                 )));
             }
 
@@ -516,7 +610,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     if !app.searching {
         return;
     }
@@ -528,13 +622,16 @@ fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(ACCENT))
-        .title(Span::styled(" File path ", Style::new().fg(ACCENT).bold()))
+        .border_style(Style::new().fg(tc.accent))
+        .title(Span::styled(
+            " File path ",
+            Style::new().fg(tc.accent).bold(),
+        ))
         .padding(Padding::horizontal(1));
 
     let cursor_line = Line::from(vec![
         Span::raw(&app.file_path_buf),
-        Span::styled("▌", Style::new().fg(ACCENT)),
+        Span::styled("▌", Style::new().fg(tc.accent)),
     ]);
 
     frame.render_widget(Paragraph::new(cursor_line).block(block), inner);
@@ -557,7 +654,7 @@ pub(crate) fn friendly_timestamp(ts: &str) -> String {
     }
 }
 
-fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     let records = &app.history;
 
     let panel_h = area.height;
@@ -568,8 +665,8 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(DIM_BORDER))
-        .title(Span::styled(" History ", Style::new().fg(ACCENT).bold()))
+        .border_style(Style::new().fg(tc.dim_border))
+        .title(Span::styled(" History ", Style::new().fg(tc.accent).bold()))
         .padding(Padding::symmetric(2, 1));
 
     let mut lines = Vec::new();
@@ -577,7 +674,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
     if records.is_empty() {
         lines.push(Line::from(Span::styled(
             "No sessions yet",
-            Style::new().fg(DIM_TEXT),
+            Style::new().fg(tc.dim_text),
         )));
     } else {
         // chrome: borders 2 + padding 2 + header 1 + avg ~3 + footer 2 = 10
@@ -598,7 +695,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
                 "{:<18} {:>5}  {:>5}  {:>6}  {}",
                 "date", "wpm", "acc", "time", "lesson"
             ),
-            Style::new().fg(DIM_TEXT),
+            Style::new().fg(tc.dim_text),
         )));
 
         for (i, r) in records.iter().enumerate().skip(scroll).take(visible_slots) {
@@ -613,7 +710,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
                 .unwrap_or(&r.id);
             let lesson_display = if r.id.is_empty() { "—" } else { lesson_label };
             let selected = i == scroll_pos;
-            let fg = if selected { Color::White } else { DIM_TEXT };
+            let fg = if selected { tc.text } else { tc.dim_text };
             let marker = if selected { "▸ " } else { "  " };
             lines.push(Line::from(Span::styled(
                 format!(
@@ -624,7 +721,6 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
             )));
         }
 
-        // Averages from completed sessions
         let completed: Vec<_> = records.iter().filter(|r| r.completed).collect();
         if !completed.is_empty() {
             let avg_wpm: f64 =
@@ -633,16 +729,19 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
                 completed.iter().map(|r| r.accuracy).sum::<f64>() / completed.len() as f64;
             lines.push(Line::from(""));
             lines.push(Line::from(vec![
-                Span::styled("Avg: ", Style::new().fg(DIM_TEXT)),
-                Span::styled(format!("{avg_wpm:.0} wpm"), Style::new().fg(ACCENT).bold()),
-                Span::styled("  ", Style::new().fg(DIM_TEXT)),
+                Span::styled("Avg: ", Style::new().fg(tc.dim_text)),
+                Span::styled(
+                    format!("{avg_wpm:.0} wpm"),
+                    Style::new().fg(tc.accent).bold(),
+                ),
+                Span::styled("  ", Style::new().fg(tc.dim_text)),
                 Span::styled(
                     format!("{avg_acc:.0}% acc"),
-                    Style::new().fg(CORRECT).bold(),
+                    Style::new().fg(tc.correct).bold(),
                 ),
                 Span::styled(
                     format!("  ({} sessions)", completed.len()),
-                    Style::new().fg(DIM_TEXT),
+                    Style::new().fg(tc.dim_text),
                 ),
             ]));
         }
@@ -650,12 +749,12 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect) {
 
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("↑↓", Style::new().fg(ACCENT)),
-        Span::styled(" scroll  ", Style::new().fg(DIM_TEXT)),
-        Span::styled("Esc", Style::new().fg(ACCENT)),
-        Span::styled(" back  ", Style::new().fg(DIM_TEXT)),
-        Span::styled("*", Style::new().fg(ACCENT)),
-        Span::styled(" = incomplete", Style::new().fg(DIM_TEXT)),
+        Span::styled("↑↓", Style::new().fg(tc.accent)),
+        Span::styled(" scroll  ", Style::new().fg(tc.dim_text)),
+        Span::styled("Esc", Style::new().fg(tc.accent)),
+        Span::styled(" back  ", Style::new().fg(tc.dim_text)),
+        Span::styled("*", Style::new().fg(tc.accent)),
+        Span::styled(" = incomplete", Style::new().fg(tc.dim_text)),
     ]));
 
     frame.render_widget(Paragraph::new(lines).block(block), inner);
@@ -700,7 +799,36 @@ fn draw_keyboard(
     highlight_coord: Option<GridCoord>,
     highlight_color: Color,
     show_fingers: bool,
+    tc: &ThemeColors,
 ) {
+    if let Some(outer) = bounding_rect(kbd_rects) {
+        let pad_x: u16 = 2;
+        let pad_y: u16 = 1;
+        let padded = Rect::new(
+            outer.x.saturating_sub(pad_x),
+            outer.y.saturating_sub(pad_y),
+            (outer.width + pad_x * 2).min(
+                frame
+                    .area()
+                    .width
+                    .saturating_sub(outer.x.saturating_sub(pad_x)),
+            ),
+            (outer.height + pad_y * 2).min(
+                frame
+                    .area()
+                    .height
+                    .saturating_sub(outer.y.saturating_sub(pad_y)),
+            ),
+        );
+        frame.render_widget(
+            Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::new().fg(tc.dim_border)),
+            padded,
+        );
+    }
+
     for (row_idx, row) in rows.iter().enumerate() {
         let Some(row_rects) = kbd_rects.get(row_idx) else {
             continue;
@@ -717,9 +845,9 @@ fn draw_keyboard(
             let border_color = if is_highlight {
                 highlight_color
             } else if is_hint {
-                CORRECT
+                tc.correct
             } else {
-                DIM_BORDER
+                tc.dim_border
             };
             let block = Block::new()
                 .borders(Borders::ALL)
@@ -729,13 +857,12 @@ fn draw_keyboard(
             let inner = block.inner(cell);
             frame.render_widget(block, cell);
 
-            // Show finger abbreviation on the top border of hint keys
             if is_hint && show_fingers {
                 if let Some(finger) = finger_for_coord((row_idx, col_idx)) {
                     frame.render_widget(
                         Paragraph::new(Span::styled(
                             finger.label(),
-                            Style::new().fg(Color::Yellow),
+                            Style::new().fg(tc.finger_label),
                         ))
                         .centered(),
                         cell,
@@ -754,13 +881,17 @@ fn draw_keyboard(
             let cx = inner.x + inner.width.saturating_sub(label_w) / 2;
 
             let label_fg = if is_highlight {
-                Color::Black
+                tc.cursor_fg
             } else if is_hint {
-                CORRECT
+                tc.correct
             } else {
-                Color::Gray
+                tc.key_label
             };
-            let sec_fg = if is_highlight { Color::Black } else { DIM_TEXT };
+            let sec_fg = if is_highlight {
+                tc.cursor_fg
+            } else {
+                tc.dim_text
+            };
 
             if let Some(sec_char) = has_secondary {
                 // Two-label key: secondary at top, primary at bottom half
@@ -775,7 +906,6 @@ fn draw_keyboard(
                     buf.set_string(sx, inner.y, &s, Style::new().fg(sec_fg));
                 }
             } else {
-                // Single-label key
                 let cy = inner.y + inner.height / 2;
                 if cx < inner.x + inner.width && cy < inner.y + inner.height {
                     buf.set_string(cx, cy, label, Style::new().fg(label_fg));

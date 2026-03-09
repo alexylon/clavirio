@@ -38,6 +38,32 @@ pub struct KeyboardSettings {
     pub layout: KeyboardLayout,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    #[default]
+    Dark,
+    Light,
+}
+
+impl Theme {
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::Dark => Self::Light,
+            Self::Light => Self::Dark,
+        }
+    }
+}
+
+impl fmt::Display for Theme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Dark => write!(f, "dark"),
+            Self::Light => write!(f, "light"),
+        }
+    }
+}
+
 fn default_true() -> bool {
     true
 }
@@ -50,6 +76,8 @@ pub struct DisplaySettings {
     pub show_hints: bool,
     #[serde(default = "default_true")]
     pub show_fingers: bool,
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Default for DisplaySettings {
@@ -58,6 +86,7 @@ impl Default for DisplaySettings {
             show_keyboard: true,
             show_hints: true,
             show_fingers: true,
+            theme: Theme::default(),
         }
     }
 }
@@ -139,5 +168,23 @@ mod tests {
         assert_eq!(KeyboardLayout::Qwerty.to_string(), "QWERTY");
         assert_eq!(KeyboardLayout::Dvorak.to_string(), "Dvorak");
         assert_eq!(KeyboardLayout::Colemak.to_string(), "Colemak");
+    }
+
+    #[test]
+    fn default_theme_is_dark() {
+        let s = Settings::default();
+        assert_eq!(s.display.theme, Theme::Dark);
+    }
+
+    #[test]
+    fn cycle_theme() {
+        assert_eq!(Theme::Dark.cycle(), Theme::Light);
+        assert_eq!(Theme::Light.cycle(), Theme::Dark);
+    }
+
+    #[test]
+    fn theme_display() {
+        assert_eq!(Theme::Dark.to_string(), "dark");
+        assert_eq!(Theme::Light.to_string(), "light");
     }
 }

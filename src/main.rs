@@ -70,6 +70,7 @@ async fn run_app() -> Result<()> {
     app.show_keyboard = settings.display.show_keyboard;
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
+    app.theme = settings.display.theme;
 
     if let Some(path) = std::env::args().nth(1) {
         match app::Document::load(&path) {
@@ -108,10 +109,10 @@ async fn run_app() -> Result<()> {
             break;
         }
 
-        // Sync settings if anything changed
         let display_changed = app.show_keyboard != settings.display.show_keyboard
             || app.show_hints != settings.display.show_hints
-            || app.show_fingers != settings.display.show_fingers;
+            || app.show_fingers != settings.display.show_fingers
+            || app.theme != settings.display.theme;
         let layout_changed = app.layout != settings.keyboard.layout;
 
         if layout_changed || display_changed {
@@ -119,6 +120,7 @@ async fn run_app() -> Result<()> {
             settings.display.show_keyboard = app.show_keyboard;
             settings.display.show_hints = app.show_hints;
             settings.display.show_fingers = app.show_fingers;
+            settings.display.theme = app.theme;
             settings::save_settings(&settings);
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);

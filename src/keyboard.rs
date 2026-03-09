@@ -316,7 +316,6 @@ fn finger_for_col(col: usize) -> Finger {
     }
 }
 
-/// Returns the finger for a key at the given grid coordinate.
 pub fn finger_for_coord(coord: GridCoord) -> Option<Finger> {
     let (row, col) = coord;
     match row {
@@ -333,7 +332,6 @@ pub fn finger_for_coord(coord: GridCoord) -> Option<Finger> {
             9 => Some(Finger::Ring),
             _ => Some(Finger::Pinky),
         },
-        // Modifier row
         4 => Some(Finger::Thumb),
         _ => None,
     }

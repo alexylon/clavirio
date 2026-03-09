@@ -6,7 +6,9 @@
 
 *From Latin **clavis** (key) — a terminal typing tutor.*
 
-<div align="center"><img src="/assets/images/screenshot.png" style="width: 800px;" alt="clavirio"></div>
+<div align="center"><img src="/assets/images/screenshot_dark.png" style="width: 800px;" alt="clavirio"></div>
+
+<div align="center"><img src="/assets/images/screenshot_light.png" style="width: 800px;" alt="clavirio"></div>
 
 A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Practice with built-in lessons or any text file while a virtual keyboard tracks your keystrokes in real time.
 
@@ -19,7 +21,7 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 - **Error feedback** — wrong keystrokes are shown inline and block progress until corrected with Backspace
 - **Completion summary** — final WPM, accuracy percentage, and your weakest keys
 - **Session history** — results saved to `~/.clavirio/history.json` with per-lesson tracking, scrollable history view, and averages across completed sessions
-- **Settings** — preferences stored in `~/.clavirio/settings.toml`; keyboard layout is saved automatically when changed
+- **Display settings** — toggle fingers, hints, keyboard, and dark/light theme from the main menu (`1`–`4`); all preferences saved to `~/.clavirio/settings.toml`
 - **Progress tracking** — the menu cursor remembers your last built-in lesson: points to it if unfinished, advances to the next if completed
 - **Custom text** — load any text file via `Ctrl-F` or as a CLI argument
 - **Graceful shutdown** — in-progress sessions are saved on SIGTERM/SIGHUP
@@ -68,8 +70,12 @@ On a laptop screen this usually means a maximized terminal window.
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | Navigate lesson menu / scroll history |
 | `Enter` | Start selected lesson |
-| `l` | Cycle keyboard layout: QWERTY → Dvorak → Colemak (main menu) |
-| `h` | View session history (main menu) |
+| `l` | Cycle keyboard layout: QWERTY → Dvorak → Colemak |
+| `1` | Toggle finger hints (requires hints on) |
+| `2` | Toggle key hints |
+| `3` | Toggle virtual keyboard |
+| `4` | Toggle dark/light theme |
+| `h` | View session history |
 | `Ctrl-F` | Open file path input |
 | `Ctrl-R` | Restart current text |
 | `Ctrl-C` | Save and quit immediately |
@@ -83,5 +89,11 @@ Preferences are stored in `~/.clavirio/settings.toml` and saved automatically.
 
 ```toml
 [keyboard]
-layout = "qwerty"  # qwerty, dvorak, colemak
+layout = "qwerty"      # qwerty, dvorak, colemak
+
+[display]
+show_keyboard = true
+show_hints = true
+show_fingers = true
+theme = "dark"          # dark, light
 ```

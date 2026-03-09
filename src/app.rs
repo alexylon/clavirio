@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use time::{format_description::well_known::Iso8601, OffsetDateTime, UtcOffset};
 
 use crate::input::InputEvent;
-use crate::settings::KeyboardLayout;
+use crate::settings::{KeyboardLayout, Theme};
 
 fn chrono_now() -> String {
     let now = OffsetDateTime::now_utc()
@@ -169,6 +169,7 @@ pub struct App {
     pub show_keyboard: bool,
     pub show_hints: bool,
     pub show_fingers: bool,
+    pub theme: Theme,
 }
 
 impl App {
@@ -197,6 +198,7 @@ impl App {
             show_keyboard: true,
             show_hints: true,
             show_fingers: true,
+            theme: Theme::default(),
         }
     }
 
@@ -447,6 +449,9 @@ impl App {
             }
             KeyCode::Char('3') => {
                 self.show_keyboard = !self.show_keyboard;
+            }
+            KeyCode::Char('4') => {
+                self.theme = self.theme.cycle();
             }
             _ => {}
         }
@@ -750,7 +755,6 @@ mod tests {
         assert!(!app.last_correct);
         assert_eq!(app.total_count, 1);
         assert_eq!(app.correct_count, 0);
-        // Cursor should NOT have advanced
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
     }
 
@@ -972,7 +976,6 @@ mod tests {
     #[test]
     fn save_on_exit_does_nothing_without_document() {
         let app = App::new();
-        // Should not panic
         app.save_on_exit();
     }
 
@@ -982,7 +985,6 @@ mod tests {
         app.document = Some(Document::from_text("a").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
-        // Should not panic — already saved on completion
         app.save_on_exit();
     }
 
