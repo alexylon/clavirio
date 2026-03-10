@@ -14,7 +14,7 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 
 ## Features
 
-- **15 built-in lessons** — progressive drills from home row basics to full paragraphs and code, ordered by difficulty
+- **15 built-in lessons** — progressive drills from home row basics to full paragraphs and code; lessons 1–9 are tailored to each keyboard layout, lessons 10–15 are shared
 - **Live stats** — WPM, accuracy %, elapsed time, keystrokes, and line progress update as you type
 - **Keyboard layouts** — supports QWERTY, Dvorak, and Colemak; switch with `l` on the main menu
 - **Virtual keyboard** — highlights the expected next key (including Shift) with a finger hint (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb) on the top border; adapts to macOS and PC layouts
@@ -28,17 +28,22 @@ A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Pract
 
 ## Lessons
 
+Lessons 1–9 are **layout-specific** (each layout has its own drills matched to that layout's finger positions). Lessons 10–15 are **shared** across all layouts.
+
+| # | Lesson | QWERTY | Dvorak | Colemak |
+|---|--------|--------|--------|---------|
+| 1 | Index Keys | f j | u h | t n |
+| 2 | Middle Keys | d k (+ f j) | e t (+ u h) | s e (+ t n) |
+| 3 | Ring & Pinky | s l ; (+ f j d k) | o n s (+ a) | r i o (+ a) |
+| 4 | Home Row | a s d f j k l ; | a o e u i d h t n s | a r s t d h n e i o |
+| 5 | Home Reach | g h | i d | d h |
+| 6 | Top Intro | e i r u | p c r l | f p l u |
+| 7 | Top Row | q w e r t y u i o p | ' , . p y f g c r l | q w f p g j l u y ; |
+| 8 | Bottom Row | z x c v b n m , . | ; q j k x b m w v z | z x c v b k m , . |
+| 9 | All Letters | Pangrams | Pangrams | Pangrams |
+
 | # | Lesson | Focus |
 |---|--------|-------|
-| 1 | f j d k | Index fingers |
-| 2 | d k (+ f j) | Index + middle fingers |
-| 3 | s l ; (+ f j d k) | Ring + pinky fingers |
-| 4 | a s d f j k l ; | Full home row |
-| 5 | g h (home row) | Home row complete |
-| 6 | e i r u | Top row reach |
-| 7 | q w e r t y u i o p | Full top row |
-| 8 | z x c v b n m , . | Bottom row |
-| 9 | All Letters | Pangrams |
 | 10 | Capitals & Shift | Mixed case |
 | 11 | 0-9 Numbers | Numbers in context |
 | 12 | Punctuation & Symbols | Special characters |
