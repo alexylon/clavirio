@@ -1,16 +1,22 @@
-# clavirio
+<div align="center"><img src="/assets/images/icon.svg" style="width: 80px;" alt="clavirio"></div>
+
+<h1 align="center"><code>clavirio</code></h1>
 
 ![](https://github.com/alexylon/clavirio/actions/workflows/rust.yml/badge.svg) &nbsp; [![Crates.io](https://img.shields.io/crates/v/clavirio.svg?color=blue)](https://crates.io/crates/clavirio)
 
 [www.clavir.io](https://www.clavir.io)
 
-*From Latin **clavis** (key) — a terminal typing tutor.*
+### Learn touch typing without leaving the terminal.
+
+Progressive lessons for QWERTY, Dvorak & Colemak. 
+Real-time stats, a virtual keyboard with finger hints, and session history — in a fast, 
+lightweight binary built with Rust and [ratatui](https://ratatui.rs).
+
+*clavirio* — from Latin *clavis* (key).
 
 <div align="center"><img src="/assets/images/screenshot_dark.png" style="width: 800px;" alt="clavirio"></div>
 
 <div align="center"><img src="/assets/images/screenshot_light.png" style="width: 800px;" alt="clavirio"></div>
-
-A terminal typing tutor built with Rust and [ratatui](https://ratatui.rs). Practice with built-in lessons or any text file while a virtual keyboard tracks your keystrokes in real time.
 
 ## Features
 
