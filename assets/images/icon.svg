@@ -8,12 +8,12 @@
     </linearGradient>
     <!-- Inner screen gradient -->
     <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#002a00"/>
-      <stop offset="100%" stop-color="#002a00"/>
+      <stop offset="0%" stop-color="#001a00"/>
+      <stop offset="100%" stop-color="#001a00"/>
     </linearGradient>
     <!-- Dot pattern -->
     <pattern id="dots" width="12" height="12" patternUnits="userSpaceOnUse">
-      <circle cx="6" cy="6" r="1.8" fill="#ffffff" opacity="0.12"/>
+      <circle cx="6" cy="6" r="2.4" fill="#ffffff" opacity="0.12"/>
     </pattern>
     <!-- Glow behind letter -->
     <radialGradient id="glow" cx="50%" cy="50%" r="40%">
@@ -22,8 +22,9 @@
     </radialGradient>
     <!-- Glossy highlight -->
     <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15"/>
-      <stop offset="40%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
 
