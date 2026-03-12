@@ -19,17 +19,17 @@
     </pattern>
     <!-- Dot pattern - bright for letter -->
     <pattern id="brightdots" width="9" height="9" patternUnits="userSpaceOnUse">
-      <circle cx="4.5" cy="4.5" r="2.8" fill="#33ff33" opacity="0.7"/>
+      <circle cx="4.5" cy="4.5" r="2.8" fill="#44ff44" opacity="0.9"/>
     </pattern>
     <!-- Dot pattern - glow around letter -->
     <pattern id="glowdots" width="9" height="9" patternUnits="userSpaceOnUse">
-      <circle cx="4.5" cy="4.5" r="2.8" fill="#33ff33" opacity="0.6"/>
+      <circle cx="4.5" cy="4.5" r="2.8" fill="#33ff33" opacity="0.75"/>
     </pattern>
     <!-- Glow behind letter -->
     <radialGradient id="glow" cx="50%" cy="50%" r="45%">
-      <stop offset="0%" stop-color="#33ff33" stop-opacity="0.15"/>
-      <stop offset="30%" stop-color="#33ff33" stop-opacity="0.1"/>
-      <stop offset="55%" stop-color="#33ff33" stop-opacity="0.05"/>
+      <stop offset="0%" stop-color="#33ff33" stop-opacity="0.25"/>
+      <stop offset="30%" stop-color="#33ff33" stop-opacity="0.15"/>
+      <stop offset="55%" stop-color="#33ff33" stop-opacity="0.06"/>
       <stop offset="100%" stop-color="#33ff33" stop-opacity="0"/>
     </radialGradient>
     <!-- Glossy highlight -->
@@ -59,13 +59,13 @@
     <mask id="cmask-glow">
       <path transform="translate(87.2 410) scale(0.56 -0.56)" fill="white" stroke="white" stroke-width="14" stroke-linejoin="round" filter="url(#cblur)" d="M304 -10Q238 -10 188.5 15.0Q139 40 112.0 87.5Q85 135 85 200V350Q85 416 112.0 463.0Q139 510 188.5 535.0Q238 560 304 560Q399 560 457.0 509.0Q515 458 518 370H428Q425 423 392.5 451.5Q360 480 304 480Q245 480 210.0 446.5Q175 413 175 351V200Q175 138 210.0 104.0Q245 70 304 70Q360 70 392.5 99.0Q425 128 428 180H518Q515 92 457.0 41.0Q399 -10 304 -10Z"/>
     </mask>
-    <!-- Mask: sharp LED dot -->
-    <mask id="ledmask-sharp">
-      <circle cx="420" cy="420" r="15" fill="white"/>
+    <!-- Mask: sharp cursor block -->
+    <mask id="cursormask-sharp">
+      <rect x="401" y="73" width="12" height="366" fill="white"/>
     </mask>
-    <!-- Mask: blurred LED for glow -->
-    <mask id="ledmask-glow">
-      <circle cx="420" cy="420" r="18" fill="white" filter="url(#ledblur)"/>
+    <!-- Mask: blurred cursor for glow -->
+    <mask id="cursormask-glow">
+      <rect x="401" y="73" width="12" height="366" fill="white" filter="url(#ledblur)"/>
     </mask>
   </defs>
 
@@ -79,16 +79,16 @@
   <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#dots)"/>
   <!-- Dots glowing near the C -->
   <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#glowdots)" mask="url(#cmask-glow)"/>
-  <!-- Dots glowing near the LED -->
-  <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#glowdots)" mask="url(#ledmask-glow)"/>
+  <!-- Dots glowing near the cursor -->
+  <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#glowdots)" mask="url(#cursormask-glow)"/>
   <!-- Glow -->
   <circle cx="256" cy="256" r="150" fill="url(#glow)"/>
-  <!-- LED glow halo -->
-  <circle cx="420" cy="420" r="35" fill="#33ff33" opacity="0.2" filter="url(#ledblur)"/>
+  <!-- Cursor glow halo -->
+  <rect x="396" y="68" width="22" height="376" rx="4" fill="#33ff33" opacity="0.25" filter="url(#ledblur)"/>
   <!-- Bright dots forming the C -->
   <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#brightdots)" mask="url(#cmask-sharp)" filter="url(#snap)"/>
-  <!-- Bright dots forming the LED -->
-  <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#brightdots)" mask="url(#ledmask-sharp)" filter="url(#snap)"/>
+  <!-- Bright dots forming the cursor -->
+  <rect x="28" y="28" width="456" height="456" rx="72" fill="url(#brightdots)" mask="url(#cursormask-sharp)" filter="url(#snap)"/>
   <!-- Gloss -->
   <path d="M28,100 A72,72 0 0,1 100,28 L412,28 A72,72 0 0,1 484,100 L484,280 Q256,355 28,280 Z" fill="url(#gloss)"/>
 </svg>
