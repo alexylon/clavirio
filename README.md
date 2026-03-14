@@ -1,4 +1,4 @@
-<div align="center"><img src="/assets/images/icon_gunmetal_small_dotmatrix.svg" style="width: 80px;" alt="clavirio"></div>
+<div align="center"><img src="/assets/images/icon_gunmetal_scanlines.svg" style="width: 80px;" alt="clavirio"></div>
 
 <h1 align="center"><code>clavirio</code></h1>
 

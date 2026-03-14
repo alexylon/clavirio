@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 533 533">
+  <defs>
+    <!-- Outer bezel gradient - gun metal -->
+    <linearGradient id="bezel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6a6e73"/>
+      <stop offset="15%" stop-color="#555960"/>
+      <stop offset="50%" stop-color="#3a3d42"/>
+      <stop offset="85%" stop-color="#484c52"/>
+      <stop offset="100%" stop-color="#2a2d31"/>
+    </linearGradient>
+    <!-- Scan line pattern - dim background (14px pitch, 9px line) -->
+    <pattern id="scanlines" width="1" height="14" patternUnits="userSpaceOnUse">
+      <rect x="0" y="2.5" width="1" height="9" fill="#ffffff" opacity="0.12"/>
+    </pattern>
+    <!-- Scan line pattern - green glow near letter/cursor -->
+    <pattern id="glowscanlines" width="1" height="14" patternUnits="userSpaceOnUse">
+      <rect x="0" y="2.5" width="1" height="9" fill="#20ff20" opacity="0.95"/>
+    </pattern>
+    <!-- Glossy highlight -->
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Dome highlight - radial shine -->
+    <radialGradient id="dome" cx="50%" cy="38%" r="55%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Dome edge shadow - vignette for convex look -->
+    <radialGradient id="dome-edge" cx="50%" cy="50%" r="50%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="85%" stop-color="#000000" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.35"/>
+    </radialGradient>
+    <!-- C letter glow blur -->
+    <filter id="cblur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+    <!-- Cursor glow blur - tighter than C -->
+    <filter id="cursorblur" x="-200%" y="-20%" width="500%" height="140%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- Mask: blurred C for phosphor glow -->
+    <mask id="cmask-glow">
+      <path transform="translate(87.2 423.9) scale(0.56 -0.57)" fill="white" stroke="white" stroke-width="14" stroke-linejoin="round" filter="url(#cblur)" d="M304 -10Q238 -10 188.5 15.0Q139 40 112.0 87.5Q85 135 85 200V350Q85 416 112.0 463.0Q139 510 188.5 535.0Q238 560 304 560Q399 560 457.0 509.0Q515 458 518 370H428Q425 423 392.5 451.5Q360 480 304 480Q245 480 210.0 446.5Q175 413 175 351V200Q175 138 210.0 104.0Q245 70 304 70Q360 70 392.5 99.0Q425 128 428 180H518Q515 92 457.0 41.0Q399 -10 304 -10Z"/>
+    </mask>
+    <!-- Mask: blurred cursor for phosphor glow -->
+    <mask id="cursormask-glow">
+      <rect x="408" y="73" width="24" height="390" fill="white" filter="url(#cursorblur)"/>
+    </mask>
+  </defs>
+
+  <!-- Bezel -->
+  <rect width="533" height="533" rx="100" fill="url(#bezel)"/>
+  <!-- Dark inner border -->
+  <rect x="18" y="18" width="497" height="497" rx="82" fill="#111"/>
+  <!-- Screen -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="#000"/>
+  <!-- Dim background scan lines -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="url(#scanlines)"/>
+  <!-- Background scan lines glowing near the C -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="url(#glowscanlines)" mask="url(#cmask-glow)"/>
+  <!-- Background scan lines glowing near the cursor -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="url(#glowscanlines)" opacity="0.5" mask="url(#cursormask-glow)"/>
+  <!-- C letter - rounded scan line bars with curve-calculated x positions -->
+  <g fill="#20ff20">
+    <rect x="212.5" y="100.5" width="93" height="9" rx="4.5"/>
+    <rect x="184.5" y="114.5" width="145.4" height="9" rx="4.5"/>
+    <rect x="165.4" y="128.5" width="183.3" height="9" rx="4.5"/>
+    <rect x="153.0" y="142.5" width="208.1" height="9" rx="4.5"/>
+    <rect x="144.4" y="156.5" width="71.9" height="9" rx="4.5"/>
+    <rect x="298.8" y="156.5" width="70.8" height="9" rx="4.5"/>
+    <rect x="138.3" y="170.5" width="63.9" height="9" rx="4.5"/>
+    <rect x="312.1" y="170.5" width="63.2" height="9" rx="4.5"/>
+    <rect x="134.3" y="184.5" width="60.3" height="9" rx="4.5"/>
+    <rect x="318.9" y="184.5" width="59.9" height="9" rx="4.5"/>
+    <rect x="132.0" y="198.5" width="58.8" height="9" rx="4.5"/>
+    <rect x="322.2" y="198.5" width="58.5" height="9" rx="4.5"/>
+    <rect x="131.0" y="212.5" width="58.3" height="9" rx="4.5"/>
+    <rect x="130.9" y="226.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="130.9" y="240.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="130.9" y="254.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="130.9" y="268.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="130.9" y="282.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="130.9" y="296.5" width="58.2" height="9" rx="4.5"/>
+    <rect x="131.0" y="310.5" width="58.3" height="9" rx="4.5"/>
+    <rect x="132.0" y="324.5" width="58.8" height="9" rx="4.5"/>
+    <rect x="322.2" y="324.5" width="58.5" height="9" rx="4.5"/>
+    <rect x="134.3" y="338.5" width="60.3" height="9" rx="4.5"/>
+    <rect x="318.9" y="338.5" width="59.9" height="9" rx="4.5"/>
+    <rect x="138.3" y="352.5" width="63.9" height="9" rx="4.5"/>
+    <rect x="312.1" y="352.5" width="63.2" height="9" rx="4.5"/>
+    <rect x="144.4" y="366.5" width="71.9" height="9" rx="4.5"/>
+    <rect x="298.8" y="366.5" width="70.8" height="9" rx="4.5"/>
+    <rect x="153.0" y="380.5" width="208.1" height="9" rx="4.5"/>
+    <rect x="165.4" y="394.5" width="183.3" height="9" rx="4.5"/>
+    <rect x="184.5" y="408.5" width="145.4" height="9" rx="4.5"/>
+    <rect x="212.5" y="422.5" width="93" height="9" rx="4.5"/>
+  </g>
+  <!-- Cursor - rounded scan line bars -->
+  <g fill="#20ff20" opacity="0.35">
+    <rect x="408" y="72.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="86.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="100.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="114.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="128.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="142.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="156.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="170.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="184.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="198.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="212.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="226.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="240.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="254.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="268.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="282.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="296.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="310.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="324.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="338.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="352.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="366.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="380.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="394.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="408.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="422.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="436.5" width="24" height="9" rx="4.5"/>
+    <rect x="408" y="450.5" width="24" height="9" rx="4.5"/>
+  </g>
+  <!-- Dome edge shadow -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="url(#dome-edge)"/>
+  <!-- Dome highlight -->
+  <rect x="28" y="28" width="477" height="477" rx="72" fill="url(#dome)"/>
+  <!-- Gloss -->
+  <path d="M28,100 A72,72 0 0,1 100,28 L433,28 A72,72 0 0,1 505,100 L505,287 Q267,362 28,287 Z" fill="url(#gloss)"/>
+</svg>
