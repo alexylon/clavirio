@@ -520,6 +520,11 @@ impl App {
                 }
                 _ => {}
             },
+            (KeyCode::Char('q'), _)
+                if self.document.is_none() && self.error.is_none() =>
+            {
+                return true;
+            }
             _ if self.document.is_none() && self.error.is_none() => {
                 self.handle_menu_key(key.code);
             }

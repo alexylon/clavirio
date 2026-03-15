@@ -441,7 +441,7 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     // Clear the entire text area so no underlying borders bleed through
     frame.render_widget(Block::default().style(Style::default().bg(tc.bg)), area);
 
-    let items = [("Restart lesson", "R"), ("Next lesson", "N"), ("Quit", "Q")];
+    let items = [("Restart lesson", "r"), ("Next lesson", "n"), ("Quit", "q")];
 
     let block = Block::new()
         .borders(Borders::ALL)
@@ -596,6 +596,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled(format!(" {}  ", app.layout), Style::new().fg(tc.dim_text)),
                 Span::styled("^F", Style::new().fg(tc.accent)),
                 Span::styled(" file  ", Style::new().fg(tc.dim_text)),
+                Span::styled("q", Style::new().fg(tc.accent)),
+                Span::styled("/", Style::new().fg(tc.dim_text)),
                 Span::styled("Esc", Style::new().fg(tc.accent)),
                 Span::styled(" quit", Style::new().fg(tc.dim_text)),
             ]));
