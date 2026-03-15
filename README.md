@@ -20,17 +20,15 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 ## Features
 
-- **15 built-in lessons** — progressive drills from home row basics to full paragraphs and code; lessons 1–9 are tailored to each keyboard layout, lessons 10–15 are shared
-- **Live stats** — WPM, accuracy %, elapsed time, keystrokes, and line progress update as you type
-- **Keyboard layouts** — supports QWERTY, Dvorak, and Colemak; switch with `l` on the main menu
-- **Virtual keyboard** — highlights the expected next key (including Shift) with a finger hint (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb) on the top border; adapts to macOS and PC layouts
-- **Error feedback** — wrong keystrokes are shown inline and block progress until corrected with Backspace
-- **Completion summary** — final WPM, accuracy percentage, and your weakest keys
-- **Session history** — results saved to `~/.clavirio/history.json` with per-lesson tracking, scrollable history view, and averages across completed sessions
-- **Display settings** — toggle fingers, hints, keyboard, and dark/light theme from the main menu (`1`–`4`); all preferences saved to `~/.clavirio/settings.toml`
-- **Progress tracking** — the menu cursor remembers your last built-in lesson: points to it if unfinished, advances to the next if completed
-- **Custom text** — load any text file via `Ctrl-F` or as a CLI argument
-- **Graceful shutdown** — in-progress sessions are saved on SIGTERM/SIGHUP
+- **15 built-in lessons** — progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
+- **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
+- **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
+- **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
+- **Error feedback** — wrong keystrokes shown inline, blocked until corrected with Backspace
+- **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
+- **Progress tracking** — remembers your last lesson; advances automatically on completion
+- **Custom text** — load any file via `Ctrl-F` or as a CLI argument
+- **Dark & light themes**
 
 ## Lessons
 
@@ -70,29 +68,41 @@ Optionally pass a file directly:
 cargo run -- sample.txt
 ```
 
-## Terminal Size
+## Terminal size
 
-clavirio is a terminal UI application — your terminal window should be large enough to display all elements (text panel, keyboard, stats).
-On a laptop screen this usually means a maximized terminal window.
+Best with a maximized terminal window so text, keyboard, and stats fit comfortably.
 
 ## Controls
 
+### Menu
+
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `k`/`j` | Navigate lesson menu / scroll history |
-| `Enter` | Start selected lesson |
-| `l` | Cycle keyboard layout: QWERTY → Dvorak → Colemak |
-| `1` | Toggle finger hints (requires hints on) |
-| `2` | Toggle key hints |
-| `3` | Toggle virtual keyboard |
-| `4` | Toggle dark/light theme |
-| `h` | View session history |
-| `Ctrl-F` | Open file path input |
-| `Ctrl-R` | Restart current text |
-| `Ctrl-C` | Save and quit immediately |
-| `Esc` | Save and back to menu / quit |
-| `Backspace` | Correct a mistake |
-| `r` | Restart (completion screen) |
+| `↑`/`↓` `k`/`j` | Navigate lessons / history |
+| `Enter` | Start lesson |
+| `l` | Cycle layout |
+| `1`–`4` | Toggle fingers / hints / keyboard / theme |
+| `h` | Session history |
+| `Ctrl-F` | Load file |
+| `q` / `Esc` | Quit |
+
+### Typing
+
+| Key | Action |
+|-----|--------|
+| `Backspace` | Correct mistake |
+| `Esc` | Pause menu |
+| `Ctrl-R` | Restart lesson |
+
+### Pause menu
+
+| Key | Action |
+|-----|--------|
+| `Space` | Resume |
+| `r` | Restart lesson |
+| `n` | Next lesson |
+| `q` | Quit |
+| `Esc` | Back to menu |
 
 ## Settings
 
