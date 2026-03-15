@@ -170,6 +170,10 @@ pub struct App {
     pub show_hints: bool,
     pub show_fingers: bool,
     pub theme: Theme,
+    pub lesson_title: String,
+    pub paused: bool,
+    pub pause_menu_index: usize,
+    pub paused_at: Option<Instant>,
 }
 
 impl App {
@@ -199,6 +203,10 @@ impl App {
             show_hints: true,
             show_fingers: true,
             theme: Theme::default(),
+            lesson_title: String::new(),
+            paused: false,
+            pause_menu_index: 0,
+            paused_at: None,
         }
     }
 
@@ -207,7 +215,10 @@ impl App {
             Some(t) => t,
             None => return 0.0,
         };
-        let end = self.end_time.unwrap_or_else(Instant::now);
+        let end = self
+            .end_time
+            .or(self.paused_at)
+            .unwrap_or_else(Instant::now);
         let secs = end.duration_since(start).as_secs_f64();
         if secs < 1.0 {
             return 0.0;
@@ -218,11 +229,18 @@ impl App {
     pub fn elapsed_secs(&self) -> f64 {
         match self.start_time {
             Some(t) => {
-                let end = self.end_time.unwrap_or_else(Instant::now);
+                let end = self
+                    .end_time
+                    .or(self.paused_at)
+                    .unwrap_or_else(Instant::now);
                 end.duration_since(t).as_secs_f64()
             }
             None => 0.0,
         }
+    }
+
+    pub fn error_count(&self) -> u32 {
+        self.total_count - self.correct_count
     }
 
     fn save_history(&self, completed: bool) {
@@ -281,6 +299,7 @@ impl App {
         self.end_time = None;
         self.key_stats.clear();
         self.last_error_char = None;
+        self.paused_at = None;
     }
 
     fn restart(&mut self) {
@@ -288,6 +307,99 @@ impl App {
             doc.reset();
         }
         self.reset_session();
+    }
+
+    fn resume(&mut self) {
+        if let Some(paused_at) = self.paused_at.take() {
+            let pause_duration = Instant::now().duration_since(paused_at);
+            if let Some(ref mut start) = self.start_time {
+                *start += pause_duration;
+            }
+        }
+        self.paused = false;
+        self.pause_menu_index = 0;
+    }
+
+    fn next_lesson(&mut self) {
+        if !self.is_finished() {
+            self.save_history(false);
+        }
+        let lessons = crate::lessons::lessons_for_layout(self.layout);
+        self.selected_lesson = (self.selected_lesson + 1).min(lessons.len().saturating_sub(1));
+        if let Some(lesson) = lessons.get(self.selected_lesson) {
+            match Document::from_text(lesson.text) {
+                Ok(doc) => {
+                    self.document = Some(doc);
+                    self.reset_session();
+                    self.lesson_id = lesson.id.to_string();
+                    self.lesson_title = lesson.title.to_string();
+                }
+                Err(e) => self.error = Some(e),
+            }
+        }
+    }
+
+    fn go_to_lesson_index(&mut self) {
+        if !self.is_finished() {
+            self.save_history(false);
+        }
+        self.document = None;
+        self.error = None;
+        self.reset_session();
+        self.paused = false;
+        self.pause_menu_index = 0;
+        self.lesson_title.clear();
+    }
+
+    fn handle_pause_key(&mut self, code: KeyCode) -> bool {
+        const MENU_LEN: usize = 3;
+        match code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.pause_menu_index = self.pause_menu_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.pause_menu_index + 1 < MENU_LEN {
+                    self.pause_menu_index += 1;
+                }
+            }
+            KeyCode::Home => self.pause_menu_index = 0,
+            KeyCode::End => self.pause_menu_index = MENU_LEN - 1,
+            KeyCode::Enter => return self.activate_pause_item(),
+            KeyCode::Char(' ') => self.resume(),
+            KeyCode::Char('r' | 'R') => {
+                self.resume();
+                self.restart();
+            }
+            KeyCode::Char('n' | 'N') => {
+                self.resume();
+                self.next_lesson();
+            }
+            KeyCode::Char('q' | 'Q') => {
+                self.save_on_exit();
+                return true;
+            }
+            _ => {}
+        }
+        false
+    }
+
+    fn activate_pause_item(&mut self) -> bool {
+        match self.pause_menu_index {
+            0 => {
+                self.resume();
+                self.restart();
+            }
+            1 => {
+                self.resume();
+                self.next_lesson();
+            }
+            2 => {
+                self.save_on_exit();
+                return true;
+            }
+            _ => {}
+        }
+        false
     }
 
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
@@ -322,6 +434,7 @@ impl App {
                                 .and_then(|n| n.to_str())
                                 .unwrap_or(&path)
                                 .to_string();
+                            self.lesson_title = self.lesson_id.clone();
                         }
                         Err(e) => self.error = Some(e),
                     }
@@ -366,15 +479,35 @@ impl App {
                     self.viewing_history = false;
                     return false;
                 }
+                if self.paused {
+                    self.go_to_lesson_index();
+                    return false;
+                }
                 if self.document.is_none() && self.error.is_none() {
                     return true;
                 }
-                if !self.is_finished() {
-                    self.save_history(false);
+                if self.error.is_some() {
+                    self.error = None;
+                    self.reset_session();
+                    return false;
                 }
-                self.document = None;
-                self.error = None;
-                self.reset_session();
+                if self.is_finished() {
+                    self.document = None;
+                    self.reset_session();
+                    self.lesson_title.clear();
+                    return false;
+                }
+                // Active typing: open pause menu
+                self.paused = true;
+                self.paused_at = if self.start_time.is_some() {
+                    Some(Instant::now())
+                } else {
+                    None
+                };
+                self.pause_menu_index = 0;
+            }
+            _ if self.paused => {
+                return self.handle_pause_key(key.code);
             }
             _ if self.viewing_history => match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -425,6 +558,7 @@ impl App {
                             self.error = None;
                             self.reset_session();
                             self.lesson_id = lesson.id.to_string();
+                            self.lesson_title = lesson.title.to_string();
                         }
                         Err(e) => self.error = Some(e),
                     }
@@ -1026,7 +1160,7 @@ mod tests {
     // --- Esc from active typing ---
 
     #[test]
-    fn esc_from_active_typing_returns_to_menu() {
+    fn esc_from_active_typing_opens_pause_menu() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
@@ -1035,9 +1169,45 @@ mod tests {
 
         let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
         assert!(!quit);
+        assert!(app.paused);
+        assert!(app.document.is_some());
+    }
+
+    #[test]
+    fn esc_from_pause_menu_goes_to_menu() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(!app.paused);
         assert!(app.document.is_none());
-        assert_eq!(app.correct_count, 0);
-        assert!(app.start_time.is_none());
+    }
+
+    #[test]
+    fn pause_menu_esc_returns_to_menu() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(!app.paused);
+        assert!(app.document.is_none());
+    }
+
+    #[test]
+    fn pause_menu_quit() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+
+        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Char('q'))));
+        assert!(quit);
     }
 
     // --- Ctrl-R no-op without document ---

@@ -63,7 +63,7 @@ impl ThemeColors {
                 cursor_bg: Color::Rgb(40, 40, 40),
                 finger_label: Color::Rgb(180, 130, 0),
                 disabled: Color::Rgb(200, 200, 200),
-                bg: Color::Rgb(245, 245, 245),
+                bg: Color::Rgb(235, 233, 230),
             },
         }
     }
@@ -71,6 +71,7 @@ impl ThemeColors {
 
 pub struct Regions {
     header: Rect,
+    body: Rect,
     text_area: Rect,
     search_area: Rect,
     keyboard_area: Rect,
@@ -94,7 +95,7 @@ pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     };
 
     let [header, body, keyboard_area] = Layout::vertical([
-        Constraint::Length(3),
+        Constraint::Length(2),
         Constraint::Min(5),
         Constraint::Length(kbd_height),
     ])
@@ -110,6 +111,7 @@ pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
 
     Regions {
         header,
+        body,
         text_area,
         search_area,
         keyboard_area,
@@ -259,7 +261,9 @@ pub fn draw(
         None
     };
     draw_header(frame, app, regions.header, hint_finger, &tc);
-    if app.viewing_history {
+    if app.paused {
+        draw_pause_menu(frame, app, regions.body, &tc);
+    } else if app.viewing_history {
         draw_history(frame, app, regions.text_area, &tc);
     } else {
         draw_text_panel(frame, app, regions.text_area, &tc);
@@ -306,13 +310,6 @@ fn draw_header(
     hint_finger: Option<Finger>,
     tc: &ThemeColors,
 ) {
-    let [left, center, right] = Layout::horizontal([
-        Constraint::Percentage(30),
-        Constraint::Min(0),
-        Constraint::Percentage(30),
-    ])
-    .areas(area);
-
     frame.render_widget(
         Block::new()
             .borders(Borders::BOTTOM)
@@ -320,35 +317,44 @@ fn draw_header(
         area,
     );
 
-    let elapsed = app.elapsed_secs();
-    let mins = (elapsed as u64) / 60;
-    let secs = (elapsed as u64) % 60;
+    let on_menu = app.document.is_none() && app.error.is_none();
+    if on_menu {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "clavirio",
+                Style::new().fg(tc.title).bold(),
+            )))
+            .centered(),
+            area,
+        );
+        return;
+    }
 
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(format!(" {mins}:{secs:02}"), Style::new().fg(tc.dim_text)),
-            if app.document.is_some() {
-                Span::styled("  Esc", Style::new().fg(tc.accent).bold())
-            } else {
-                Span::raw("")
-            },
-            if app.document.is_some() {
-                Span::styled(" menu", Style::new().fg(tc.dim_text))
-            } else {
-                Span::raw("")
-            },
-        ])),
-        left,
-    );
+    let [left, center, right] = Layout::horizontal([
+        Constraint::Percentage(30),
+        Constraint::Min(0),
+        Constraint::Percentage(30),
+    ])
+    .areas(area);
 
-    let mut center_spans = vec![Span::styled("clavirio", Style::new().fg(tc.title).bold())];
+    // LEFT: lesson_title · cur/total
+    let mut left_spans: Vec<Span> = vec![Span::raw(" ")];
+    if !app.lesson_title.is_empty() {
+        left_spans.push(Span::styled(&app.lesson_title, Style::new().fg(tc.text)));
+        if app.document.is_some() {
+            left_spans.push(Span::styled(" \u{b7} ", Style::new().fg(tc.dim_text)));
+        }
+    }
     if let Some(doc) = &app.document {
         let (cur, total) = doc.line_progress();
-        center_spans.push(Span::styled(
-            format!("  {cur}/{total}"),
-            Style::new().fg(tc.dim_text),
+        left_spans.push(Span::styled(
+            format!("{cur}/{total}"),
+            Style::new().fg(tc.text),
         ));
     }
+    frame.render_widget(Paragraph::new(Line::from(left_spans)), left);
+
+    // MIDDLE: finger hint (dedicated reserved slot)
     if let Some(finger) = hint_finger {
         let name = match finger {
             Finger::Pinky => "pinky",
@@ -357,45 +363,129 @@ fn draw_header(
             Finger::Index => "index",
             Finger::Thumb => "thumb",
         };
-        center_spans.push(Span::styled(
-            format!("  {} ", finger.label()),
-            Style::new().fg(tc.finger_label).bold(),
-        ));
-        center_spans.push(Span::styled(name, Style::new().fg(tc.dim_text)));
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(
+                    format!("{} ", finger.label()),
+                    Style::new().fg(tc.finger_label).bold(),
+                ),
+                Span::styled(name, Style::new().fg(tc.dim_text)),
+            ]))
+            .centered(),
+            center,
+        );
     }
-    frame.render_widget(Paragraph::new(Line::from(center_spans)).centered(), center);
 
+    // RIGHT: wpm · acc · err · mm:ss
     let wpm = app.wpm();
+    let started = app.start_time.is_some();
     let acc_pct = if app.total_count > 0 {
         app.correct_count as f64 / app.total_count as f64 * 100.0
     } else {
         0.0
     };
-    let has_stats = app.total_count > 0;
+    let err = app.error_count();
+    let elapsed = app.elapsed_secs();
+    let mins = (elapsed as u64) / 60;
+    let secs = (elapsed as u64) % 60;
+
+    let (wpm_str, wpm_fg) = if started {
+        (
+            format!("{wpm:.0}"),
+            if wpm > 0.0 { tc.accent } else { tc.dim_text },
+        )
+    } else {
+        ("\u{2014}".into(), tc.dim_text)
+    };
+    let (acc_str, acc_fg) = if started {
+        (format!("{acc_pct:.0}%"), tc.text)
+    } else {
+        ("\u{2014}".into(), tc.dim_text)
+    };
+    let err_fg = if err > 0 { tc.incorrect } else { tc.dim_text };
+    let dim = Style::new().fg(tc.dim_text);
+
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(
-                format!("{wpm:.0} wpm"),
-                Style::new().fg(if wpm > 0.0 { tc.accent } else { tc.dim_text }),
-            ),
-            Span::styled("  ✓ ", Style::new().fg(tc.correct).bold()),
-            Span::styled(
-                format!("{}", app.correct_count),
-                Style::new().fg(if has_stats { tc.text } else { tc.dim_text }),
-            ),
-            Span::styled("  ⌨ ", Style::new().fg(tc.finger_label).bold()),
-            Span::styled(
-                format!("{}", app.total_count),
-                Style::new().fg(if has_stats { tc.text } else { tc.dim_text }),
-            ),
-            Span::styled(
-                format!("  {acc_pct:.0}% "),
-                Style::new().fg(if has_stats { tc.correct } else { tc.dim_text }),
-            ),
+            Span::styled(wpm_str, Style::new().fg(wpm_fg)),
+            Span::styled(" wpm", dim),
+            Span::styled(" \u{b7} ", dim),
+            Span::styled(acc_str, Style::new().fg(acc_fg)),
+            Span::styled(" acc", dim),
+            Span::styled(" \u{b7} ", dim),
+            Span::styled(format!("{err}"), Style::new().fg(err_fg)),
+            Span::styled(" err", dim),
+            Span::styled(" \u{b7} ", dim),
+            Span::styled(format!("{mins:02}:{secs:02} "), dim),
         ]))
         .right_aligned(),
         right,
     );
+}
+
+fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
+    if !app.paused {
+        return;
+    }
+
+    let menu_width = 36_u16;
+    let menu_height = 7_u16;
+
+    let [v_area] = Layout::vertical([Constraint::Length(menu_height)])
+        .flex(Flex::Center)
+        .areas(area);
+    let [menu_area] = Layout::horizontal([Constraint::Length(menu_width)])
+        .flex(Flex::Center)
+        .areas(v_area);
+
+    // Clear the entire text area so no underlying borders bleed through
+    frame.render_widget(Block::default().style(Style::default().bg(tc.bg)), area);
+
+    let items = [("Restart lesson", "R"), ("Next lesson", "N"), ("Quit", "Q")];
+
+    let block = Block::new()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(tc.dim_border))
+        .padding(Padding::vertical(1))
+        .title(Span::styled(" Paused ", Style::new().fg(tc.accent).bold()))
+        .title_bottom(
+            Line::from(Span::styled(
+                " Resume [Space] ",
+                Style::new().fg(tc.dim_text),
+            ))
+            .left_aligned(),
+        )
+        .title_bottom(
+            Line::from(Span::styled(" Menu [Esc] ", Style::new().fg(tc.dim_text))).right_aligned(),
+        );
+
+    let inner = block.inner(menu_area);
+    frame.render_widget(block, menu_area);
+
+    for (i, (label, shortcut)) in items.iter().enumerate() {
+        if i as u16 >= inner.height {
+            break;
+        }
+        let row = Rect::new(inner.x, inner.y + i as u16, inner.width, 1);
+        let selected = i == app.pause_menu_index;
+        let label_fg = if selected { tc.text } else { tc.dim_text };
+        let shortcut_fg = if selected { tc.accent } else { tc.dim_text };
+        let marker = if selected { "\u{25b8} " } else { "  " };
+
+        let pad_len = (inner.width as usize).saturating_sub(2 + label.len() + shortcut.len() + 1);
+
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(marker, Style::new().fg(tc.accent)),
+                Span::styled(*label, Style::new().fg(label_fg)),
+                Span::raw(" ".repeat(pad_len)),
+                Span::styled(*shortcut, Style::new().fg(shortcut_fg)),
+                Span::raw(" "),
+            ])),
+            row,
+        );
+    }
 }
 
 fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
@@ -559,8 +649,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 ),
                 Span::styled("  r", Style::new().fg(tc.accent).bold()),
                 Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
-                Span::styled("Ctrl-F", Style::new().fg(tc.accent).bold()),
-                Span::styled(" new file", Style::new().fg(tc.dim_text)),
+                Span::styled("Esc", Style::new().fg(tc.accent).bold()),
+                Span::styled(" menu", Style::new().fg(tc.dim_text)),
             ])];
             let worst = app.worst_keys(5);
             if !worst.is_empty() {
