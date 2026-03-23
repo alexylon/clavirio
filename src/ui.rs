@@ -37,7 +37,7 @@ impl ThemeColors {
         match theme {
             Theme::Dark => Self {
                 dim_border: Color::DarkGray,
-                title: Color::Rgb(0x22, 0xcc, 0x22),
+                title: Color::Rgb(0x2a, 0xd0, 0x5c),
                 accent: Color::Cyan,
                 dim_text: Color::DarkGray,
                 correct: Color::Rgb(100, 180, 255),
