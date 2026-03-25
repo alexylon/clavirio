@@ -187,6 +187,9 @@ pub struct App {
     pub word_count: usize,
     pub time_limit: Option<u64>,
     pub is_random_words_lesson: bool,
+    pub wpm_samples: Vec<f64>,
+    last_sample_count: u32,
+    last_sample_time: Option<Instant>,
 }
 
 impl App {
@@ -222,6 +225,9 @@ impl App {
             word_count: 50,
             time_limit: None,
             is_random_words_lesson: false,
+            wpm_samples: Vec::new(),
+            last_sample_count: 0,
+            last_sample_time: None,
         }
     }
 
@@ -295,6 +301,53 @@ impl App {
         keys
     }
 
+    const SPARKLINE_WIDTH: usize = 16;
+
+    /// Returns (sparkline_string, min_wpm, max_wpm) or None if not enough data.
+    pub fn sparkline(&self) -> Option<(String, f64, f64)> {
+        let samples: Vec<f64> = self
+            .wpm_samples
+            .iter()
+            .copied()
+            .filter(|&v| v > 0.0)
+            .collect();
+        if samples.len() < 3 {
+            return None;
+        }
+
+        // Downsample to fixed width
+        let condensed = if samples.len() <= Self::SPARKLINE_WIDTH {
+            samples
+        } else {
+            let bucket_size = samples.len() as f64 / Self::SPARKLINE_WIDTH as f64;
+            (0..Self::SPARKLINE_WIDTH)
+                .map(|i| {
+                    let start = (i as f64 * bucket_size) as usize;
+                    let end = (((i + 1) as f64) * bucket_size) as usize;
+                    let slice = &samples[start..end.min(samples.len())];
+                    slice.iter().sum::<f64>() / slice.len() as f64
+                })
+                .collect()
+        };
+
+        const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+        let min = condensed.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = condensed.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let range = max - min;
+        let bars: Vec<String> = condensed
+            .iter()
+            .map(|&v| {
+                let idx = if range < 0.1 {
+                    BLOCKS.len() / 2
+                } else {
+                    ((v - min) / range * (BLOCKS.len() - 1) as f64).round() as usize
+                };
+                BLOCKS[idx.min(BLOCKS.len() - 1)].to_string()
+            })
+            .collect();
+        Some((bars.join(" "), min, max))
+    }
+
     pub fn is_random_mode(&self) -> bool {
         self.is_random_words_lesson
     }
@@ -319,6 +372,9 @@ impl App {
         self.key_stats.clear();
         self.last_error_char = None;
         self.paused_at = None;
+        self.wpm_samples.clear();
+        self.last_sample_count = 0;
+        self.last_sample_time = None;
     }
 
     fn restart(&mut self) {
@@ -459,6 +515,7 @@ impl App {
             && self.remaining_secs().is_some_and(|r| r <= 0.0)
         {
             self.end_time = Some(Instant::now());
+            self.wpm_samples.push(self.wpm());
             if let Some(doc) = self.document.as_mut() {
                 doc.progress = Progress::Finished;
             }
@@ -726,10 +783,19 @@ impl App {
     }
 
     fn handle_typed_char(&mut self, typed: char) {
-        let expected = match self.document.as_ref().and_then(|d| d.expected_char()) {
+        let doc = match self.document.as_ref() {
+            Some(d) => d,
+            None => return,
+        };
+        let expected = match doc.expected_char() {
             Some(c) => c,
             None => return,
         };
+
+        // Ignore space at the start of a new line (habitual space after end of previous line)
+        if typed == ' ' && expected != ' ' && doc.cursor_position() == 0 {
+            return;
+        }
 
         if self.start_time.is_none() {
             self.start_time = Some(Instant::now());
@@ -743,10 +809,34 @@ impl App {
             self.correct_count += 1;
             self.last_correct = true;
             self.last_error_char = None;
+
+            // Sample interval WPM for sparkline; skip first 3 seconds
+            const SAMPLE_INTERVAL: u32 = 5;
+            if self.correct_count - self.last_sample_count >= SAMPLE_INTERVAL
+                && self.elapsed_secs() >= 3.0
+            {
+                let now = Instant::now();
+                let interval_wpm = if let Some(prev_time) = self.last_sample_time {
+                    let dt = now.duration_since(prev_time).as_secs_f64();
+                    let chars = self.correct_count - self.last_sample_count;
+                    if dt > 0.1 {
+                        (chars as f64 / 5.0) / (dt / 60.0)
+                    } else {
+                        self.wpm()
+                    }
+                } else {
+                    self.wpm()
+                };
+                self.wpm_samples.push(interval_wpm);
+                self.last_sample_count = self.correct_count;
+                self.last_sample_time = Some(now);
+            }
+
             if let Some(doc) = self.document.as_mut() {
                 doc.advance();
                 if doc.progress == Progress::Finished {
                     self.end_time = Some(Instant::now());
+                    self.wpm_samples.push(self.wpm());
                     self.save_history(true);
                     if !self.is_random_words_lesson {
                         let lesson_count = crate::lessons::lesson_count();
@@ -1420,6 +1510,53 @@ mod tests {
         app.handle_event(InputEvent::Tick);
         assert!(app.is_finished());
         assert!(app.end_time.is_some());
+    }
+
+    // --- sparkline ---
+
+    #[test]
+    fn sparkline_none_with_few_samples() {
+        let app = App::new();
+        assert!(app.sparkline().is_none());
+
+        let mut app = App::new();
+        app.wpm_samples = vec![50.0, 60.0];
+        assert!(app.sparkline().is_none());
+    }
+
+    #[test]
+    fn sparkline_renders_blocks() {
+        let mut app = App::new();
+        app.wpm_samples = vec![20.0, 40.0, 60.0, 80.0];
+        let (s, min, max) = app.sparkline().unwrap();
+        let blocks: Vec<&str> = s.split(' ').collect();
+        assert_eq!(blocks.len(), 4);
+        assert_eq!(blocks[0], "▁");
+        assert_eq!(blocks[3], "█");
+        assert!((min - 20.0).abs() < 0.1);
+        assert!((max - 80.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn sparkline_flat_uses_middle_block() {
+        let mut app = App::new();
+        app.wpm_samples = vec![50.0, 50.0, 50.0];
+        let (s, _, _) = app.sparkline().unwrap();
+        let blocks: Vec<&str> = s.split(' ').collect();
+        let unique: std::collections::HashSet<&str> = blocks.into_iter().collect();
+        assert_eq!(unique.len(), 1);
+    }
+
+    #[test]
+    fn wpm_samples_collected_during_typing() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abcdefghijklmnopqrstuvwxy").unwrap());
+        // Fake start_time 10 seconds ago so samples pass the 3-second warm-up filter
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(10));
+        for c in "abcdefghijklmnopqrstuvwxy".chars() {
+            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+        }
+        assert!(app.wpm_samples.len() >= 2);
     }
 
     #[test]

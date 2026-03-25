@@ -520,6 +520,15 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     } else {
         7
     };
+    let ideal_height = if app.is_finished() {
+        let has_spark = app.sparkline().is_some();
+        let has_worst = !app.worst_keys(5).is_empty();
+        let content = 1 + if has_spark { 3 } else { 0 } + if has_worst { 1 } else { 0 };
+        // borders(2) + padding(2) + content
+        ideal_height.max(content + 4)
+    } else {
+        ideal_height
+    };
     let panel_height = ideal_height.min(area.height);
     let inner = if panel_height >= area.height {
         area
@@ -718,6 +727,14 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled("Esc", Style::new().fg(tc.accent).bold()),
                 Span::styled(" menu", Style::new().fg(tc.dim_text)),
             ])];
+            if let Some((spark, min, max)) = app.sparkline() {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
+                lines.push(Line::from(Span::styled(
+                    format!("{:.0} min - {:.0} max wpm", min, max),
+                    Style::new().fg(tc.dim_text),
+                )));
+            }
             let worst = app.worst_keys(5);
             if !worst.is_empty() {
                 let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(tc.dim_text))];
