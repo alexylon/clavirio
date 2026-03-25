@@ -97,8 +97,6 @@ pub struct Settings {
     pub keyboard: KeyboardSettings,
     #[serde(default)]
     pub display: DisplaySettings,
-    #[serde(default)]
-    pub selected_lesson: usize,
 }
 
 fn settings_path() -> PathBuf {

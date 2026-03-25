@@ -25,6 +25,12 @@ pub enum Progress {
     Finished,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuMode {
+    Lessons,
+    Practice,
+}
+
 #[derive(Debug, Clone)]
 pub struct Document {
     lines: Vec<String>,
@@ -123,11 +129,12 @@ impl Document {
 
     pub fn line_progress(&self) -> (usize, usize) {
         let total = self.lines.iter().filter(|l| !l.is_empty()).count();
-        let current = self.lines[..self.line_idx]
+        let current = (self.lines[..self.line_idx]
             .iter()
             .filter(|l| !l.is_empty())
             .count()
-            + 1;
+            + 1)
+        .min(total);
         (current, total)
     }
 
@@ -186,7 +193,8 @@ pub struct App {
     pub paused_at: Option<Instant>,
     pub word_count: usize,
     pub time_limit: Option<u64>,
-    pub is_random_words_lesson: bool,
+    pub menu_mode: MenuMode,
+    pub selected_practice: usize,
     pub wpm_samples: Vec<f64>,
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
@@ -222,9 +230,10 @@ impl App {
             paused: false,
             pause_menu_index: 0,
             paused_at: None,
-            word_count: 50,
+            word_count: 100,
             time_limit: None,
-            is_random_words_lesson: false,
+            menu_mode: MenuMode::Lessons,
+            selected_practice: 0,
             wpm_samples: Vec::new(),
             last_sample_count: 0,
             last_sample_time: None,
@@ -286,17 +295,21 @@ impl App {
         });
     }
 
-    pub fn worst_keys(&self, count: usize) -> Vec<(char, f32)> {
-        let mut keys: Vec<(char, f32)> = self
+    /// Returns worst keys as (char, correct, total), sorted by accuracy ascending.
+    pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
+        let mut keys: Vec<(char, u32, u32)> = self
             .key_stats
             .iter()
             .filter(|(_, (hits, misses))| *misses > 0 && (*hits + *misses) >= 2)
-            .map(|(&ch, (hits, misses))| {
-                let accuracy = *hits as f32 / (*hits + *misses) as f32 * 100.0;
-                (ch, accuracy)
-            })
+            .map(|(&ch, (hits, misses))| (ch, *hits, *hits + *misses))
             .collect();
-        keys.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        keys.sort_by(|a, b| {
+            let acc_a = a.1 as f32 / a.2 as f32;
+            let acc_b = b.1 as f32 / b.2 as f32;
+            acc_a
+                .partial_cmp(&acc_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         keys.truncate(count);
         keys
     }
@@ -348,8 +361,8 @@ impl App {
         Some((bars.join(" "), min, max))
     }
 
-    pub fn is_random_mode(&self) -> bool {
-        self.is_random_words_lesson
+    pub fn is_practice_mode(&self) -> bool {
+        self.menu_mode == MenuMode::Practice
     }
 
     pub fn is_finished(&self) -> bool {
@@ -402,21 +415,11 @@ impl App {
         let lessons = crate::lessons::lessons_for_layout(self.layout);
         self.selected_lesson = (self.selected_lesson + 1).min(lessons.len().saturating_sub(1));
         if let Some(lesson) = lessons.get(self.selected_lesson) {
-            match Document::from_text(lesson.text) {
-                Ok(doc) => {
-                    self.document = Some(doc);
-                    self.reset_session();
-                    self.time_limit = None;
-                    self.is_random_words_lesson = false;
-                    self.lesson_id = lesson.id.to_string();
-                    self.lesson_title = lesson.title.to_string();
-                }
-                Err(e) => self.error = Some(e),
-            }
+            self.start_lesson(lesson);
         }
     }
 
-    fn go_to_lesson_index(&mut self) {
+    fn go_to_menu(&mut self) {
         if !self.is_finished() {
             self.save_history(false);
         }
@@ -424,14 +427,13 @@ impl App {
         self.error = None;
         self.reset_session();
         self.time_limit = None;
-        self.is_random_words_lesson = false;
         self.paused = false;
         self.pause_menu_index = 0;
         self.lesson_title.clear();
     }
 
     pub fn pause_menu_len(&self) -> usize {
-        if self.is_random_mode() {
+        if self.is_practice_mode() {
             2
         } else {
             3
@@ -457,7 +459,7 @@ impl App {
                 self.resume();
                 self.restart();
             }
-            KeyCode::Char('n' | 'N') if !self.is_random_mode() => {
+            KeyCode::Char('n' | 'N') if !self.is_practice_mode() => {
                 self.resume();
                 self.next_lesson();
             }
@@ -471,7 +473,7 @@ impl App {
     }
 
     fn activate_pause_item(&mut self) -> bool {
-        if self.is_random_mode() {
+        if self.is_practice_mode() {
             match self.pause_menu_index {
                 0 => {
                     self.resume();
@@ -546,22 +548,7 @@ impl App {
                     self.searching = false;
                     let path = self.file_path_buf.clone();
                     self.file_path_buf.clear();
-                    match Document::load(&path) {
-                        Ok(doc) => {
-                            self.document = Some(doc);
-                            self.error = None;
-                            self.reset_session();
-                            self.time_limit = None;
-                            self.is_random_words_lesson = true;
-                            self.lesson_id = Path::new(&path)
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&path)
-                                .to_string();
-                            self.lesson_title = self.lesson_id.clone();
-                        }
-                        Err(e) => self.error = Some(e),
-                    }
+                    self.load_file(&path);
                 }
                 KeyCode::Esc => {
                     self.searching = false;
@@ -604,7 +591,7 @@ impl App {
                     return false;
                 }
                 if self.paused {
-                    self.go_to_lesson_index();
+                    self.go_to_menu();
                     return false;
                 }
                 if self.document.is_none() && self.error.is_none() {
@@ -673,53 +660,44 @@ impl App {
         (60, WordList::English1k),
     ];
 
-    pub fn menu_item_count(&self) -> usize {
+    pub fn practice_item_count() -> usize {
+        crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
+    }
+
+    pub fn lesson_count_for_layout(&self) -> usize {
         crate::lessons::lessons_for_layout(self.layout).len()
-            + crate::words::WordList::all().len()
-            + Self::TIMED_OPTIONS.len()
+    }
+
+    pub fn current_menu_count(&self) -> usize {
+        match self.menu_mode {
+            MenuMode::Lessons => self.lesson_count_for_layout(),
+            MenuMode::Practice => Self::practice_item_count(),
+        }
     }
 
     fn handle_menu_key(&mut self, code: KeyCode) {
-        let lessons = crate::lessons::lessons_for_layout(self.layout);
-        let total = self.menu_item_count();
+        let count = self.current_menu_count();
+        let cursor = match self.menu_mode {
+            MenuMode::Lessons => &mut self.selected_lesson,
+            MenuMode::Practice => &mut self.selected_practice,
+        };
         match code {
             KeyCode::Up | KeyCode::Char('k') => {
-                self.selected_lesson = self.selected_lesson.saturating_sub(1);
+                *cursor = cursor.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.selected_lesson + 1 < total {
-                    self.selected_lesson += 1;
+                if *cursor + 1 < count {
+                    *cursor += 1;
                 }
             }
             KeyCode::Enter => {
-                let word_lists = crate::words::WordList::all();
-                let timed_start = lessons.len() + word_lists.len();
-                if self.selected_lesson < lessons.len() {
-                    if let Some(lesson) = lessons.get(self.selected_lesson) {
-                        match Document::from_text(lesson.text) {
-                            Ok(doc) => {
-                                self.document = Some(doc);
-                                self.error = None;
-                                self.reset_session();
-                                self.time_limit = None;
-                                self.is_random_words_lesson = false;
-                                self.lesson_id = lesson.id.to_string();
-                                self.lesson_title = lesson.title.to_string();
-                            }
-                            Err(e) => self.error = Some(e),
-                        }
-                    }
-                } else if self.selected_lesson < timed_start {
-                    let word_idx = self.selected_lesson - lessons.len();
-                    if let Some(&list) = word_lists.get(word_idx) {
-                        self.start_word_practice(list);
-                    }
-                } else {
-                    let timed_idx = self.selected_lesson - timed_start;
-                    if let Some(&(secs, list)) = Self::TIMED_OPTIONS.get(timed_idx) {
-                        self.start_timed_practice(secs, list);
-                    }
-                }
+                self.activate_menu_item();
+            }
+            KeyCode::Char('m') => {
+                self.menu_mode = match self.menu_mode {
+                    MenuMode::Lessons => MenuMode::Practice,
+                    MenuMode::Practice => MenuMode::Lessons,
+                };
             }
             KeyCode::Char('h') => {
                 self.history = crate::history::load_history();
@@ -748,7 +726,65 @@ impl App {
         }
     }
 
-    fn start_word_practice(&mut self, list: WordList) {
+    fn activate_menu_item(&mut self) {
+        match self.menu_mode {
+            MenuMode::Lessons => {
+                let lessons = crate::lessons::lessons_for_layout(self.layout);
+                if let Some(lesson) = lessons.get(self.selected_lesson) {
+                    self.start_lesson(lesson);
+                }
+            }
+            MenuMode::Practice => {
+                let word_lists = crate::words::WordList::all();
+                if self.selected_practice < word_lists.len() {
+                    if let Some(&list) = word_lists.get(self.selected_practice) {
+                        self.start_word_practice(list);
+                    }
+                } else {
+                    let timed_idx = self.selected_practice - word_lists.len();
+                    if let Some(&(secs, list)) = Self::TIMED_OPTIONS.get(timed_idx) {
+                        self.start_timed_practice(secs, list);
+                    }
+                }
+            }
+        }
+    }
+
+    fn start_lesson(&mut self, lesson: &crate::lessons::Lesson) {
+        match Document::from_text(lesson.text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = None;
+                self.menu_mode = MenuMode::Lessons;
+                self.lesson_id = lesson.id.to_string();
+                self.lesson_title = lesson.title.to_string();
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn load_file(&mut self, path: &str) {
+        match Document::load(path) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = None;
+                self.menu_mode = MenuMode::Practice;
+                self.lesson_id = Path::new(path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(path)
+                    .to_string();
+                self.lesson_title = self.lesson_id.clone();
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn start_word_practice(&mut self, list: WordList) {
         let text = crate::words::generate_text(list, self.word_count);
         match Document::from_text(&text) {
             Ok(doc) => {
@@ -756,7 +792,7 @@ impl App {
                 self.error = None;
                 self.reset_session();
                 self.time_limit = None;
-                self.is_random_words_lesson = true;
+                self.menu_mode = MenuMode::Practice;
                 self.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
                 self.lesson_title = format!("Random Words ({})", list.label());
             }
@@ -774,7 +810,7 @@ impl App {
                 self.error = None;
                 self.reset_session();
                 self.time_limit = Some(secs);
-                self.is_random_words_lesson = true;
+                self.menu_mode = MenuMode::Practice;
                 self.lesson_id = format!("timed_{secs}s_{}", list.label().replace(' ', "_"));
                 self.lesson_title = format!("Random Words ({secs}s · {})", list.label());
             }
@@ -838,7 +874,7 @@ impl App {
                     self.end_time = Some(Instant::now());
                     self.wpm_samples.push(self.wpm());
                     self.save_history(true);
-                    if !self.is_random_words_lesson {
+                    if !self.is_practice_mode() {
                         let lesson_count = crate::lessons::lesson_count();
                         self.selected_lesson =
                             (self.selected_lesson + 1).min(lesson_count.saturating_sub(1));
@@ -951,6 +987,9 @@ mod tests {
         assert_eq!(doc.line_progress(), (2, 3));
         doc.advance(); // finish "b", move to "c"
         assert_eq!(doc.line_progress(), (3, 3));
+        doc.advance(); // finish "c", document finished
+        assert_eq!(doc.progress, Progress::Finished);
+        assert_eq!(doc.line_progress(), (3, 3)); // should not exceed total
     }
 
     #[test]
@@ -1268,7 +1307,7 @@ mod tests {
     #[test]
     fn menu_down_at_last_stays_at_last() {
         let mut app = App::new();
-        let last = app.menu_item_count() - 1;
+        let last = app.current_menu_count() - 1;
         app.selected_lesson = last;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, last);
@@ -1481,15 +1520,14 @@ mod tests {
     #[test]
     fn select_word_practice_from_menu() {
         let mut app = App::new();
-        let lesson_count = crate::lessons::lesson_count();
-        // Navigate to the first word practice entry (right after lessons)
-        app.selected_lesson = lesson_count;
+        app.menu_mode = MenuMode::Practice;
+        app.selected_practice = 0;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
         let doc = app.document.as_ref().unwrap();
         let word_count: usize = doc.lines.iter().map(|l| l.split_whitespace().count()).sum();
-        assert_eq!(word_count, 50);
+        assert_eq!(word_count, 100);
     }
 
     #[test]
@@ -1560,14 +1598,27 @@ mod tests {
     }
 
     #[test]
-    fn menu_includes_all_entries() {
+    fn lesson_mode_count() {
         let app = App::new();
-        let lesson_count = crate::lessons::lesson_count();
+        assert_eq!(app.current_menu_count(), crate::lessons::lesson_count());
+    }
+
+    #[test]
+    fn practice_mode_count() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
         let word_list_count = crate::words::WordList::all().len();
         let timed_count = App::TIMED_OPTIONS.len();
-        assert_eq!(
-            app.menu_item_count(),
-            lesson_count + word_list_count + timed_count
-        );
+        assert_eq!(app.current_menu_count(), word_list_count + timed_count);
+    }
+
+    #[test]
+    fn m_key_toggles_mode() {
+        let mut app = App::new();
+        assert_eq!(app.menu_mode, MenuMode::Lessons);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('m'))));
+        assert_eq!(app.menu_mode, MenuMode::Practice);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('m'))));
+        assert_eq!(app.menu_mode, MenuMode::Lessons);
     }
 }

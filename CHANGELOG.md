@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- Separate Lessons and Practice modes toggled with `m` key
+- Practice mode includes random words and timed entries
+
+### Fixed
+- Line progress showing beyond total (e.g. 4/3) on document completion
+
+### Changed
+- Restored history-based lesson resume (immune to lesson reordering) instead of settings-based index
+- Removed `selected_lesson` from settings.toml
+- Weakest keys now show correct/total (e.g. `k 3/6`) instead of accuracy percentage
+- Default word count changed from 50 to 100
+- Extracted `start_lesson`, `load_file`, `start_word_practice`, `start_timed_practice` methods to eliminate duplicated session setup logic
+
 ## [0.3.4] - 2026-03-25
 
 ### Added

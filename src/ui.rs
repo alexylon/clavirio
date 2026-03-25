@@ -446,8 +446,8 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 
     let menu_width = 36_u16;
-    let is_random = app.is_random_mode();
-    let menu_height = if is_random { 6_u16 } else { 7_u16 };
+    let is_practice = app.is_practice_mode();
+    let menu_height = if is_practice { 6_u16 } else { 7_u16 };
 
     let [v_area] = Layout::vertical([Constraint::Length(menu_height)])
         .flex(Flex::Center)
@@ -459,7 +459,7 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     // Clear the entire text area so no underlying borders bleed through
     frame.render_widget(Block::default().style(Style::default().bg(tc.bg)), area);
 
-    let items: Vec<(&str, &str)> = if is_random {
+    let items: Vec<(&str, &str)> = if is_practice {
         vec![("Restart", "r"), ("Quit", "q")]
     } else {
         vec![("Restart lesson", "r"), ("Next lesson", "n"), ("Quit", "q")]
@@ -516,7 +516,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 
     let ideal_height = if app.document.is_none() && app.error.is_none() {
-        (app.menu_item_count() as u16) + 7
+        (app.current_menu_count() as u16) + 7
     } else {
         7
     };
@@ -558,111 +558,125 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
     match &app.document {
         None => {
-            let lessons = crate::lessons::lessons_for_layout(app.layout);
-            let word_lists = crate::words::WordList::all();
-            let timed_options = crate::app::App::TIMED_OPTIONS;
-            let total_items = lessons.len() + word_lists.len() + timed_options.len();
+            use crate::app::MenuMode;
+            let total_items = app.current_menu_count();
+            let cursor = match app.menu_mode {
+                MenuMode::Lessons => app.selected_lesson,
+                MenuMode::Practice => app.selected_practice,
+            };
             // borders: 2 + padding: 2 + blank: 1 + controls: 1 + settings: 1 = 7
             let chrome = 7_u16;
             let visible_slots = inner.height.saturating_sub(chrome) as usize;
 
-            let scroll = if visible_slots >= total_items || app.selected_lesson < visible_slots / 2
-            {
+            let scroll = if visible_slots >= total_items || cursor < visible_slots / 2 {
                 0
-            } else if app.selected_lesson + visible_slots / 2 >= total_items {
+            } else if cursor + visible_slots / 2 >= total_items {
                 total_items.saturating_sub(visible_slots)
             } else {
-                app.selected_lesson.saturating_sub(visible_slots / 2)
+                cursor.saturating_sub(visible_slots / 2)
             };
-
-            let label_len = |l: &&crate::lessons::Lesson| {
-                if l.keys.is_empty() {
-                    l.title.len()
-                } else {
-                    l.title.len() + 2 + l.keys.len() + 1
-                }
-            };
-            let word_label_len =
-                |wl: &crate::words::WordList| "Random Words".len() + 2 + wl.label().len() + 1;
-            let max_label: usize = [
-                crate::settings::KeyboardLayout::Qwerty,
-                crate::settings::KeyboardLayout::Dvorak,
-                crate::settings::KeyboardLayout::Colemak,
-            ]
-            .iter()
-            .flat_map(|lay| crate::lessons::lessons_for_layout(*lay))
-            .map(|l| label_len(&l))
-            .chain(word_lists.iter().map(word_label_len))
-            .chain(timed_options.iter().map(|(s, wl)| {
-                "Random Words".len() + 2 + format!("{s}s · {}", wl.label()).chars().count() + 1
-            }))
-            .max()
-            .unwrap_or(20);
 
             let mut lines: Vec<Line> = Vec::new();
-            for i in scroll..(scroll + visible_slots).min(total_items) {
-                let selected = i == app.selected_lesson;
-                let marker = if selected { "▸" } else { " " };
-                let title_fg = if selected { tc.text } else { tc.dim_text };
-                let marker_fg = if selected { tc.accent } else { tc.dim_text };
-
-                if i < lessons.len() {
-                    let lesson = &lessons[i];
-                    let mut spans = vec![
-                        Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
-                        Span::styled(lesson.title.to_string(), Style::new().fg(title_fg)),
-                    ];
-                    if !lesson.keys.is_empty() {
-                        spans.push(Span::styled(
-                            format!(" ({})", lesson.keys),
-                            Style::new().fg(tc.dim_text),
-                        ));
-                    }
-                    let current_len = if lesson.keys.is_empty() {
-                        lesson.title.len()
-                    } else {
-                        lesson.title.len() + 2 + lesson.keys.len() + 1
+            match app.menu_mode {
+                MenuMode::Lessons => {
+                    let lessons = crate::lessons::lessons_for_layout(app.layout);
+                    let label_len = |l: &&crate::lessons::Lesson| {
+                        if l.keys.is_empty() {
+                            l.title.len()
+                        } else {
+                            l.title.len() + 2 + l.keys.len() + 1
+                        }
                     };
-                    if current_len < max_label {
-                        spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                    let max_label: usize = [
+                        crate::settings::KeyboardLayout::Qwerty,
+                        crate::settings::KeyboardLayout::Dvorak,
+                        crate::settings::KeyboardLayout::Colemak,
+                    ]
+                    .iter()
+                    .flat_map(|lay| crate::lessons::lessons_for_layout(*lay))
+                    .map(|l| label_len(&l))
+                    .max()
+                    .unwrap_or(20);
+
+                    for i in scroll..(scroll + visible_slots).min(total_items) {
+                        let selected = i == cursor;
+                        let marker = if selected { "▸" } else { " " };
+                        let title_fg = if selected { tc.text } else { tc.dim_text };
+                        let marker_fg = if selected { tc.accent } else { tc.dim_text };
+                        let lesson = &lessons[i];
+                        let mut spans = vec![
+                            Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                            Span::styled(lesson.title.to_string(), Style::new().fg(title_fg)),
+                        ];
+                        if !lesson.keys.is_empty() {
+                            spans.push(Span::styled(
+                                format!(" ({})", lesson.keys),
+                                Style::new().fg(tc.dim_text),
+                            ));
+                        }
+                        let current_len = if lesson.keys.is_empty() {
+                            lesson.title.len()
+                        } else {
+                            lesson.title.len() + 2 + lesson.keys.len() + 1
+                        };
+                        if current_len < max_label {
+                            spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                        }
+                        lines.push(Line::from(spans));
                     }
-                    lines.push(Line::from(spans));
-                } else if i < lessons.len() + word_lists.len() {
-                    let wl = &word_lists[i - lessons.len()];
-                    let title = "Random Words";
-                    let keys = wl.label();
-                    let current_len = title.len() + 2 + keys.len() + 1;
-                    let mut spans = vec![
-                        Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
-                        Span::styled(title, Style::new().fg(title_fg)),
-                        Span::styled(format!(" ({keys})"), Style::new().fg(tc.dim_text)),
-                    ];
-                    if current_len < max_label {
-                        spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                }
+                MenuMode::Practice => {
+                    let word_lists = crate::words::WordList::all();
+                    let timed_options = crate::app::App::TIMED_OPTIONS;
+                    let max_label: usize = word_lists
+                        .iter()
+                        .map(|wl| "Random Words".len() + 2 + wl.label().len() + 1)
+                        .chain(timed_options.iter().map(|(s, wl)| {
+                            "Random Words".len()
+                                + 2
+                                + format!("{s}s · {}", wl.label()).chars().count()
+                                + 1
+                        }))
+                        .max()
+                        .unwrap_or(20);
+
+                    for i in scroll..(scroll + visible_slots).min(total_items) {
+                        let selected = i == cursor;
+                        let marker = if selected { "▸" } else { " " };
+                        let title_fg = if selected { tc.text } else { tc.dim_text };
+                        let marker_fg = if selected { tc.accent } else { tc.dim_text };
+
+                        let title = "Random Words";
+                        let keys = if i < word_lists.len() {
+                            word_lists[i].label().to_string()
+                        } else {
+                            let (secs, wl) = timed_options[i - word_lists.len()];
+                            format!("{secs}s · {}", wl.label())
+                        };
+                        let current_len = title.len() + 2 + keys.chars().count() + 1;
+                        let mut spans = vec![
+                            Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                            Span::styled(title, Style::new().fg(title_fg)),
+                            Span::styled(format!(" ({keys})"), Style::new().fg(tc.dim_text)),
+                        ];
+                        if current_len < max_label {
+                            spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                        }
+                        lines.push(Line::from(spans));
                     }
-                    lines.push(Line::from(spans));
-                } else {
-                    let timed_idx = i - lessons.len() - word_lists.len();
-                    let (secs, wl) = timed_options[timed_idx];
-                    let title = "Random Words";
-                    let keys = format!("{secs}s · {}", wl.label());
-                    let current_len = title.len() + 2 + keys.chars().count() + 1;
-                    let mut spans = vec![
-                        Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
-                        Span::styled(title, Style::new().fg(title_fg)),
-                        Span::styled(format!(" ({keys})"), Style::new().fg(tc.dim_text)),
-                    ];
-                    if current_len < max_label {
-                        spans.push(Span::raw(" ".repeat(max_label - current_len)));
-                    }
-                    lines.push(Line::from(spans));
                 }
             }
             let on_off = |on: bool| if on { "on" } else { "off" };
             lines.push(Line::from(""));
+            let mode_label = match app.menu_mode {
+                MenuMode::Lessons => "lessons",
+                MenuMode::Practice => "practice",
+            };
             lines.push(Line::from(vec![
                 Span::styled("Enter", Style::new().fg(tc.accent)),
                 Span::styled(" start  ", Style::new().fg(tc.dim_text)),
+                Span::styled("m", Style::new().fg(tc.accent)),
+                Span::styled(format!(" {mode_label}  "), Style::new().fg(tc.dim_text)),
                 Span::styled("h", Style::new().fg(tc.accent)),
                 Span::styled(" history  ", Style::new().fg(tc.dim_text)),
                 Span::styled("l", Style::new().fg(tc.accent)),
@@ -738,7 +752,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             let worst = app.worst_keys(5);
             if !worst.is_empty() {
                 let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(tc.dim_text))];
-                for (i, (ch, acc)) in worst.iter().enumerate() {
+                for (i, (ch, correct, total)) in worst.iter().enumerate() {
                     if i > 0 {
                         spans.push(Span::styled("  ", Style::new().fg(tc.dim_text)));
                     }
@@ -749,7 +763,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     };
                     spans.push(Span::styled(label, Style::new().fg(tc.incorrect).bold()));
                     spans.push(Span::styled(
-                        format!(" {acc:.0}%"),
+                        format!(" {correct}/{total}"),
                         Style::new().fg(tc.dim_text),
                     ));
                 }

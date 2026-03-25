@@ -44,6 +44,28 @@ pub fn save_session(record: SessionRecord) {
     }
 }
 
+pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> usize {
+    let lessons = crate::lessons::lessons_for_layout(layout);
+    resume_lesson_from(&load_history(), &lessons)
+}
+
+fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Lesson]) -> usize {
+    for entry in history.iter().rev() {
+        if entry.id.is_empty() {
+            continue;
+        }
+        let idx = lessons.iter().position(|l| l.id == entry.id);
+        match idx {
+            Some(i) if entry.completed => {
+                return (i + 1).min(lessons.len().saturating_sub(1));
+            }
+            Some(i) => return i,
+            None => continue,
+        }
+    }
+    0
+}
+
 pub fn load_history() -> Vec<SessionRecord> {
     let path = history_path();
     fs::read_to_string(&path)
@@ -93,6 +115,84 @@ mod tests {
         let record: SessionRecord = serde_json::from_str(json).unwrap();
         assert!(!record.completed); // default
         assert!(record.id.is_empty()); // default
+    }
+
+    // --- resume_lesson_from ---
+
+    fn record(id: &str, completed: bool) -> SessionRecord {
+        SessionRecord {
+            timestamp: String::new(),
+            wpm: 0.0,
+            accuracy: 0.0,
+            correct: 0,
+            total: 1,
+            duration_secs: 0.0,
+            completed,
+            id: id.into(),
+        }
+    }
+
+    fn qwerty_lessons() -> Vec<&'static crate::lessons::Lesson> {
+        crate::lessons::lessons_for_layout(crate::settings::KeyboardLayout::Qwerty)
+    }
+
+    #[test]
+    fn resume_empty_history_returns_zero() {
+        assert_eq!(resume_lesson_from(&[], &qwerty_lessons()), 0);
+    }
+
+    #[test]
+    fn resume_incomplete_lesson_returns_same() {
+        let lessons = qwerty_lessons();
+        let history = vec![record(lessons[0].id, false)];
+        assert_eq!(resume_lesson_from(&history, &lessons), 0);
+    }
+
+    #[test]
+    fn resume_completed_lesson_returns_next() {
+        let lessons = qwerty_lessons();
+        let history = vec![record(lessons[0].id, true)];
+        assert_eq!(resume_lesson_from(&history, &lessons), 1);
+    }
+
+    #[test]
+    fn resume_completed_last_lesson_stays_at_last() {
+        let lessons = qwerty_lessons();
+        let last = lessons.last().unwrap();
+        let history = vec![record(last.id, true)];
+        assert_eq!(resume_lesson_from(&history, &lessons), lessons.len() - 1);
+    }
+
+    #[test]
+    fn resume_unknown_lesson_returns_zero() {
+        let history = vec![record("unknown", false)];
+        assert_eq!(resume_lesson_from(&history, &qwerty_lessons()), 0);
+    }
+
+    #[test]
+    fn resume_uses_last_matching_entry() {
+        let lessons = qwerty_lessons();
+        let history = vec![record(lessons[0].id, true), record(lessons[3].id, false)];
+        assert_eq!(resume_lesson_from(&history, &lessons), 3);
+    }
+
+    #[test]
+    fn resume_skips_non_lesson_sessions() {
+        let lessons = qwerty_lessons();
+        let history = vec![
+            record(lessons[3].id, true),
+            record("words_english_200", true),
+            record("timed_60s_english_200", true),
+        ];
+        assert_eq!(resume_lesson_from(&history, &lessons), 4);
+    }
+
+    #[test]
+    fn resume_cross_layout_shares_ids() {
+        let qwerty = qwerty_lessons();
+        let dvorak = crate::lessons::lessons_for_layout(crate::settings::KeyboardLayout::Dvorak);
+        let history = vec![record(qwerty[3].id, true)];
+        assert_eq!(resume_lesson_from(&history, &dvorak), 4);
     }
 
     #[test]

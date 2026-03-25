@@ -30,11 +30,11 @@ struct Cli {
     #[arg(short, long)]
     file: Option<String>,
 
-    /// Start random words mode with N words (default: 50)
+    /// Start practice mode with N random words (default: 100)
     #[arg(short, long)]
     words: Option<Option<usize>>,
 
-    /// Start timed mode for N seconds (e.g. 30, 60)
+    /// Start practice mode for N seconds (e.g. 30, 60)
     #[arg(short, long)]
     time: Option<u64>,
 
@@ -104,39 +104,17 @@ async fn run_app(cli: Cli) -> Result<()> {
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
     app.theme = settings.display.theme;
-    app.selected_lesson = settings
-        .selected_lesson
-        .min(app.menu_item_count().saturating_sub(1));
+    app.selected_lesson = crate::history::resume_lesson(app.layout);
 
     // Handle CLI flags: --time > --words > --file
     let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
     if let Some(secs) = cli.time {
         app.start_timed_practice(secs, list);
     } else if let Some(maybe_count) = cli.words {
-        let count = maybe_count.unwrap_or(50);
-        let text = words::generate_text(list, count);
-        match app::Document::from_text(&text) {
-            Ok(doc) => {
-                app.document = Some(doc);
-                app.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
-                app.lesson_title = format!("Random Words ({})", list.label());
-                app.word_count = count;
-            }
-            Err(e) => app.error = Some(e),
-        }
+        app.word_count = maybe_count.unwrap_or(100);
+        app.start_word_practice(list);
     } else if let Some(path) = cli.file {
-        match app::Document::load(&path) {
-            Ok(doc) => {
-                app.document = Some(doc);
-                app.lesson_id = std::path::Path::new(&path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(&path)
-                    .to_string();
-                app.lesson_title = app.lesson_id.clone();
-            }
-            Err(e) => app.error = Some(e),
-        }
+        app.load_file(&path);
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -167,11 +145,9 @@ async fn run_app(cli: Cli) -> Result<()> {
             || app.show_fingers != settings.display.show_fingers
             || app.theme != settings.display.theme;
         let layout_changed = app.layout != settings.keyboard.layout;
-        let lesson_changed = app.selected_lesson != settings.selected_lesson;
 
-        if layout_changed || display_changed || lesson_changed {
+        if layout_changed || display_changed {
             settings.keyboard.layout = app.layout;
-            settings.selected_lesson = app.selected_lesson;
             settings.display.show_keyboard = app.show_keyboard;
             settings.display.show_hints = app.show_hints;
             settings.display.show_fingers = app.show_fingers;

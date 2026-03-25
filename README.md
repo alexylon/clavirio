@@ -16,20 +16,21 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 <div align="center"><img src="/assets/images/screenshot_dark.png" style="width: 800px;" alt="clavirio"></div>
 
+<div align="center"><img src="/assets/images/screenshot_dark_2.png" style="width: 800px;" alt="clavirio"></div>
+
 <div align="center"><img src="/assets/images/screenshot_light.png" style="width: 800px;" alt="clavirio"></div>
 
 ## Features
 
-- **15 built-in lessons** — progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
-- **Random words** — practice with the 200 or 1000 most common English words
-- **Timed mode** — 30s and 60s countdown sessions with random words
+- **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
+- **Practice mode** — random words (english 200/1k) and timed sessions (30s/60s), toggle with `m`
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
 - **WPM sparkline** — see your speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
 - **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
 - **Error feedback** — wrong keystrokes shown inline, blocked until corrected with Backspace
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
-- **Progress tracking** — remembers your last lesson; advances automatically on completion
+- **Progress tracking** — remembers which lesson you're on and advances automatically on completion (practice mode excluded)
 - **Custom text** — load any file via `Ctrl-F` or as a CLI argument
 - **CLI flags** — start modes directly from the command line
 - **Dark & light themes**
@@ -70,18 +71,18 @@ cargo run
 
 ```
 clavirio                        # interactive menu
-clavirio -w                     # 50 random words (english 200)
-clavirio -w 100 -l 1k           # 100 random words (english 1k)
-clavirio -t 60                  # 60-second timed mode
-clavirio -t 30 -l 1k            # 30-second timed (english 1k)
+clavirio -w                     # practice: 100 words (english 200)
+clavirio -w 50 -l 1k            # practice: 50 words (english 1k)
+clavirio -t 60                  # practice: 60-second timed
+clavirio -t 30 -l 1k            # practice: 30-second timed (english 1k)
 clavirio -f path/to/file.txt    # custom file
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-f, --file <FILE>` | File path to load as typing text |
-| `-w, --words [<WORDS>]` | Start random words mode with N words (default: 50) |
-| `-t, --time <TIME>` | Start timed mode for N seconds (e.g. 30, 60) |
+| `-w, --words [<WORDS>]` | Start practice mode with N random words (default: 100) |
+| `-t, --time <TIME>` | Start practice mode for N seconds (e.g. 30, 60) |
 | `-l, --list <LIST>` | Word list to use: "200" or "1k" (default: 200) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
@@ -97,7 +98,8 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` `k`/`j` | Navigate lessons / history |
-| `Enter` | Start lesson |
+| `Enter` | Start lesson / practice |
+| `m` | Toggle between lessons and practice |
 | `l` | Cycle layout |
 | `1`–`4` | Toggle fingers / hints / keyboard / theme |
 | `h` | Session history |
@@ -110,15 +112,15 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 |-----|--------|
 | `Backspace` | Correct mistake |
 | `Esc` | Pause menu |
-| `Ctrl-R` | Restart lesson |
+| `Ctrl-R` | Restart |
 
 ### Pause menu
 
 | Key | Action |
 |-----|--------|
 | `Space` | Resume |
-| `r` | Restart lesson |
-| `n` | Next lesson |
+| `r` | Restart |
+| `n` | Next lesson (lessons mode only) |
 | `q` | Quit |
 | `Esc` | Back to menu |
 
@@ -135,8 +137,6 @@ show_keyboard = true
 show_hints = true
 show_fingers = true
 theme = "dark"          # dark, light
-
-selected_lesson = 0    # remembered menu position
 ```
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
