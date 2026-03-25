@@ -34,6 +34,10 @@ struct Cli {
     #[arg(short, long)]
     words: Option<Option<usize>>,
 
+    /// Start timed mode for N seconds (e.g. 30, 60)
+    #[arg(short, long)]
+    time: Option<u64>,
+
     /// Word list to use: "200" or "1k" (default: 200)
     #[arg(short, long, default_value = "200")]
     list: String,
@@ -100,11 +104,16 @@ async fn run_app(cli: Cli) -> Result<()> {
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
     app.theme = settings.display.theme;
+    app.selected_lesson = settings
+        .selected_lesson
+        .min(app.menu_item_count().saturating_sub(1));
 
-    // Handle CLI flags: --words takes precedence over --file
-    if let Some(maybe_count) = cli.words {
+    // Handle CLI flags: --time > --words > --file
+    let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
+    if let Some(secs) = cli.time {
+        app.start_timed_practice(secs, list);
+    } else if let Some(maybe_count) = cli.words {
         let count = maybe_count.unwrap_or(50);
-        let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
         let text = words::generate_text(list, count);
         match app::Document::from_text(&text) {
             Ok(doc) => {
@@ -158,9 +167,11 @@ async fn run_app(cli: Cli) -> Result<()> {
             || app.show_fingers != settings.display.show_fingers
             || app.theme != settings.display.theme;
         let layout_changed = app.layout != settings.keyboard.layout;
+        let lesson_changed = app.selected_lesson != settings.selected_lesson;
 
-        if layout_changed || display_changed {
+        if layout_changed || display_changed || lesson_changed {
             settings.keyboard.layout = app.layout;
+            settings.selected_lesson = app.selected_lesson;
             settings.display.show_keyboard = app.show_keyboard;
             settings.display.show_hints = app.show_hints;
             settings.display.show_fingers = app.show_fingers;

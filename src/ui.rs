@@ -407,6 +407,21 @@ fn draw_header(
     let err_fg = if err > 0 { tc.incorrect } else { tc.dim_text };
     let dim = Style::new().fg(tc.dim_text);
 
+    // Show countdown for timed mode, elapsed time otherwise
+    let remaining = app.remaining_secs();
+    let time_str = if let Some(r) = remaining {
+        let r_mins = (r as u64) / 60;
+        let r_secs = (r as u64) % 60;
+        format!("{r_mins:02}:{r_secs:02} ")
+    } else {
+        format!("{mins:02}:{secs:02} ")
+    };
+    let time_fg = if remaining.is_some_and(|r| r <= 5.0) && started {
+        tc.incorrect
+    } else {
+        tc.dim_text
+    };
+
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(wpm_str, Style::new().fg(wpm_fg)),
@@ -418,7 +433,7 @@ fn draw_header(
             Span::styled(format!("{err}"), Style::new().fg(err_fg)),
             Span::styled(" err", dim),
             Span::styled(" \u{b7} ", dim),
-            Span::styled(format!("{mins:02}:{secs:02} "), dim),
+            Span::styled(time_str, Style::new().fg(time_fg)),
         ]))
         .right_aligned(),
         right,
@@ -431,7 +446,8 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 
     let menu_width = 36_u16;
-    let menu_height = 7_u16;
+    let is_random = app.is_random_mode();
+    let menu_height = if is_random { 6_u16 } else { 7_u16 };
 
     let [v_area] = Layout::vertical([Constraint::Length(menu_height)])
         .flex(Flex::Center)
@@ -443,7 +459,11 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     // Clear the entire text area so no underlying borders bleed through
     frame.render_widget(Block::default().style(Style::default().bg(tc.bg)), area);
 
-    let items = [("Restart lesson", "r"), ("Next lesson", "n"), ("Quit", "q")];
+    let items: Vec<(&str, &str)> = if is_random {
+        vec![("Restart", "r"), ("Quit", "q")]
+    } else {
+        vec![("Restart lesson", "r"), ("Next lesson", "n"), ("Quit", "q")]
+    };
 
     let block = Block::new()
         .borders(Borders::ALL)
@@ -531,7 +551,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         None => {
             let lessons = crate::lessons::lessons_for_layout(app.layout);
             let word_lists = crate::words::WordList::all();
-            let total_items = lessons.len() + word_lists.len();
+            let timed_options = crate::app::App::TIMED_OPTIONS;
+            let total_items = lessons.len() + word_lists.len() + timed_options.len();
             // borders: 2 + padding: 2 + blank: 1 + controls: 1 + settings: 1 = 7
             let chrome = 7_u16;
             let visible_slots = inner.height.saturating_sub(chrome) as usize;
@@ -563,6 +584,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             .flat_map(|lay| crate::lessons::lessons_for_layout(*lay))
             .map(|l| label_len(&l))
             .chain(word_lists.iter().map(word_label_len))
+            .chain(timed_options.iter().map(|(s, wl)| {
+                "Random Words".len() + 2 + format!("{s}s · {}", wl.label()).chars().count() + 1
+            }))
             .max()
             .unwrap_or(20);
 
@@ -594,11 +618,26 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         spans.push(Span::raw(" ".repeat(max_label - current_len)));
                     }
                     lines.push(Line::from(spans));
-                } else {
+                } else if i < lessons.len() + word_lists.len() {
                     let wl = &word_lists[i - lessons.len()];
                     let title = "Random Words";
                     let keys = wl.label();
                     let current_len = title.len() + 2 + keys.len() + 1;
+                    let mut spans = vec![
+                        Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                        Span::styled(title, Style::new().fg(title_fg)),
+                        Span::styled(format!(" ({keys})"), Style::new().fg(tc.dim_text)),
+                    ];
+                    if current_len < max_label {
+                        spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                    }
+                    lines.push(Line::from(spans));
+                } else {
+                    let timed_idx = i - lessons.len() - word_lists.len();
+                    let (secs, wl) = timed_options[timed_idx];
+                    let title = "Random Words";
+                    let keys = format!("{secs}s · {}", wl.label());
+                    let current_len = title.len() + 2 + keys.chars().count() + 1;
                     let mut spans = vec![
                         Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
                         Span::styled(title, Style::new().fg(title_fg)),
@@ -840,7 +879,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
         lines.push(Line::from(Span::styled(
             format!(
-                "{:<18} {:>5}  {:>5}  {:>6}  {}",
+                "  {:<14} {:>5}  {:>5}  {:>6}  {}",
                 "date", "wpm", "acc", "time", "lesson"
             ),
             Style::new().fg(tc.dim_text),
@@ -852,19 +891,26 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             let secs = (r.duration_secs as u64) % 60;
             let status = if r.completed { "" } else { "*" };
             let lessons = crate::lessons::lessons_for_layout(app.layout);
-            let lesson_label = lessons
-                .iter()
-                .find(|l| l.id == r.id)
-                .map(|l| l.title)
-                .unwrap_or(&r.id);
-            let lesson_display = if r.id.is_empty() { "—" } else { lesson_label };
+            let lesson_display = if r.id.is_empty() {
+                "—".to_string()
+            } else if let Some(lesson) = lessons.iter().find(|l| l.id == r.id) {
+                lesson.title.to_string()
+            } else {
+                // Show friendly label for word/timed sessions (e.g. "words_english_200" → "Random Words")
+                r.id.replace('_', " ")
+            };
             let selected = i == scroll_pos;
             let fg = if selected { tc.text } else { tc.dim_text };
             let marker = if selected { "▸ " } else { "  " };
             lines.push(Line::from(Span::styled(
                 format!(
-                    "{}{:<18} {:>5.0}  {:>4.0}%  {:>2}:{:02}{}  {}",
-                    marker, display_ts, r.wpm, r.accuracy, mins, secs, status, lesson_display
+                    "{}{:<14} {:>5.0}  {:>4.0}%  {:>6}  {}",
+                    marker,
+                    display_ts,
+                    r.wpm,
+                    r.accuracy,
+                    format!("{mins}:{secs:02}{status}"),
+                    lesson_display
                 ),
                 Style::new().fg(fg),
             )));

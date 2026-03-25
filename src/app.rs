@@ -185,11 +185,12 @@ pub struct App {
     pub pause_menu_index: usize,
     pub paused_at: Option<Instant>,
     pub word_count: usize,
+    pub time_limit: Option<u64>,
+    pub is_random_words_lesson: bool,
 }
 
 impl App {
     pub fn new() -> Self {
-        let selected_lesson = crate::history::resume_lesson(KeyboardLayout::default());
         Self {
             document: None,
             file_path_buf: String::new(),
@@ -207,7 +208,7 @@ impl App {
             viewing_history: false,
             history: Vec::new(),
             history_scroll: 0,
-            selected_lesson,
+            selected_lesson: 0,
             lesson_id: String::new(),
             layout: KeyboardLayout::default(),
             show_keyboard: true,
@@ -219,6 +220,8 @@ impl App {
             pause_menu_index: 0,
             paused_at: None,
             word_count: 50,
+            time_limit: None,
+            is_random_words_lesson: false,
         }
     }
 
@@ -292,6 +295,10 @@ impl App {
         keys
     }
 
+    pub fn is_random_mode(&self) -> bool {
+        self.is_random_words_lesson
+    }
+
     pub fn is_finished(&self) -> bool {
         self.document
             .as_ref()
@@ -343,6 +350,8 @@ impl App {
                 Ok(doc) => {
                     self.document = Some(doc);
                     self.reset_session();
+                    self.time_limit = None;
+                    self.is_random_words_lesson = false;
                     self.lesson_id = lesson.id.to_string();
                     self.lesson_title = lesson.title.to_string();
                 }
@@ -358,31 +367,41 @@ impl App {
         self.document = None;
         self.error = None;
         self.reset_session();
+        self.time_limit = None;
+        self.is_random_words_lesson = false;
         self.paused = false;
         self.pause_menu_index = 0;
         self.lesson_title.clear();
     }
 
+    pub fn pause_menu_len(&self) -> usize {
+        if self.is_random_mode() {
+            2
+        } else {
+            3
+        }
+    }
+
     fn handle_pause_key(&mut self, code: KeyCode) -> bool {
-        const MENU_LEN: usize = 3;
+        let menu_len = self.pause_menu_len();
         match code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.pause_menu_index = self.pause_menu_index.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.pause_menu_index + 1 < MENU_LEN {
+                if self.pause_menu_index + 1 < menu_len {
                     self.pause_menu_index += 1;
                 }
             }
             KeyCode::Home => self.pause_menu_index = 0,
-            KeyCode::End => self.pause_menu_index = MENU_LEN - 1,
+            KeyCode::End => self.pause_menu_index = menu_len - 1,
             KeyCode::Enter => return self.activate_pause_item(),
             KeyCode::Char(' ') => self.resume(),
             KeyCode::Char('r' | 'R') => {
                 self.resume();
                 self.restart();
             }
-            KeyCode::Char('n' | 'N') => {
+            KeyCode::Char('n' | 'N') if !self.is_random_mode() => {
                 self.resume();
                 self.next_lesson();
             }
@@ -396,22 +415,55 @@ impl App {
     }
 
     fn activate_pause_item(&mut self) -> bool {
-        match self.pause_menu_index {
-            0 => {
-                self.resume();
-                self.restart();
+        if self.is_random_mode() {
+            match self.pause_menu_index {
+                0 => {
+                    self.resume();
+                    self.restart();
+                }
+                1 => {
+                    self.save_on_exit();
+                    return true;
+                }
+                _ => {}
             }
-            1 => {
-                self.resume();
-                self.next_lesson();
+        } else {
+            match self.pause_menu_index {
+                0 => {
+                    self.resume();
+                    self.restart();
+                }
+                1 => {
+                    self.resume();
+                    self.next_lesson();
+                }
+                2 => {
+                    self.save_on_exit();
+                    return true;
+                }
+                _ => {}
             }
-            2 => {
-                self.save_on_exit();
-                return true;
-            }
-            _ => {}
         }
         false
+    }
+
+    pub fn remaining_secs(&self) -> Option<f64> {
+        let limit = self.time_limit? as f64;
+        let elapsed = self.elapsed_secs();
+        Some((limit - elapsed).max(0.0))
+    }
+
+    fn check_time_limit(&mut self) {
+        if self.start_time.is_some()
+            && !self.is_finished()
+            && self.remaining_secs().is_some_and(|r| r <= 0.0)
+        {
+            self.end_time = Some(Instant::now());
+            if let Some(doc) = self.document.as_mut() {
+                doc.progress = Progress::Finished;
+            }
+            self.save_history(true);
+        }
     }
 
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
@@ -423,6 +475,7 @@ impl App {
                         self.highlight_until = None;
                     }
                 }
+                self.check_time_limit();
                 false
             }
             InputEvent::Press(key) => self.handle_key(key),
@@ -441,6 +494,8 @@ impl App {
                             self.document = Some(doc);
                             self.error = None;
                             self.reset_session();
+                            self.time_limit = None;
+                            self.is_random_words_lesson = true;
                             self.lesson_id = Path::new(&path)
                                 .file_name()
                                 .and_then(|n| n.to_str())
@@ -554,8 +609,17 @@ impl App {
         false
     }
 
+    pub const TIMED_OPTIONS: &'static [(u64, WordList)] = &[
+        (30, WordList::English200),
+        (60, WordList::English200),
+        (30, WordList::English1k),
+        (60, WordList::English1k),
+    ];
+
     pub fn menu_item_count(&self) -> usize {
-        crate::lessons::lessons_for_layout(self.layout).len() + crate::words::WordList::all().len()
+        crate::lessons::lessons_for_layout(self.layout).len()
+            + crate::words::WordList::all().len()
+            + Self::TIMED_OPTIONS.len()
     }
 
     fn handle_menu_key(&mut self, code: KeyCode) {
@@ -572,6 +636,7 @@ impl App {
             }
             KeyCode::Enter => {
                 let word_lists = crate::words::WordList::all();
+                let timed_start = lessons.len() + word_lists.len();
                 if self.selected_lesson < lessons.len() {
                     if let Some(lesson) = lessons.get(self.selected_lesson) {
                         match Document::from_text(lesson.text) {
@@ -579,16 +644,23 @@ impl App {
                                 self.document = Some(doc);
                                 self.error = None;
                                 self.reset_session();
+                                self.time_limit = None;
+                                self.is_random_words_lesson = false;
                                 self.lesson_id = lesson.id.to_string();
                                 self.lesson_title = lesson.title.to_string();
                             }
                             Err(e) => self.error = Some(e),
                         }
                     }
-                } else {
+                } else if self.selected_lesson < timed_start {
                     let word_idx = self.selected_lesson - lessons.len();
                     if let Some(&list) = word_lists.get(word_idx) {
                         self.start_word_practice(list);
+                    }
+                } else {
+                    let timed_idx = self.selected_lesson - timed_start;
+                    if let Some(&(secs, list)) = Self::TIMED_OPTIONS.get(timed_idx) {
+                        self.start_timed_practice(secs, list);
                     }
                 }
             }
@@ -626,8 +698,28 @@ impl App {
                 self.document = Some(doc);
                 self.error = None;
                 self.reset_session();
+                self.time_limit = None;
+                self.is_random_words_lesson = true;
                 self.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
                 self.lesson_title = format!("Random Words ({})", list.label());
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
+        // Generate enough words to outlast the timer (~80 wpm × time + margin)
+        let estimated_words = ((secs as usize) * 80 / 60) + 20;
+        let text = crate::words::generate_text(list, estimated_words);
+        match Document::from_text(&text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = Some(secs);
+                self.is_random_words_lesson = true;
+                self.lesson_id = format!("timed_{secs}s_{}", list.label().replace(' ', "_"));
+                self.lesson_title = format!("Random Words ({secs}s · {})", list.label());
             }
             Err(e) => self.error = Some(e),
         }
@@ -656,8 +748,11 @@ impl App {
                 if doc.progress == Progress::Finished {
                     self.end_time = Some(Instant::now());
                     self.save_history(true);
-                    self.selected_lesson = (self.selected_lesson + 1)
-                        .min(crate::lessons::lesson_count().saturating_sub(1));
+                    if !self.is_random_words_lesson {
+                        let lesson_count = crate::lessons::lesson_count();
+                        self.selected_lesson =
+                            (self.selected_lesson + 1).min(lesson_count.saturating_sub(1));
+                    }
                 }
             }
         } else {
@@ -1308,10 +1403,34 @@ mod tests {
     }
 
     #[test]
-    fn menu_includes_word_lists() {
+    fn timed_practice_sets_time_limit() {
+        let mut app = App::new();
+        app.start_timed_practice(60, crate::words::WordList::English200);
+        assert!(app.document.is_some());
+        assert_eq!(app.time_limit, Some(60));
+        assert!(app.lesson_title.contains("60s"));
+    }
+
+    #[test]
+    fn timed_practice_finishes_when_time_expires() {
+        let mut app = App::new();
+        app.start_timed_practice(1, crate::words::WordList::English200);
+        // Simulate starting and time passing
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
+        app.handle_event(InputEvent::Tick);
+        assert!(app.is_finished());
+        assert!(app.end_time.is_some());
+    }
+
+    #[test]
+    fn menu_includes_all_entries() {
         let app = App::new();
         let lesson_count = crate::lessons::lesson_count();
         let word_list_count = crate::words::WordList::all().len();
-        assert_eq!(app.menu_item_count(), lesson_count + word_list_count);
+        let timed_count = App::TIMED_OPTIONS.len();
+        assert_eq!(
+            app.menu_item_count(),
+            lesson_count + word_list_count + timed_count
+        );
     }
 }
