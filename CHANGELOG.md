@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-03-25
+
 ### Added
 - Random words mode — practice with the 200 or 1000 most common English words
 - Timed mode — 30s and 60s countdown sessions with random words (english 200 and 1k)
