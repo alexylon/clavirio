@@ -9,6 +9,7 @@ mod words;
 
 use std::io::{stdout, Result};
 
+use clap::Parser;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -21,8 +22,35 @@ use keyboard::{build_keyboard_rows, build_keycode_grid_map};
 use settings::load_settings;
 use ui::{compute_regions, draw};
 
+/// A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking
+#[derive(Parser)]
+#[command(version, about)]
+struct Cli {
+    /// File path to load as typing text
+    #[arg(short, long)]
+    file: Option<String>,
+
+    /// Start random words mode with N words (default: 50)
+    #[arg(short, long)]
+    words: Option<Option<usize>>,
+
+    /// Word list to use: "200" or "1k" (default: 200)
+    #[arg(short, long, default_value = "200")]
+    list: String,
+}
+
+fn parse_word_list(s: &str) -> std::result::Result<words::WordList, String> {
+    match s {
+        "200" => Ok(words::WordList::English200),
+        "1k" => Ok(words::WordList::English1k),
+        _ => Err(format!("Unknown word list '{s}'. Use '200' or '1k'.")),
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+    let cli = Cli::parse();
+
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;
 
@@ -33,7 +61,7 @@ async fn main() -> Result<()> {
         default_hook(info);
     }));
 
-    let result = run_app().await;
+    let result = run_app(cli).await;
 
     execute!(stdout(), LeaveAlternateScreen)?;
     disable_raw_mode()?;
@@ -54,12 +82,12 @@ async fn shutdown_signal() {
     }
     #[cfg(not(unix))]
     {
-        // On Windows, just wait forever — graceful shutdown relies on Esc/Ctrl-C
+        // On Windows, graceful shutdown relies on Esc/Ctrl-C
         std::future::pending::<()>().await;
     }
 }
 
-async fn run_app() -> Result<()> {
+async fn run_app(cli: Cli) -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
@@ -73,7 +101,21 @@ async fn run_app() -> Result<()> {
     app.show_fingers = settings.display.show_fingers;
     app.theme = settings.display.theme;
 
-    if let Some(path) = std::env::args().nth(1) {
+    // Handle CLI flags: --words takes precedence over --file
+    if let Some(maybe_count) = cli.words {
+        let count = maybe_count.unwrap_or(50);
+        let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
+        let text = words::generate_text(list, count);
+        match app::Document::from_text(&text) {
+            Ok(doc) => {
+                app.document = Some(doc);
+                app.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
+                app.lesson_title = format!("Random Words ({})", list.label());
+                app.word_count = count;
+            }
+            Err(e) => app.error = Some(e),
+        }
+    } else if let Some(path) = cli.file {
         match app::Document::load(&path) {
             Ok(doc) => {
                 app.document = Some(doc);
@@ -82,6 +124,7 @@ async fn run_app() -> Result<()> {
                     .and_then(|n| n.to_str())
                     .unwrap_or(&path)
                     .to_string();
+                app.lesson_title = app.lesson_id.clone();
             }
             Err(e) => app.error = Some(e),
         }

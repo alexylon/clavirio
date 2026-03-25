@@ -133,6 +133,8 @@ fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
     } else {
         raw
     };
+    // Wide keys (Shift, Tab, etc.) are 1.5× normal width, spacebar is 6×.
+    // All widths forced odd so labels center perfectly in the inner area.
     let raw_wide = unit_width * 3 / 2;
     let wide_width = if raw_wide % 2 == 0 {
         raw_wide - 1
