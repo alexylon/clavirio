@@ -5,6 +5,7 @@ mod keyboard;
 mod lessons;
 mod settings;
 mod ui;
+mod words;
 
 use std::io::{stdout, Result};
 

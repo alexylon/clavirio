@@ -8,6 +8,7 @@ use time::{format_description::well_known::Iso8601, OffsetDateTime, UtcOffset};
 
 use crate::input::InputEvent;
 use crate::settings::{KeyboardLayout, Theme};
+use crate::words::WordList;
 
 fn chrono_now() -> String {
     let now = OffsetDateTime::now_utc()
@@ -174,6 +175,7 @@ pub struct App {
     pub paused: bool,
     pub pause_menu_index: usize,
     pub paused_at: Option<Instant>,
+    pub word_count: usize,
 }
 
 impl App {
@@ -207,6 +209,7 @@ impl App {
             paused: false,
             pause_menu_index: 0,
             paused_at: None,
+            word_count: 50,
         }
     }
 
@@ -520,9 +523,7 @@ impl App {
                 }
                 _ => {}
             },
-            (KeyCode::Char('q'), _)
-                if self.document.is_none() && self.error.is_none() =>
-            {
+            (KeyCode::Char('q'), _) if self.document.is_none() && self.error.is_none() => {
                 return true;
             }
             _ if self.document.is_none() && self.error.is_none() => {
@@ -544,28 +545,41 @@ impl App {
         false
     }
 
+    pub fn menu_item_count(&self) -> usize {
+        crate::lessons::lessons_for_layout(self.layout).len() + crate::words::WordList::all().len()
+    }
+
     fn handle_menu_key(&mut self, code: KeyCode) {
         let lessons = crate::lessons::lessons_for_layout(self.layout);
+        let total = self.menu_item_count();
         match code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.selected_lesson = self.selected_lesson.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.selected_lesson + 1 < lessons.len() {
+                if self.selected_lesson + 1 < total {
                     self.selected_lesson += 1;
                 }
             }
             KeyCode::Enter => {
-                if let Some(lesson) = lessons.get(self.selected_lesson) {
-                    match Document::from_text(lesson.text) {
-                        Ok(doc) => {
-                            self.document = Some(doc);
-                            self.error = None;
-                            self.reset_session();
-                            self.lesson_id = lesson.id.to_string();
-                            self.lesson_title = lesson.title.to_string();
+                let word_lists = crate::words::WordList::all();
+                if self.selected_lesson < lessons.len() {
+                    if let Some(lesson) = lessons.get(self.selected_lesson) {
+                        match Document::from_text(lesson.text) {
+                            Ok(doc) => {
+                                self.document = Some(doc);
+                                self.error = None;
+                                self.reset_session();
+                                self.lesson_id = lesson.id.to_string();
+                                self.lesson_title = lesson.title.to_string();
+                            }
+                            Err(e) => self.error = Some(e),
                         }
-                        Err(e) => self.error = Some(e),
+                    }
+                } else {
+                    let word_idx = self.selected_lesson - lessons.len();
+                    if let Some(&list) = word_lists.get(word_idx) {
+                        self.start_word_practice(list);
                     }
                 }
             }
@@ -593,6 +607,20 @@ impl App {
                 self.theme = self.theme.cycle();
             }
             _ => {}
+        }
+    }
+
+    fn start_word_practice(&mut self, list: WordList) {
+        let text = crate::words::generate_text(list, self.word_count);
+        match Document::from_text(&text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
+                self.lesson_title = format!("Random Words ({})", list.label());
+            }
+            Err(e) => self.error = Some(e),
         }
     }
 
@@ -1046,7 +1074,7 @@ mod tests {
     #[test]
     fn menu_down_at_last_stays_at_last() {
         let mut app = App::new();
-        let last = crate::lessons::lesson_count() - 1;
+        let last = app.menu_item_count() - 1;
         app.selected_lesson = last;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, last);
@@ -1252,5 +1280,29 @@ mod tests {
         assert!(app.error.is_none());
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "sample.txt");
+    }
+
+    // --- word practice ---
+
+    #[test]
+    fn select_word_practice_from_menu() {
+        let mut app = App::new();
+        let lesson_count = crate::lessons::lesson_count();
+        // Navigate to the first word practice entry (right after lessons)
+        app.selected_lesson = lesson_count;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.document.is_some());
+        assert!(app.lesson_title.starts_with("Random Words"));
+        let doc = app.document.as_ref().unwrap();
+        let word_count: usize = doc.lines.iter().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(word_count, 50);
+    }
+
+    #[test]
+    fn menu_includes_word_lists() {
+        let app = App::new();
+        let lesson_count = crate::lessons::lesson_count();
+        let word_list_count = crate::words::WordList::all().len();
+        assert_eq!(app.menu_item_count(), lesson_count + word_list_count);
     }
 }
