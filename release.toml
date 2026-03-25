@@ -1,0 +1,39 @@
+# Cargo-release configuration
+# Automates versioning, tagging, and publishing
+# Reference: https://rust-lang.github.io/cargo-release/
+
+# Pre-release commit message
+pre-release-commit-message = "Release {{version}}"
+
+# Tag configuration
+tag-name = "v{{version}}"
+tag-message = "Release {{version}}"
+
+# Publish configuration
+publish = true
+
+# Push configuration
+push = true
+push-remote = "origin"
+
+# Consolidate commits before release
+consolidate-commits = false
+
+# Skip verification checks (set to true to skip tests/formatting)
+verify = true
+
+# Pre-release replacements for updating version references in other files
+[[pre-release-replacements]]
+file = "CHANGELOG.md"
+search = "(?m)^## \\[Unreleased\\]\\n\\n"
+replace = """## [Unreleased]
+
+## [{{version}}] - {{date}}
+
+"""
+
+# Example: Update version in README
+# [[pre-release-replacements]]
+# file = "README.md"
+# search = "clavirio v[0-9.]+(-[a-zA-Z0-9]+)?"
+# replace = "clavirio v{{version}}"

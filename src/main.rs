@@ -38,7 +38,7 @@ struct Cli {
     #[arg(short, long)]
     time: Option<u64>,
 
-    /// Word list to use: "200" or "1k" (default: 200)
+    /// Word list to use: "200" or "1k"
     #[arg(short, long, default_value = "200")]
     list: String,
 }

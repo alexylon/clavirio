@@ -21,13 +21,17 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 ## Features
 
 - **15 built-in lessons** — progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
+- **Random words** — practice with the 200 or 1000 most common English words
+- **Timed mode** — 30s and 60s countdown sessions with random words
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
+- **WPM sparkline** — see your speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
 - **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
 - **Error feedback** — wrong keystrokes shown inline, blocked until corrected with Backspace
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
 - **Progress tracking** — remembers your last lesson; advances automatically on completion
 - **Custom text** — load any file via `Ctrl-F` or as a CLI argument
+- **CLI flags** — start modes directly from the command line
 - **Dark & light themes**
 
 ## Lessons
@@ -62,11 +66,25 @@ cargo build --release
 cargo run
 ```
 
-Optionally pass a file directly:
+## CLI
 
 ```
-cargo run -- sample.txt
+clavirio                        # interactive menu
+clavirio -w                     # 50 random words (english 200)
+clavirio -w 100 -l 1k           # 100 random words (english 1k)
+clavirio -t 60                  # 60-second timed mode
+clavirio -t 30 -l 1k            # 30-second timed (english 1k)
+clavirio -f path/to/file.txt    # custom file
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-f, --file <FILE>` | File path to load as typing text |
+| `-w, --words [<WORDS>]` | Start random words mode with N words (default: 50) |
+| `-t, --time <TIME>` | Start timed mode for N seconds (e.g. 30, 60) |
+| `-l, --list <LIST>` | Word list to use: "200" or "1k" (default: 200) |
+| `-h, --help` | Print help |
+| `-V, --version` | Print version |
 
 ## Terminal size
 
@@ -117,6 +135,8 @@ show_keyboard = true
 show_hints = true
 show_fingers = true
 theme = "dark"          # dark, light
+
+selected_lesson = 0    # remembered menu position
 ```
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
