@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-03-25
+
 ### Added
 - Separate Lessons and Practice modes toggled with `m` key
 - Practice mode includes random words and timed entries
