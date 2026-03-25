@@ -71,6 +71,15 @@ impl Document {
             return Err(format!("File not found: {}", resolved.display()));
         }
 
+        const MAX_FILE_SIZE: u64 = 1_000_000; // 1 MB
+        let meta = fs::metadata(&resolved).map_err(|e| format!("Cannot read file: {e}"))?;
+        if meta.len() > MAX_FILE_SIZE {
+            return Err(format!(
+                "File too large ({:.1} MB, max 1 MB)",
+                meta.len() as f64 / 1_000_000.0
+            ));
+        }
+
         let content =
             fs::read_to_string(&resolved).map_err(|e| format!("Cannot read file: {e}"))?;
 
