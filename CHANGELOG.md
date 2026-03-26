@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-03-26
+
 ### Added
 - Weak Keys practice — generates word drills targeting your least accurate characters; uses cumulative stats from all past sessions (`~/.clavirio/keystats.json`), accuracy improves naturally as you get better
 - `w` shortcut on the finished screen — quick drill using weak keys from the current session only
