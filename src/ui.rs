@@ -628,7 +628,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
-                    let special_items = ["Weak Keys", "Common Bigrams (english 1k)"];
+                    let special_items = ["Weak Keys", "Common Bigrams (english 1k)", "Quotes"];
                     let max_label: usize = special_items
                         .iter()
                         .map(|s| s.len())
@@ -939,7 +939,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 "  {:<14} {:>5}  {:>5}  {:>6}  {}",
                 "date", "wpm", "acc", "time", "lesson"
             ),
-            Style::new().fg(tc.dim_text),
+            Style::new().fg(tc.text).bold(),
         )));
 
         for (i, r) in records.iter().enumerate().skip(scroll).take(visible_slots) {

@@ -23,7 +23,7 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 ## Features
 
 - **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
-- **Practice mode** — weak keys, common bigrams, random words (english 200/1k), and timed sessions (30s/60s), toggle with `m`
+- **Practice mode** — weak keys, common bigrams, quotes, random words (english 200/1k), and timed sessions (30s/60s), toggle with `m`
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
 - **WPM sparkline** — see your speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak

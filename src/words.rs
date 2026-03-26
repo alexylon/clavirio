@@ -1,5 +1,6 @@
 const ENGLISH_200: &str = include_str!("../assets/words/english_200.txt");
 const ENGLISH_1K: &str = include_str!("../assets/words/english_1k.txt");
+const QUOTES: &str = include_str!("../assets/quotes/english.txt");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WordList {
@@ -142,6 +143,52 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
     weighted_text(&scored, word_count)
 }
 
+/// Pick random complete quotes without repeats until reaching the target word count.
+pub fn generate_quote_text(word_count: usize) -> String {
+    let quotes: Vec<&str> = QUOTES
+        .split("\n---\n")
+        .map(|q| q.trim())
+        .filter(|q| !q.is_empty())
+        .collect();
+    if quotes.is_empty() {
+        return generate_text(WordList::English1k, word_count);
+    }
+
+    let mut rng = Rng::from_time();
+    let mut total_words = 0;
+    let mut lines: Vec<String> = Vec::new();
+
+    // Shuffle indices to avoid repeats; reshuffle if we exhaust all quotes
+    let mut indices: Vec<usize> = (0..quotes.len()).collect();
+    let mut pos = indices.len();
+
+    while total_words < word_count {
+        if pos >= indices.len() {
+            for i in (1..indices.len()).rev() {
+                indices.swap(i, rng.usize(i + 1));
+            }
+            pos = 0;
+        }
+        let quote = quotes[indices[pos]];
+        pos += 1;
+        for word in quote.split_whitespace() {
+            let need_new_line = match lines.last() {
+                None => true,
+                Some(line) => line.len() + 1 + word.len() > LINE_WIDTH,
+            };
+            if need_new_line {
+                lines.push(word.to_string());
+            } else {
+                lines.last_mut().unwrap().push(' ');
+                lines.last_mut().unwrap().push_str(word);
+            }
+            total_words += 1;
+        }
+        lines.push(String::new());
+    }
+    lines.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,6 +225,49 @@ mod tests {
         assert_eq!(all.len(), 2);
         assert_eq!(all[0], WordList::English200);
         assert_eq!(all[1], WordList::English1k);
+    }
+
+    #[test]
+    fn quote_text_produces_at_least_target_word_count() {
+        let text = generate_quote_text(30);
+        let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
+        assert!(count >= 30, "got {count} words, expected at least 30");
+    }
+
+    #[test]
+    fn quote_text_contains_punctuation() {
+        let text = generate_quote_text(100);
+        let has_punct = text
+            .chars()
+            .any(|c| c == '.' || c == ',' || c == '\'' || c == ':');
+        assert!(has_punct, "quotes should contain punctuation");
+    }
+
+    #[test]
+    fn quotes_file_has_entries() {
+        let quotes: Vec<&str> = QUOTES
+            .split("\n---\n")
+            .map(|q| q.trim())
+            .filter(|q| !q.is_empty())
+            .collect();
+        assert!(quotes.len() >= 10);
+    }
+
+    #[test]
+    fn quote_text_uses_complete_quotes() {
+        let quotes: Vec<&str> = QUOTES
+            .split("\n---\n")
+            .map(|q| q.trim())
+            .filter(|q| !q.is_empty())
+            .collect();
+        let text = generate_quote_text(30);
+        let flat = text.lines().collect::<Vec<_>>().join(" ");
+        // At least one full quote should appear in the output
+        let has_full_quote = quotes.iter().any(|q| flat.contains(q));
+        assert!(
+            has_full_quote,
+            "output should contain at least one complete quote"
+        );
     }
 
     #[test]

@@ -664,7 +664,7 @@ impl App {
     ];
 
     pub fn practice_item_count() -> usize {
-        2 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
+        3 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
     }
 
     pub fn lesson_count_for_layout(&self) -> usize {
@@ -746,7 +746,11 @@ impl App {
                     self.start_bigram_practice();
                     return;
                 }
-                let idx = self.selected_practice - 2;
+                if self.selected_practice == 2 {
+                    self.start_quote_practice();
+                    return;
+                }
+                let idx = self.selected_practice - 3;
                 let word_lists = crate::words::WordList::all();
                 if idx < word_lists.len() {
                     if let Some(&list) = word_lists.get(idx) {
@@ -841,6 +845,22 @@ impl App {
                 self.menu_mode = MenuMode::Practice;
                 self.lesson_id = "bigrams".into();
                 self.lesson_title = "Common Bigrams (english 1k)".into();
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn start_quote_practice(&mut self) {
+        let text = crate::words::generate_quote_text(self.word_count);
+        match Document::from_text(&text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = None;
+                self.menu_mode = MenuMode::Practice;
+                self.lesson_id = "quotes".into();
+                self.lesson_title = "Quotes".into();
             }
             Err(e) => self.error = Some(e),
         }
@@ -1588,7 +1608,7 @@ mod tests {
     fn select_word_practice_from_menu() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
-        app.selected_practice = 2; // 0=Weak Keys, 1=Bigrams, 2=first word list
+        app.selected_practice = 3; // 0=Weak Keys, 1=Bigrams, 2=Quotes, 3=first word list
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
@@ -1676,7 +1696,7 @@ mod tests {
         app.menu_mode = MenuMode::Practice;
         let word_list_count = crate::words::WordList::all().len();
         let timed_count = App::TIMED_OPTIONS.len();
-        assert_eq!(app.current_menu_count(), 2 + word_list_count + timed_count);
+        assert_eq!(app.current_menu_count(), 3 + word_list_count + timed_count);
     }
 
     #[test]
@@ -1743,6 +1763,17 @@ mod tests {
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "bigrams");
         assert_eq!(app.lesson_title, "Common Bigrams (english 1k)");
+    }
+
+    #[test]
+    fn select_quotes_from_practice_menu() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        app.selected_practice = 2;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, "quotes");
+        assert_eq!(app.lesson_title, "Quotes");
     }
 
     #[test]
