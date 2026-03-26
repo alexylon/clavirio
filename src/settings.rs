@@ -99,11 +99,15 @@ pub struct Settings {
     pub display: DisplaySettings,
 }
 
-fn settings_path() -> PathBuf {
+pub(crate) fn data_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".clavirio").join("settings.toml")
+    PathBuf::from(home).join(".clavirio")
+}
+
+fn settings_path() -> PathBuf {
+    data_dir().join("settings.toml")
 }
 
 pub fn load_settings() -> Settings {

@@ -296,10 +296,12 @@ pub fn draw(
             frame,
             rows,
             &kbd_rects,
-            &hint_coords,
-            highlight_coord,
-            highlight_color,
-            app.show_fingers,
+            &KeyboardState {
+                hint_coords: &hint_coords,
+                highlight_coord,
+                highlight_color,
+                show_fingers: app.show_fingers,
+            },
             &tc,
         );
     }
@@ -646,12 +648,16 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     .max()
                     .unwrap_or(20);
 
-                    for i in scroll..(scroll + visible_slots).min(total_items) {
+                    for (i, lesson) in lessons
+                        .iter()
+                        .enumerate()
+                        .skip(scroll)
+                        .take(visible_slots.min(total_items - scroll))
+                    {
                         let selected = i == cursor;
                         let marker = if selected { "▸" } else { " " };
                         let title_fg = if selected { tc.text } else { tc.dim_text };
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
-                        let lesson = &lessons[i];
                         let mut spans = vec![
                             Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
                             Span::styled(lesson.title.to_string(), Style::new().fg(title_fg)),
@@ -1092,14 +1098,18 @@ mod tests {
     }
 }
 
+struct KeyboardState<'a> {
+    hint_coords: &'a [GridCoord],
+    highlight_coord: Option<GridCoord>,
+    highlight_color: Color,
+    show_fingers: bool,
+}
+
 fn draw_keyboard(
     frame: &mut Frame,
     rows: &[Vec<KeyDef>],
     kbd_rects: &[Rc<[Rect]>],
-    hint_coords: &[GridCoord],
-    highlight_coord: Option<GridCoord>,
-    highlight_color: Color,
-    show_fingers: bool,
+    state: &KeyboardState,
     tc: &ThemeColors,
 ) {
     if let Some(outer) = bounding_rect(kbd_rects) {
@@ -1140,11 +1150,11 @@ fn draw_keyboard(
                 continue;
             };
 
-            let is_hint = hint_coords.contains(&(row_idx, col_idx));
-            let is_highlight = highlight_coord == Some((row_idx, col_idx));
+            let is_hint = state.hint_coords.contains(&(row_idx, col_idx));
+            let is_highlight = state.highlight_coord == Some((row_idx, col_idx));
 
             let border_color = if is_highlight {
-                highlight_color
+                state.highlight_color
             } else if is_hint {
                 tc.correct
             } else {
@@ -1158,7 +1168,7 @@ fn draw_keyboard(
             let inner = block.inner(cell);
             frame.render_widget(block, cell);
 
-            if is_hint && show_fingers {
+            if is_hint && state.show_fingers {
                 if let Some(finger) = finger_for_coord((row_idx, col_idx)) {
                     frame.render_widget(
                         Paragraph::new(Span::styled(

@@ -1,6 +1,8 @@
-use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRecord {
@@ -17,10 +19,7 @@ pub struct SessionRecord {
 }
 
 fn history_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".clavirio").join("history.json")
+    crate::settings::data_dir().join("history.json")
 }
 
 pub fn save_session(record: SessionRecord) {
@@ -67,13 +66,10 @@ fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Les
 }
 
 fn keystats_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".clavirio").join("keystats.json")
+    crate::settings::data_dir().join("keystats.json")
 }
 
-pub fn save_key_stats(session_stats: &std::collections::HashMap<char, (u32, u32)>) {
+pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
     if session_stats.is_empty() {
         return;
     }
@@ -89,7 +85,7 @@ pub fn save_key_stats(session_stats: &std::collections::HashMap<char, (u32, u32)
         entry.1 += misses;
     }
 
-    let map: std::collections::BTreeMap<String, (u32, u32)> = cumulative
+    let map: BTreeMap<String, (u32, u32)> = cumulative
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
@@ -101,13 +97,11 @@ pub fn save_key_stats(session_stats: &std::collections::HashMap<char, (u32, u32)
     }
 }
 
-pub fn load_key_stats() -> std::collections::HashMap<char, (u32, u32)> {
+pub fn load_key_stats() -> HashMap<char, (u32, u32)> {
     let path = keystats_path();
     fs::read_to_string(&path)
         .ok()
-        .and_then(|s| {
-            serde_json::from_str::<std::collections::HashMap<String, (u32, u32)>>(&s).ok()
-        })
+        .and_then(|s| serde_json::from_str::<HashMap<String, (u32, u32)>>(&s).ok())
         .map(|m| {
             m.into_iter()
                 .filter_map(|(k, v)| k.chars().next().map(|c| (c, v)))

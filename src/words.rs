@@ -83,7 +83,7 @@ fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
 fn weighted_text(scored: &[(&str, usize)], word_count: usize) -> String {
     let weighted: Vec<&str> = scored
         .iter()
-        .flat_map(|&(w, score)| std::iter::repeat(w).take(score))
+        .flat_map(|&(w, score)| std::iter::repeat_n(w, score))
         .collect();
     random_pick_and_wrap(&weighted, word_count)
 }

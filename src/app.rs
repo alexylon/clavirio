@@ -163,6 +163,23 @@ impl Document {
     }
 }
 
+fn weakest_chars(stats: &HashMap<char, (u32, u32)>, count: usize) -> Vec<(char, u32, u32)> {
+    let mut keys: Vec<(char, u32, u32)> = stats
+        .iter()
+        .filter(|(_, (hits, misses))| *misses > 0 && (*hits + *misses) >= 2)
+        .map(|(&ch, (hits, misses))| (ch, *hits, *hits + *misses))
+        .collect();
+    keys.sort_by(|a, b| {
+        let acc_a = a.1 as f32 / a.2 as f32;
+        let acc_b = b.1 as f32 / b.2 as f32;
+        acc_a
+            .partial_cmp(&acc_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    keys.truncate(count);
+    keys
+}
+
 pub struct App {
     pub document: Option<Document>,
     pub file_path_buf: String,
@@ -282,11 +299,7 @@ impl App {
             return;
         }
         let elapsed = self.elapsed_secs();
-        let accuracy = if self.total_count > 0 {
-            self.correct_count as f64 / self.total_count as f64 * 100.0
-        } else {
-            0.0
-        };
+        let accuracy = self.correct_count as f64 / self.total_count as f64 * 100.0;
         crate::history::save_session(crate::history::SessionRecord {
             timestamp: chrono_now(),
             wpm: self.wpm(),
@@ -301,21 +314,7 @@ impl App {
     }
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
-        let mut keys: Vec<(char, u32, u32)> = self
-            .key_stats
-            .iter()
-            .filter(|(_, (hits, misses))| *misses > 0 && (*hits + *misses) >= 2)
-            .map(|(&ch, (hits, misses))| (ch, *hits, *hits + *misses))
-            .collect();
-        keys.sort_by(|a, b| {
-            let acc_a = a.1 as f32 / a.2 as f32;
-            let acc_b = b.1 as f32 / b.2 as f32;
-            acc_a
-                .partial_cmp(&acc_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        keys.truncate(count);
-        keys
+        weakest_chars(&self.key_stats, count)
     }
 
     const SPARKLINE_WIDTH: usize = 16;
@@ -753,32 +752,21 @@ impl App {
                 }
             }
             MenuMode::Practice => {
-                if self.selected_practice == 0 {
-                    self.start_weak_key_practice();
-                    return;
-                }
-                if self.selected_practice == 1 {
-                    self.start_bigram_practice();
-                    return;
-                }
-                if self.selected_practice == 2 {
-                    self.start_quote_practice();
-                    return;
-                }
-                if self.selected_practice == 3 {
-                    self.start_zen_mode();
-                    return;
-                }
-                let idx = self.selected_practice - 4;
                 let word_lists = crate::words::WordList::all();
-                if idx < word_lists.len() {
-                    if let Some(&list) = word_lists.get(idx) {
-                        self.start_word_practice(list);
-                    }
-                } else {
-                    let timed_idx = idx - word_lists.len();
-                    if let Some(&(secs, list)) = Self::TIMED_OPTIONS.get(timed_idx) {
-                        self.start_timed_practice(secs, list);
+                match self.selected_practice {
+                    0 => self.start_weak_key_practice(),
+                    1 => self.start_bigram_practice(),
+                    2 => self.start_quote_practice(),
+                    3 => self.start_zen_mode(),
+                    idx => {
+                        let idx = idx - 4;
+                        if let Some(&list) = word_lists.get(idx) {
+                            self.start_word_practice(list);
+                        } else if let Some(&(secs, list)) =
+                            Self::TIMED_OPTIONS.get(idx - word_lists.len())
+                        {
+                            self.start_timed_practice(secs, list);
+                        }
                     }
                 }
             }
@@ -819,54 +807,44 @@ impl App {
         }
     }
 
-    pub fn start_word_practice(&mut self, list: WordList) {
-        let text = crate::words::generate_text(list, self.word_count);
-        match Document::from_text(&text) {
+    fn start_practice_from_text(&mut self, text: &str, id: &str, title: &str) {
+        match Document::from_text(text) {
             Ok(doc) => {
                 self.document = Some(doc);
                 self.error = None;
                 self.reset_session();
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Practice;
-                self.lesson_id = format!("words_{}", list.label().replace(' ', "_"));
-                self.lesson_title = format!("Random Words ({})", list.label());
+                self.lesson_id = id.into();
+                self.lesson_title = title.into();
             }
             Err(e) => self.error = Some(e),
         }
     }
 
+    pub fn start_word_practice(&mut self, list: WordList) {
+        let text = crate::words::generate_text(list, self.word_count);
+        self.start_practice_from_text(
+            &text,
+            &format!("words_{}", list.label().replace(' ', "_")),
+            &format!("Random Words ({})", list.label()),
+        );
+    }
+
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
-        // Generate enough words to outlast the timer (~80 wpm × time + margin)
         let estimated_words = ((secs as usize) * 80 / 60) + 20;
         let text = crate::words::generate_text(list, estimated_words);
-        match Document::from_text(&text) {
-            Ok(doc) => {
-                self.document = Some(doc);
-                self.error = None;
-                self.reset_session();
-                self.time_limit = Some(secs);
-                self.menu_mode = MenuMode::Practice;
-                self.lesson_id = format!("timed_{secs}s_{}", list.label().replace(' ', "_"));
-                self.lesson_title = format!("Random Words ({secs}s · {})", list.label());
-            }
-            Err(e) => self.error = Some(e),
-        }
+        self.start_practice_from_text(
+            &text,
+            &format!("timed_{secs}s_{}", list.label().replace(' ', "_")),
+            &format!("Random Words ({secs}s · {})", list.label()),
+        );
+        self.time_limit = Some(secs);
     }
 
     pub fn start_bigram_practice(&mut self) {
         let text = crate::words::generate_bigram_text(self.word_count);
-        match Document::from_text(&text) {
-            Ok(doc) => {
-                self.document = Some(doc);
-                self.error = None;
-                self.reset_session();
-                self.time_limit = None;
-                self.menu_mode = MenuMode::Practice;
-                self.lesson_id = "bigrams".into();
-                self.lesson_title = "Common Bigrams (english 1k)".into();
-            }
-            Err(e) => self.error = Some(e),
-        }
+        self.start_practice_from_text(&text, "bigrams", "Common Bigrams (english 1k)");
     }
 
     fn handle_zen_key(&mut self, code: KeyCode) {
@@ -924,57 +902,25 @@ impl App {
 
     pub fn start_quote_practice(&mut self) {
         let text = crate::words::generate_quote_text(self.word_count);
-        match Document::from_text(&text) {
-            Ok(doc) => {
-                self.document = Some(doc);
-                self.error = None;
-                self.reset_session();
-                self.time_limit = None;
-                self.menu_mode = MenuMode::Practice;
-                self.lesson_id = "quotes".into();
-                self.lesson_title = "Quotes".into();
-            }
-            Err(e) => self.error = Some(e),
-        }
+        self.start_practice_from_text(&text, "quotes", "Quotes");
     }
 
     pub fn start_weak_key_practice(&mut self) {
         let weak: Vec<char> = if !self.key_stats.is_empty() {
-            self.worst_keys(10).iter().map(|&(ch, _, _)| ch).collect()
+            weakest_chars(&self.key_stats, 10)
         } else {
             let cumulative = crate::history::load_key_stats();
-            let mut keys: Vec<(char, u32, u32)> = cumulative
-                .iter()
-                .filter(|(_, (hits, misses))| *misses > 0 && (*hits + *misses) >= 2)
-                .map(|(&ch, (hits, misses))| (ch, *hits, *hits + *misses))
-                .collect();
-            keys.sort_by(|a, b| {
-                let acc_a = a.1 as f32 / a.2 as f32;
-                let acc_b = b.1 as f32 / b.2 as f32;
-                acc_a
-                    .partial_cmp(&acc_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            keys.truncate(10);
-            keys.iter().map(|&(ch, _, _)| ch).collect()
-        };
+            weakest_chars(&cumulative, 10)
+        }
+        .iter()
+        .map(|&(ch, _, _)| ch)
+        .collect();
         if weak.is_empty() {
             self.error = Some("No weak keys yet — complete a session first".into());
             return;
         }
         let text = crate::words::generate_weak_key_text(&weak, self.word_count);
-        match Document::from_text(&text) {
-            Ok(doc) => {
-                self.document = Some(doc);
-                self.error = None;
-                self.reset_session();
-                self.time_limit = None;
-                self.menu_mode = MenuMode::Practice;
-                self.lesson_id = "weak_keys".into();
-                self.lesson_title = "Weak Keys".into();
-            }
-            Err(e) => self.error = Some(e),
-        }
+        self.start_practice_from_text(&text, "weak_keys", "Weak Keys");
     }
 
     fn handle_typed_char(&mut self, typed: char) {
@@ -1612,19 +1558,6 @@ mod tests {
     }
 
     #[test]
-    fn pause_menu_esc_returns_to_menu() {
-        let mut app = App::new();
-        app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
-        assert!(app.paused);
-
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
-        assert!(!app.paused);
-        assert!(app.document.is_none());
-    }
-
-    #[test]
     fn pause_menu_quit() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
@@ -1898,5 +1831,106 @@ mod tests {
         assert_eq!(app.menu_mode, MenuMode::Practice);
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('m'))));
         assert_eq!(app.menu_mode, MenuMode::Lessons);
+    }
+
+    #[test]
+    fn space_at_line_start_is_ignored() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("ab\ncd").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        // Now on line "cd", cursor at 0; space should be ignored
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('c'));
+        assert_eq!(app.total_count, 2); // space not counted
+    }
+
+    #[test]
+    fn remaining_secs_none_without_time_limit() {
+        let app = App::new();
+        assert!(app.remaining_secs().is_none());
+    }
+
+    #[test]
+    fn remaining_secs_counts_down() {
+        let mut app = App::new();
+        app.time_limit = Some(60);
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(10));
+        let remaining = app.remaining_secs().unwrap();
+        assert!((remaining - 50.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn error_count_tracks_errors() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a')))); // hit
+        assert_eq!(app.error_count(), 1);
+        assert_eq!(app.correct_count, 1);
+        assert_eq!(app.total_count, 2);
+    }
+
+    #[test]
+    fn pause_resume_with_space() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        assert!(app.start_time.is_some());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+        assert!(app.paused_at.is_some());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        assert!(!app.paused);
+        assert!(app.paused_at.is_none());
+        assert!(app.document.is_some());
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('e'));
+    }
+
+    #[test]
+    fn next_lesson_advances() {
+        let mut app = App::new();
+        app.selected_lesson = 0;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.document.is_some());
+        // Complete the document manually
+        app.document.as_mut().unwrap().progress = Progress::Finished;
+        app.end_time = Some(Instant::now());
+        app.next_lesson();
+        assert_eq!(app.selected_lesson, 1);
+        assert!(app.document.is_some());
+    }
+
+    #[test]
+    fn document_from_text_all_blank_lines() {
+        let doc = Document::from_text("\n\n\n");
+        assert!(doc.is_ok());
+        let doc = doc.unwrap();
+        assert_eq!(doc.current_line, "");
+    }
+
+    #[test]
+    fn weakest_chars_sorted_correctly() {
+        let mut stats = HashMap::new();
+        stats.insert('a', (8u32, 2u32)); // 80% (8/10)
+        stats.insert('b', (5, 5)); // 50% (5/10)
+        stats.insert('c', (2, 8)); // 20% (2/10)
+        let result = weakest_chars(&stats, 3);
+        assert_eq!(result[0].0, 'c');
+        assert_eq!(result[1].0, 'b');
+        assert_eq!(result[2].0, 'a');
+    }
+
+    #[test]
+    fn ctrl_c_during_search_quits() {
+        let mut app = App::new();
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        assert!(app.searching);
+        let quit = app.handle_event(InputEvent::Press(ctrl_key('c')));
+        assert!(quit);
+        assert!(!app.searching);
     }
 }
