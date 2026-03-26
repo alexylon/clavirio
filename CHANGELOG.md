@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- Weak Keys practice — generates word drills targeting your least accurate characters; uses cumulative stats from all past sessions (`~/.clavirio/keystats.json`), accuracy improves naturally as you get better
+- `w` shortcut on the finished screen — quick drill using weak keys from the current session only
+- Common Bigrams practice — words weighted by the 40 most frequent English letter pairs (th, he, in, er, etc.)
+- Persistent per-key accuracy tracking across sessions
+
+### Changed
+- Refactored word generation to share line-wrap logic across all generators
+
 ## [0.3.5] - 2026-03-25
 
 ### Added

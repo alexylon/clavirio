@@ -293,9 +293,9 @@ impl App {
             completed,
             id: self.lesson_id.clone(),
         });
+        crate::history::save_key_stats(&self.key_stats);
     }
 
-    /// Returns worst keys as (char, correct, total), sorted by accuracy ascending.
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
         let mut keys: Vec<(char, u32, u32)> = self
             .key_stats
@@ -640,6 +640,9 @@ impl App {
             (KeyCode::Char('r'), _) if self.is_finished() => {
                 self.restart();
             }
+            (KeyCode::Char('w'), _) if self.is_finished() => {
+                self.start_weak_key_practice();
+            }
             (KeyCode::Char(typed), _) if self.last_error_char.is_none() => {
                 self.handle_typed_char(typed);
             }
@@ -661,7 +664,7 @@ impl App {
     ];
 
     pub fn practice_item_count() -> usize {
-        crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
+        2 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
     }
 
     pub fn lesson_count_for_layout(&self) -> usize {
@@ -735,13 +738,22 @@ impl App {
                 }
             }
             MenuMode::Practice => {
+                if self.selected_practice == 0 {
+                    self.start_weak_key_practice();
+                    return;
+                }
+                if self.selected_practice == 1 {
+                    self.start_bigram_practice();
+                    return;
+                }
+                let idx = self.selected_practice - 2;
                 let word_lists = crate::words::WordList::all();
-                if self.selected_practice < word_lists.len() {
-                    if let Some(&list) = word_lists.get(self.selected_practice) {
+                if idx < word_lists.len() {
+                    if let Some(&list) = word_lists.get(idx) {
                         self.start_word_practice(list);
                     }
                 } else {
-                    let timed_idx = self.selected_practice - word_lists.len();
+                    let timed_idx = idx - word_lists.len();
                     if let Some(&(secs, list)) = Self::TIMED_OPTIONS.get(timed_idx) {
                         self.start_timed_practice(secs, list);
                     }
@@ -813,6 +825,61 @@ impl App {
                 self.menu_mode = MenuMode::Practice;
                 self.lesson_id = format!("timed_{secs}s_{}", list.label().replace(' ', "_"));
                 self.lesson_title = format!("Random Words ({secs}s · {})", list.label());
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn start_bigram_practice(&mut self) {
+        let text = crate::words::generate_bigram_text(self.word_count);
+        match Document::from_text(&text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = None;
+                self.menu_mode = MenuMode::Practice;
+                self.lesson_id = "bigrams".into();
+                self.lesson_title = "Common Bigrams (english 1k)".into();
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn start_weak_key_practice(&mut self) {
+        let weak: Vec<char> = if !self.key_stats.is_empty() {
+            self.worst_keys(10).iter().map(|&(ch, _, _)| ch).collect()
+        } else {
+            let cumulative = crate::history::load_key_stats();
+            let mut keys: Vec<(char, u32, u32)> = cumulative
+                .iter()
+                .filter(|(_, (hits, misses))| *misses > 0 && (*hits + *misses) >= 2)
+                .map(|(&ch, (hits, misses))| (ch, *hits, *hits + *misses))
+                .collect();
+            keys.sort_by(|a, b| {
+                let acc_a = a.1 as f32 / a.2 as f32;
+                let acc_b = b.1 as f32 / b.2 as f32;
+                acc_a
+                    .partial_cmp(&acc_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            keys.truncate(10);
+            keys.iter().map(|&(ch, _, _)| ch).collect()
+        };
+        if weak.is_empty() {
+            self.error = Some("No weak keys yet — complete a session first".into());
+            return;
+        }
+        let text = crate::words::generate_weak_key_text(&weak, self.word_count);
+        match Document::from_text(&text) {
+            Ok(doc) => {
+                self.document = Some(doc);
+                self.error = None;
+                self.reset_session();
+                self.time_limit = None;
+                self.menu_mode = MenuMode::Practice;
+                self.lesson_id = "weak_keys".into();
+                self.lesson_title = "Weak Keys".into();
             }
             Err(e) => self.error = Some(e),
         }
@@ -1521,7 +1588,7 @@ mod tests {
     fn select_word_practice_from_menu() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
-        app.selected_practice = 0;
+        app.selected_practice = 2; // 0=Weak Keys, 1=Bigrams, 2=first word list
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
@@ -1609,7 +1676,73 @@ mod tests {
         app.menu_mode = MenuMode::Practice;
         let word_list_count = crate::words::WordList::all().len();
         let timed_count = App::TIMED_OPTIONS.len();
-        assert_eq!(app.current_menu_count(), word_list_count + timed_count);
+        assert_eq!(app.current_menu_count(), 2 + word_list_count + timed_count);
+    }
+
+    #[test]
+    fn weak_key_practice_with_stats() {
+        let mut app = App::new();
+        app.key_stats.insert('e', (5, 5)); // 50% accuracy
+        app.key_stats.insert('a', (3, 7)); // 30% accuracy
+        app.start_weak_key_practice();
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, "weak_keys");
+        assert_eq!(app.lesson_title, "Weak Keys");
+    }
+
+    #[test]
+    fn weak_key_practice_without_session_stats_uses_cumulative_or_errors() {
+        let mut app = App::new();
+        app.start_weak_key_practice();
+        // With no session stats, falls back to cumulative file;
+        // result depends on whether keystats.json exists on disk
+        let has_cumulative = !crate::history::load_key_stats().is_empty();
+        if has_cumulative {
+            assert!(app.document.is_some() || app.error.is_some());
+        } else {
+            assert!(app.error.is_some());
+            assert!(app.document.is_none());
+        }
+    }
+
+    #[test]
+    fn w_key_on_finished_starts_weak_practice() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("ab").unwrap());
+        // Type with an error to build key_stats
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss 'a'
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss 'b'
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        assert!(app.is_finished());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('w'))));
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, "weak_keys");
+    }
+
+    #[test]
+    fn select_weak_keys_from_practice_menu() {
+        let mut app = App::new();
+        app.key_stats.insert('e', (5, 5));
+        app.menu_mode = MenuMode::Practice;
+        app.selected_practice = 0;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, "weak_keys");
+    }
+
+    #[test]
+    fn select_bigrams_from_practice_menu() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        app.selected_practice = 1;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, "bigrams");
+        assert_eq!(app.lesson_title, "Common Bigrams (english 1k)");
     }
 
     #[test]

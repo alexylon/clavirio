@@ -55,13 +55,7 @@ impl Rng {
 
 const LINE_WIDTH: usize = 60;
 
-/// Generate `word_count` random words from the list, wrapped into lines.
-pub fn generate_text(list: WordList, word_count: usize) -> String {
-    let pool = list.words();
-    if pool.is_empty() {
-        return String::new();
-    }
-
+fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
     let mut rng = Rng::from_time();
     let mut lines: Vec<String> = Vec::new();
     let mut current_line = String::new();
@@ -82,6 +76,70 @@ pub fn generate_text(list: WordList, word_count: usize) -> String {
         lines.push(current_line);
     }
     lines.join("\n")
+}
+
+/// Build a weighted pool: repeat each word by its score, then pick randomly.
+fn weighted_text(scored: &[(&str, usize)], word_count: usize) -> String {
+    let weighted: Vec<&str> = scored
+        .iter()
+        .flat_map(|&(w, score)| std::iter::repeat(w).take(score))
+        .collect();
+    random_pick_and_wrap(&weighted, word_count)
+}
+
+pub fn generate_text(list: WordList, word_count: usize) -> String {
+    let pool = list.words();
+    if pool.is_empty() {
+        return String::new();
+    }
+    random_pick_and_wrap(&pool, word_count)
+}
+
+const BIGRAMS: &[&str] = &[
+    "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti", "es", "or", "te", "of", "ed",
+    "is", "it", "al", "ar", "st", "to", "nt", "ng", "se", "ha", "as", "ou", "io", "le", "ve", "co",
+    "me", "de", "hi", "ri", "ro", "ic", "ne", "ea",
+];
+
+pub fn generate_bigram_text(word_count: usize) -> String {
+    let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
+    let scored: Vec<(&str, usize)> = pool
+        .iter()
+        .filter_map(|&w| {
+            let score = BIGRAMS.iter().filter(|&&bg| w.contains(bg)).count();
+            if score > 0 {
+                Some((w, score))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if scored.is_empty() {
+        return generate_text(WordList::English1k, word_count);
+    }
+    weighted_text(&scored, word_count)
+}
+
+pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String {
+    if weak_chars.is_empty() {
+        return generate_text(WordList::English1k, word_count);
+    }
+    let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
+    let scored: Vec<(&str, usize)> = pool
+        .iter()
+        .filter_map(|&w| {
+            let score = w.chars().filter(|c| weak_chars.contains(c)).count();
+            if score > 0 {
+                Some((w, score))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if scored.is_empty() {
+        return generate_text(WordList::English1k, word_count);
+    }
+    weighted_text(&scored, word_count)
 }
 
 #[cfg(test)]
@@ -120,5 +178,40 @@ mod tests {
         assert_eq!(all.len(), 2);
         assert_eq!(all[0], WordList::English200);
         assert_eq!(all[1], WordList::English1k);
+    }
+
+    #[test]
+    fn weak_key_text_produces_correct_word_count() {
+        let text = generate_weak_key_text(&['e', 'a'], 25);
+        let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(count, 25);
+    }
+
+    #[test]
+    fn weak_key_text_contains_target_chars() {
+        let text = generate_weak_key_text(&['z', 'x'], 50);
+        let has_target = text.chars().any(|c| c == 'z' || c == 'x');
+        assert!(has_target, "text should contain weak key chars");
+    }
+
+    #[test]
+    fn bigram_text_produces_correct_word_count() {
+        let text = generate_bigram_text(30);
+        let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(count, 30);
+    }
+
+    #[test]
+    fn bigram_text_contains_common_bigrams() {
+        let text = generate_bigram_text(50);
+        let has_bigram = BIGRAMS.iter().any(|bg| text.contains(bg));
+        assert!(has_bigram, "text should contain at least one common bigram");
+    }
+
+    #[test]
+    fn weak_key_text_fallback_on_empty_chars() {
+        let text = generate_weak_key_text(&[], 20);
+        let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(count, 20);
     }
 }

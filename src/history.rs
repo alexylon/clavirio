@@ -66,6 +66,56 @@ fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Les
     0
 }
 
+fn keystats_path() -> PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".clavirio").join("keystats.json")
+}
+
+pub fn save_key_stats(session_stats: &std::collections::HashMap<char, (u32, u32)>) {
+    if session_stats.is_empty() {
+        return;
+    }
+    let path = keystats_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let mut cumulative = load_key_stats();
+    for (&ch, &(hits, misses)) in session_stats {
+        let entry = cumulative.entry(ch).or_insert((0, 0));
+        entry.0 += hits;
+        entry.1 += misses;
+    }
+
+    let map: std::collections::BTreeMap<String, (u32, u32)> = cumulative
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    if let Ok(json) = serde_json::to_string_pretty(&map) {
+        let tmp = path.with_extension("json.tmp");
+        if fs::write(&tmp, &json).is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        }
+    }
+}
+
+pub fn load_key_stats() -> std::collections::HashMap<char, (u32, u32)> {
+    let path = keystats_path();
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| {
+            serde_json::from_str::<std::collections::HashMap<String, (u32, u32)>>(&s).ok()
+        })
+        .map(|m| {
+            m.into_iter()
+                .filter_map(|(k, v)| k.chars().next().map(|c| (c, v)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn load_history() -> Vec<SessionRecord> {
     let path = history_path();
     fs::read_to_string(&path)
@@ -193,6 +243,15 @@ mod tests {
         let dvorak = crate::lessons::lessons_for_layout(crate::settings::KeyboardLayout::Dvorak);
         let history = vec![record(qwerty[3].id, true)];
         assert_eq!(resume_lesson_from(&history, &dvorak), 4);
+    }
+
+    #[test]
+    fn keystats_roundtrip_json() {
+        let json = r#"{"a":[10,5],"b":[20,3]}"#;
+        let map: std::collections::HashMap<String, (u32, u32)> =
+            serde_json::from_str(json).unwrap();
+        assert_eq!(map["a"], (10, 5));
+        assert_eq!(map["b"], (20, 3));
     }
 
     #[test]

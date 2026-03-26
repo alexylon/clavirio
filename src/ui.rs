@@ -628,9 +628,15 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
-                    let max_label: usize = word_lists
+                    let special_items = ["Weak Keys", "Common Bigrams (english 1k)"];
+                    let max_label: usize = special_items
                         .iter()
-                        .map(|wl| "Random Words".len() + 2 + wl.label().len() + 1)
+                        .map(|s| s.len())
+                        .chain(
+                            word_lists
+                                .iter()
+                                .map(|wl| "Random Words".len() + 2 + wl.label().len() + 1),
+                        )
                         .chain(timed_options.iter().map(|(s, wl)| {
                             "Random Words".len()
                                 + 2
@@ -646,11 +652,29 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let title_fg = if selected { tc.text } else { tc.dim_text };
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
+                        if i < special_items.len() {
+                            let title = special_items[i];
+                            let current_len = title.len();
+                            let mut spans = vec![
+                                Span::styled(
+                                    format!(" {marker} "),
+                                    Style::new().fg(marker_fg).bold(),
+                                ),
+                                Span::styled(title, Style::new().fg(title_fg)),
+                            ];
+                            if current_len < max_label {
+                                spans.push(Span::raw(" ".repeat(max_label - current_len)));
+                            }
+                            lines.push(Line::from(spans));
+                            continue;
+                        }
+
+                        let idx = i - special_items.len();
                         let title = "Random Words";
-                        let keys = if i < word_lists.len() {
-                            word_lists[i].label().to_string()
+                        let keys = if idx < word_lists.len() {
+                            word_lists[idx].label().to_string()
                         } else {
-                            let (secs, wl) = timed_options[i - word_lists.len()];
+                            let (secs, wl) = timed_options[idx - word_lists.len()];
                             format!("{secs}s · {}", wl.label())
                         };
                         let current_len = title.len() + 2 + keys.chars().count() + 1;
@@ -738,6 +762,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 ),
                 Span::styled("  r", Style::new().fg(tc.accent).bold()),
                 Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
+                Span::styled("w", Style::new().fg(tc.accent).bold()),
+                Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
                 Span::styled("Esc", Style::new().fg(tc.accent).bold()),
                 Span::styled(" menu", Style::new().fg(tc.dim_text)),
             ])];

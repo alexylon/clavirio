@@ -23,12 +23,13 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 ## Features
 
 - **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
-- **Practice mode** — random words (english 200/1k) and timed sessions (30s/60s), toggle with `m`
+- **Practice mode** — weak keys, common bigrams, random words (english 200/1k), and timed sessions (30s/60s), toggle with `m`
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
 - **WPM sparkline** — see your speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
 - **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
 - **Error feedback** — wrong keystrokes shown inline, blocked until corrected with Backspace
+- **Weak key tracking** — per-key accuracy saved across sessions to `~/.clavirio/keystats.json`; press `w` after a session to drill that session's weak keys, or select Weak Keys from the practice menu for cumulative weak keys
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
 - **Progress tracking** — remembers which lesson you're on and advances automatically on completion (practice mode excluded)
 - **Custom text** — load any file via `Ctrl-F` or as a CLI argument
@@ -113,6 +114,15 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 | `Backspace` | Correct mistake |
 | `Esc` | Pause menu |
 | `Ctrl-R` | Restart |
+
+### Finished screen
+
+| Key | Action |
+|-----|--------|
+| `r` | Restart |
+| `w` | Practice weak keys from this session |
+| `n` | Next lesson (lessons mode only) |
+| `Esc` | Back to menu |
 
 ### Pause menu
 
