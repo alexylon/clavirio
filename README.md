@@ -20,6 +20,16 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 <div align="center"><img src="/assets/images/screenshot_light.webp" style="width: 800px;" alt="clavirio"></div>
 
+## Table of Contents
+
+- [Features](#features)
+- [Lessons](#lessons)
+- [Install](#install)
+- [CLI](#cli)
+- [Terminal size](#terminal-size)
+- [Controls](#controls)
+- [Settings](#settings)
+
 ## Features
 
 - **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
@@ -61,11 +71,34 @@ Lessons 1–9 are **layout-specific** (each layout has its own drills matched to
 | 14 | Full Paragraphs | Real-world text |
 | 15 | Code (Rust) | Programming syntax |
 
-## Build & Run
+## Install
 
+### Prebuilt binary
+
+Download from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest) (macOS, Linux, Windows):
+
+```bash
+# macOS / Linux
+tar xzf clavirio-*.tar.gz
+sudo mv clavirio /usr/local/bin/
+
+# Windows — extract the .zip, then add the folder to your PATH
 ```
+
+> **macOS:** On first run, macOS may block the binary. Go to System Settings → Privacy & Security and click *Allow Anyway*.
+
+### With Rust
+
+```bash
+cargo install clavirio
+```
+
+### From source
+
+```bash
+git clone https://github.com/alexylon/clavirio.git
+cd clavirio
 cargo build --release
-cargo run
 ```
 
 ## CLI
