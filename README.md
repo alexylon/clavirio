@@ -14,11 +14,11 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 *clavirio* — from Latin *clavis* (key).
 
-<div align="center"><img src="/assets/images/screenshot_dark.png" style="width: 800px;" alt="clavirio"></div>
+<div align="center"><img src="/assets/images/screenshot_dark.webp" style="width: 800px;" alt="clavirio"></div>
 
-<div align="center"><img src="/assets/images/screenshot_dark_2.png" style="width: 800px;" alt="clavirio"></div>
+<div align="center"><img src="/assets/images/screenshot_dark_2.webp" style="width: 800px;" alt="clavirio"></div>
 
-<div align="center"><img src="/assets/images/screenshot_light.png" style="width: 800px;" alt="clavirio"></div>
+<div align="center"><img src="/assets/images/screenshot_light.webp" style="width: 800px;" alt="clavirio"></div>
 
 ## Features
 
