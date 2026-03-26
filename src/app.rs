@@ -198,6 +198,8 @@ pub struct App {
     pub wpm_samples: Vec<f64>,
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
+    pub zen_mode: bool,
+    pub zen_lines: Vec<String>,
 }
 
 impl App {
@@ -237,6 +239,8 @@ impl App {
             wpm_samples: Vec::new(),
             last_sample_count: 0,
             last_sample_time: None,
+            zen_mode: false,
+            zen_lines: Vec::new(),
         }
     }
 
@@ -372,7 +376,7 @@ impl App {
     }
 
     pub fn save_on_exit(&self) {
-        if self.document.is_some() && !self.is_finished() {
+        if (self.document.is_some() && !self.is_finished()) || self.zen_mode {
             self.save_history(false);
         }
     }
@@ -388,6 +392,8 @@ impl App {
         self.wpm_samples.clear();
         self.last_sample_count = 0;
         self.last_sample_time = None;
+        self.zen_mode = false;
+        self.zen_lines.clear();
     }
 
     fn restart(&mut self) {
@@ -594,6 +600,12 @@ impl App {
                     self.go_to_menu();
                     return false;
                 }
+                if self.zen_mode {
+                    self.save_history(true);
+                    self.reset_session();
+                    self.lesson_title.clear();
+                    return false;
+                }
                 if self.document.is_none() && self.error.is_none() {
                     return true;
                 }
@@ -631,6 +643,9 @@ impl App {
                 }
                 _ => {}
             },
+            _ if self.zen_mode => {
+                self.handle_zen_key(key.code);
+            }
             (KeyCode::Char('q'), _) if self.document.is_none() && self.error.is_none() => {
                 return true;
             }
@@ -664,7 +679,7 @@ impl App {
     ];
 
     pub fn practice_item_count() -> usize {
-        3 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
+        4 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
     }
 
     pub fn lesson_count_for_layout(&self) -> usize {
@@ -750,7 +765,11 @@ impl App {
                     self.start_quote_practice();
                     return;
                 }
-                let idx = self.selected_practice - 3;
+                if self.selected_practice == 3 {
+                    self.start_zen_mode();
+                    return;
+                }
+                let idx = self.selected_practice - 4;
                 let word_lists = crate::words::WordList::all();
                 if idx < word_lists.len() {
                     if let Some(&list) = word_lists.get(idx) {
@@ -848,6 +867,59 @@ impl App {
             }
             Err(e) => self.error = Some(e),
         }
+    }
+
+    fn handle_zen_key(&mut self, code: KeyCode) {
+        const ZEN_LINE_WIDTH: usize = 60;
+        match code {
+            KeyCode::Char(c) => {
+                if self.start_time.is_none() {
+                    self.start_time = Some(Instant::now());
+                }
+                self.correct_count += 1;
+                self.total_count += 1;
+                if let Some(line) = self.zen_lines.last_mut() {
+                    if line.len() + 1 >= ZEN_LINE_WIDTH {
+                        self.zen_lines.push(c.to_string());
+                    } else {
+                        line.push(c);
+                    }
+                }
+                let display_char = if c.is_whitespace() {
+                    ' '
+                } else {
+                    c.to_ascii_uppercase()
+                };
+                self.highlighted_key = Some(KeyCode::Char(display_char));
+                self.highlight_until = Some(Instant::now() + std::time::Duration::from_millis(400));
+            }
+            KeyCode::Backspace => {
+                if let Some(line) = self.zen_lines.last_mut() {
+                    if line.pop().is_none() && self.zen_lines.len() > 1 {
+                        self.zen_lines.pop();
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                if self.start_time.is_none() {
+                    self.start_time = Some(Instant::now());
+                }
+                self.zen_lines.push(String::new());
+            }
+            _ => {}
+        }
+    }
+
+    pub fn start_zen_mode(&mut self) {
+        self.document = None;
+        self.error = None;
+        self.reset_session();
+        self.time_limit = None;
+        self.menu_mode = MenuMode::Practice;
+        self.lesson_id = "zen".into();
+        self.lesson_title = "Zen".into();
+        self.zen_mode = true;
+        self.zen_lines = vec![String::new()];
     }
 
     pub fn start_quote_practice(&mut self) {
@@ -1608,7 +1680,7 @@ mod tests {
     fn select_word_practice_from_menu() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
-        app.selected_practice = 3; // 0=Weak Keys, 1=Bigrams, 2=Quotes, 3=first word list
+        app.selected_practice = 4; // 0=Weak Keys, 1=Bigrams, 2=Quotes, 3=Zen, 4=first word list
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
@@ -1696,7 +1768,7 @@ mod tests {
         app.menu_mode = MenuMode::Practice;
         let word_list_count = crate::words::WordList::all().len();
         let timed_count = App::TIMED_OPTIONS.len();
-        assert_eq!(app.current_menu_count(), 3 + word_list_count + timed_count);
+        assert_eq!(app.current_menu_count(), 4 + word_list_count + timed_count);
     }
 
     #[test]
@@ -1774,6 +1846,48 @@ mod tests {
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "quotes");
         assert_eq!(app.lesson_title, "Quotes");
+    }
+
+    #[test]
+    fn select_zen_from_practice_menu() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        app.selected_practice = 3;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.zen_mode);
+        assert!(app.document.is_none());
+        assert_eq!(app.lesson_id, "zen");
+    }
+
+    #[test]
+    fn zen_mode_typing() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        assert!(app.zen_mode);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('i'))));
+        assert_eq!(app.correct_count, 2);
+        assert_eq!(app.zen_lines.last().unwrap(), "hi");
+        assert!(app.start_time.is_some());
+    }
+
+    #[test]
+    fn zen_mode_backspace() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        assert_eq!(app.zen_lines.last().unwrap(), "");
+    }
+
+    #[test]
+    fn zen_mode_esc_exits() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(!quit);
+        assert!(!app.zen_mode);
     }
 
     #[test]

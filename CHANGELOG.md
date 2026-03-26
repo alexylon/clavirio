@@ -7,6 +7,7 @@
 - `w` shortcut on the finished screen — quick drill using weak keys from the current session only
 - Common Bigrams practice — words weighted by the 40 most frequent English letter pairs (th, he, in, er, etc.)
 - Quotes practice — type real quotes with natural prose and punctuation; no duplicates or truncated quotes per session
+- Zen mode — free typing with no prompt, just WPM tracking; press Esc to stop
 - Persistent per-key accuracy tracking across sessions
 
 ### Changed

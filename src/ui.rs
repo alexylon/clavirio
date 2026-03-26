@@ -200,7 +200,7 @@ pub fn draw(
     let bg_block = Block::default().style(Style::default().bg(tc.bg));
     frame.render_widget(bg_block, frame.area());
 
-    let on_menu = app.document.is_none() && app.error.is_none() && !app.searching;
+    let on_menu = app.document.is_none() && app.error.is_none() && !app.searching && !app.zen_mode;
 
     let hint_coords: Vec<GridCoord> = if app.show_hints {
         if on_menu {
@@ -319,7 +319,7 @@ fn draw_header(
         area,
     );
 
-    let on_menu = app.document.is_none() && app.error.is_none();
+    let on_menu = app.document.is_none() && app.error.is_none() && !app.zen_mode;
     if on_menu {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
@@ -515,7 +515,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         return;
     }
 
-    let ideal_height = if app.document.is_none() && app.error.is_none() {
+    let ideal_height = if app.document.is_none() && app.error.is_none() && !app.zen_mode {
         (app.current_menu_count() as u16) + 7
     } else {
         7
@@ -553,6 +553,54 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 .centered(),
             inner,
         );
+        return;
+    }
+
+    if app.zen_mode {
+        let mut lines: Vec<Line> = Vec::new();
+        let visible = inner.height.saturating_sub(4) as usize;
+        let start = app.zen_lines.len().saturating_sub(visible);
+        for (i, line) in app.zen_lines[start..].iter().enumerate() {
+            let is_current = start + i == app.zen_lines.len() - 1;
+            if is_current {
+                lines.push(Line::from(vec![
+                    Span::styled(line.clone(), Style::new().fg(tc.correct)),
+                    Span::styled(" ", Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg)),
+                ]));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    line.clone(),
+                    Style::new().fg(tc.correct),
+                )));
+            }
+        }
+        // Pad remaining space
+        while lines.len() < visible {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(""));
+        let mut controls = vec![
+            Span::styled(
+                format!("{:.0} wpm", app.wpm()),
+                Style::new().fg(tc.accent).bold(),
+            ),
+            Span::styled("  ", Style::new().fg(tc.dim_text)),
+        ];
+        if app.start_time.is_some() {
+            let elapsed = app.elapsed_secs();
+            let mins = (elapsed / 60.0) as u32;
+            let secs = (elapsed % 60.0) as u32;
+            controls.push(Span::styled(
+                format!("{mins}:{secs:02}"),
+                Style::new().fg(tc.dim_text),
+            ));
+            controls.push(Span::styled("  ", Style::new().fg(tc.dim_text)));
+        }
+        controls.push(Span::styled("Esc", Style::new().fg(tc.accent).bold()));
+        controls.push(Span::styled(" stop", Style::new().fg(tc.dim_text)));
+        lines.push(Line::from(controls));
+
+        frame.render_widget(Paragraph::new(lines).block(block), inner);
         return;
     }
 
@@ -628,7 +676,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
-                    let special_items = ["Weak Keys", "Common Bigrams (english 1k)", "Quotes"];
+                    let special_items =
+                        ["Weak Keys", "Common Bigrams (english 1k)", "Quotes", "Zen"];
                     let max_label: usize = special_items
                         .iter()
                         .map(|s| s.len())
