@@ -78,6 +78,10 @@ pub struct DisplaySettings {
     pub show_fingers: bool,
     #[serde(default)]
     pub theme: Theme,
+    #[serde(default)]
+    pub include_punctuation: bool,
+    #[serde(default)]
+    pub include_numbers: bool,
 }
 
 impl Default for DisplaySettings {
@@ -87,6 +91,8 @@ impl Default for DisplaySettings {
             show_hints: true,
             show_fingers: true,
             theme: Theme::default(),
+            include_punctuation: false,
+            include_numbers: false,
         }
     }
 }

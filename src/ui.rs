@@ -77,6 +77,17 @@ pub struct Regions {
     keyboard_area: Rect,
 }
 
+fn mix_label_suffix(punctuation: bool, numbers: bool) -> String {
+    let mut s = String::new();
+    if punctuation {
+        s.push_str(" +punct");
+    }
+    if numbers {
+        s.push_str(" +num");
+    }
+    s
+}
+
 fn clamp_width(area: Rect) -> Rect {
     if area.width <= MAX_WIDTH {
         return area;
@@ -682,24 +693,41 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
+                    const WEAK_KEYS_IDX: usize = 0;
                     let special_items =
                         ["Weak Keys", "Common Bigrams (english 1k)", "Quotes", "Zen"];
-                    let max_label: usize = special_items
-                        .iter()
-                        .map(|s| s.len())
-                        .chain(
-                            word_lists
-                                .iter()
-                                .map(|wl| "Random Words".len() + 2 + wl.label().len() + 1),
-                        )
-                        .chain(timed_options.iter().map(|(s, wl)| {
-                            "Random Words".len()
-                                + 2
-                                + format!("{s}s · {}", wl.label()).chars().count()
-                                + 1
-                        }))
-                        .max()
-                        .unwrap_or(20);
+                    let mix_suffix = mix_label_suffix(app.include_punctuation, app.include_numbers);
+                    let suffix_len = mix_suffix.len();
+                    // " (+punct +num)" = suffix content trimmed + parens + spaces
+                    let weak_suffix_len = if suffix_len > 0 {
+                        suffix_len + 2 // " (" + trimmed suffix + ")"
+                    } else {
+                        0
+                    };
+                    let max_label: usize =
+                        special_items
+                            .iter()
+                            .enumerate()
+                            .map(|(j, s)| {
+                                s.len()
+                                    + if j == WEAK_KEYS_IDX {
+                                        weak_suffix_len
+                                    } else {
+                                        0
+                                    }
+                            })
+                            .chain(word_lists.iter().map(|wl| {
+                                "Random Words".len() + 2 + wl.label().len() + suffix_len + 1
+                            }))
+                            .chain(timed_options.iter().map(|(s, wl)| {
+                                "Random Words".len()
+                                    + 2
+                                    + format!("{s}s · {}", wl.label()).chars().count()
+                                    + suffix_len
+                                    + 1
+                            }))
+                            .max()
+                            .unwrap_or(20);
 
                     for i in scroll..(scroll + visible_slots).min(total_items) {
                         let selected = i == cursor;
@@ -708,7 +736,12 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
                         if i < special_items.len() {
-                            let title = special_items[i];
+                            let base_title = special_items[i];
+                            let title = if i == WEAK_KEYS_IDX && !mix_suffix.is_empty() {
+                                format!("{base_title} ({})", mix_suffix.trim())
+                            } else {
+                                base_title.to_string()
+                            };
                             let current_len = title.len();
                             let mut spans = vec![
                                 Span::styled(
@@ -726,12 +759,13 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
                         let idx = i - special_items.len();
                         let title = "Random Words";
-                        let keys = if idx < word_lists.len() {
+                        let mut keys = if idx < word_lists.len() {
                             word_lists[idx].label().to_string()
                         } else {
                             let (secs, wl) = timed_options[idx - word_lists.len()];
                             format!("{secs}s · {}", wl.label())
                         };
+                        keys.push_str(&mix_suffix);
                         let current_len = title.len() + 2 + keys.chars().count() + 1;
                         let mut spans = vec![
                             Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
@@ -777,7 +811,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             } else {
                 tc.disabled
             };
-            lines.push(Line::from(vec![
+            let mut toggle_spans = vec![
                 Span::styled("1", Style::new().fg(fingers_key_fg)),
                 Span::styled(
                     format!(" fingers {}  ", on_off(app.show_fingers)),
@@ -794,8 +828,23 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     Style::new().fg(tc.dim_text),
                 ),
                 Span::styled("4", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {}", app.theme), Style::new().fg(tc.dim_text)),
-            ]));
+                Span::styled(format!(" {}  ", app.theme), Style::new().fg(tc.dim_text)),
+            ];
+            if app.menu_mode == MenuMode::Practice {
+                toggle_spans.extend([
+                    Span::styled("5", Style::new().fg(tc.accent)),
+                    Span::styled(
+                        format!(" punct {}  ", on_off(app.include_punctuation)),
+                        Style::new().fg(tc.dim_text),
+                    ),
+                    Span::styled("6", Style::new().fg(tc.accent)),
+                    Span::styled(
+                        format!(" num {}", on_off(app.include_numbers)),
+                        Style::new().fg(tc.dim_text),
+                    ),
+                ]);
+            }
+            lines.push(Line::from(toggle_spans));
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {

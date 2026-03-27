@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Punctuation and numbers toggle for word practice — press `5`/`6` in practice mode to inject punctuation marks and numbers into random word and timed drills; affected menu labels update to show `+punct`/`+num`
+- CLI flags `--punctuation` (`-p`) and `--numbers` (`-n`) for word practice
+
 ## [0.3.6] - 2026-03-26
 
 ### Added

@@ -41,6 +41,14 @@ struct Cli {
     /// Word list to use: "200" or "1k"
     #[arg(short, long, default_value = "200")]
     list: String,
+
+    /// Include punctuation in word practice
+    #[arg(short, long)]
+    punctuation: bool,
+
+    /// Include numbers in word practice
+    #[arg(short, long)]
+    numbers: bool,
 }
 
 fn parse_word_list(s: &str) -> std::result::Result<words::WordList, String> {
@@ -104,7 +112,17 @@ async fn run_app(cli: Cli) -> Result<()> {
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
     app.theme = settings.display.theme;
+    app.include_punctuation = settings.display.include_punctuation;
+    app.include_numbers = settings.display.include_numbers;
     app.selected_lesson = crate::history::resume_lesson(app.layout);
+
+    // CLI flags override persisted settings
+    if cli.punctuation {
+        app.include_punctuation = true;
+    }
+    if cli.numbers {
+        app.include_numbers = true;
+    }
 
     // Handle CLI flags: --time > --words > --file
     let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
@@ -143,7 +161,9 @@ async fn run_app(cli: Cli) -> Result<()> {
         let display_changed = app.show_keyboard != settings.display.show_keyboard
             || app.show_hints != settings.display.show_hints
             || app.show_fingers != settings.display.show_fingers
-            || app.theme != settings.display.theme;
+            || app.theme != settings.display.theme
+            || app.include_punctuation != settings.display.include_punctuation
+            || app.include_numbers != settings.display.include_numbers;
         let layout_changed = app.layout != settings.keyboard.layout;
 
         if layout_changed || display_changed {
@@ -152,6 +172,8 @@ async fn run_app(cli: Cli) -> Result<()> {
             settings.display.show_hints = app.show_hints;
             settings.display.show_fingers = app.show_fingers;
             settings.display.theme = app.theme;
+            settings.display.include_punctuation = app.include_punctuation;
+            settings.display.include_numbers = app.include_numbers;
             settings::save_settings(&settings);
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);

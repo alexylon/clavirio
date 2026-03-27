@@ -56,14 +56,11 @@ impl Rng {
 
 const LINE_WIDTH: usize = 60;
 
-fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
-    let mut rng = Rng::from_time();
+fn wrap_words<I: IntoIterator<Item = S>, S: AsRef<str>>(words: I) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut current_line = String::new();
-    let mut remaining = word_count;
-
-    while remaining > 0 {
-        let word = pool[rng.usize(pool.len())];
+    for word in words {
+        let word = word.as_ref();
         if !current_line.is_empty() && current_line.len() + 1 + word.len() > LINE_WIDTH {
             lines.push(std::mem::take(&mut current_line));
         }
@@ -71,12 +68,19 @@ fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
             current_line.push(' ');
         }
         current_line.push_str(word);
-        remaining -= 1;
     }
     if !current_line.is_empty() {
         lines.push(current_line);
     }
     lines.join("\n")
+}
+
+fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
+    let mut rng = Rng::from_time();
+    let words: Vec<&str> = (0..word_count)
+        .map(|_| pool[rng.usize(pool.len())])
+        .collect();
+    wrap_words(words)
 }
 
 /// Build a weighted pool: repeat each word by its score, then pick randomly.
@@ -94,6 +98,56 @@ pub fn generate_text(list: WordList, word_count: usize) -> String {
         return String::new();
     }
     random_pick_and_wrap(&pool, word_count)
+}
+
+const PUNCTUATION_MARKS: &[&str] = &[
+    ".", ",", ";", ":", "!", "?", "'", "\"", "-", "()", "...", "--",
+];
+const NUMBER_TOKENS: &[&str] = &[
+    "0", "1", "2", "3", "4", "5", "10", "42", "99", "100", "123", "256", "1000", "2025",
+];
+const PARENS: &str = "()";
+const PCT_BASE: usize = 100;
+const NUMBER_CHANCE_PCT: usize = 15;
+const PUNCTUATION_CHANCE_PCT: usize = 20;
+// Higher rates for weak key drills where the point is to practice those chars
+const WEAK_NUMBER_CHANCE_PCT: usize = 30;
+const WEAK_PUNCTUATION_CHANCE_PCT: usize = 40;
+
+pub fn generate_text_mixed(
+    list: WordList,
+    word_count: usize,
+    punctuation: bool,
+    numbers: bool,
+) -> String {
+    let base_pool = list.words();
+    if base_pool.is_empty() {
+        return String::new();
+    }
+    let mut rng = Rng::from_time();
+
+    let words: Vec<String> = (0..word_count)
+        .map(|_| {
+            let word = base_pool[rng.usize(base_pool.len())];
+
+            if numbers && rng.usize(PCT_BASE) < NUMBER_CHANCE_PCT {
+                return NUMBER_TOKENS[rng.usize(NUMBER_TOKENS.len())].to_string();
+            }
+
+            if punctuation && rng.usize(PCT_BASE) < PUNCTUATION_CHANCE_PCT {
+                let punct = PUNCTUATION_MARKS[rng.usize(PUNCTUATION_MARKS.len())];
+                return if punct == PARENS {
+                    format!("({word})")
+                } else {
+                    format!("{word}{punct}")
+                };
+            }
+
+            word.to_string()
+        })
+        .collect();
+
+    wrap_words(words)
 }
 
 const BIGRAMS: &[&str] = &[
@@ -121,15 +175,45 @@ pub fn generate_bigram_text(word_count: usize) -> String {
     weighted_text(&scored, word_count)
 }
 
-pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String {
+pub fn generate_weak_key_text(
+    weak_chars: &[char],
+    word_count: usize,
+    include_punctuation: bool,
+    include_numbers: bool,
+) -> String {
     if weak_chars.is_empty() {
         return generate_text(WordList::English1k, word_count);
     }
+
+    let alpha_chars: Vec<char> = weak_chars
+        .iter()
+        .copied()
+        .filter(|c| c.is_alphabetic())
+        .collect();
+    let punct_chars: Vec<char> = if include_punctuation {
+        weak_chars
+            .iter()
+            .copied()
+            .filter(|c| !c.is_alphanumeric())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let digit_chars: Vec<char> = if include_numbers {
+        weak_chars
+            .iter()
+            .copied()
+            .filter(|c| c.is_ascii_digit())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
     let scored: Vec<(&str, usize)> = pool
         .iter()
         .filter_map(|&w| {
-            let score = w.chars().filter(|c| weak_chars.contains(c)).count();
+            let score = w.chars().filter(|c| alpha_chars.contains(c)).count();
             if score > 0 {
                 Some((w, score))
             } else {
@@ -137,10 +221,43 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
             }
         })
         .collect();
-    if scored.is_empty() {
-        return generate_text(WordList::English1k, word_count);
+
+    if punct_chars.is_empty() && digit_chars.is_empty() {
+        if scored.is_empty() {
+            return generate_text(WordList::English1k, word_count);
+        }
+        return weighted_text(&scored, word_count);
     }
-    weighted_text(&scored, word_count)
+
+    let base_pool: Vec<&str> = if scored.is_empty() {
+        pool
+    } else {
+        scored
+            .iter()
+            .flat_map(|&(w, score)| std::iter::repeat_n(w, score))
+            .collect()
+    };
+
+    let mut rng = Rng::from_time();
+    let words: Vec<String> = (0..word_count)
+        .map(|_| {
+            let word = base_pool[rng.usize(base_pool.len())];
+
+            if !digit_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_NUMBER_CHANCE_PCT {
+                let d = digit_chars[rng.usize(digit_chars.len())];
+                return d.to_string();
+            }
+
+            if !punct_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_PUNCTUATION_CHANCE_PCT {
+                let p = punct_chars[rng.usize(punct_chars.len())];
+                return format!("{word}{p}");
+            }
+
+            word.to_string()
+        })
+        .collect();
+
+    wrap_words(words)
 }
 
 /// Pick random complete quotes without repeats until reaching the target word count.
@@ -272,14 +389,14 @@ mod tests {
 
     #[test]
     fn weak_key_text_produces_correct_word_count() {
-        let text = generate_weak_key_text(&['e', 'a'], 25);
+        let text = generate_weak_key_text(&['e', 'a'], 25, false, false);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 25);
     }
 
     #[test]
     fn weak_key_text_contains_target_chars() {
-        let text = generate_weak_key_text(&['z', 'x'], 50);
+        let text = generate_weak_key_text(&['z', 'x'], 50, false, false);
         let has_target = text.chars().any(|c| c == 'z' || c == 'x');
         assert!(has_target, "text should contain weak key chars");
     }
@@ -300,8 +417,45 @@ mod tests {
 
     #[test]
     fn weak_key_text_fallback_on_empty_chars() {
-        let text = generate_weak_key_text(&[], 20);
+        let text = generate_weak_key_text(&[], 20, false, false);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 20);
+    }
+
+    #[test]
+    fn weak_key_text_includes_punct_when_enabled() {
+        // Large sample to guarantee at least one '-' appears
+        let text = generate_weak_key_text(&['-'], 200, true, false);
+        assert!(
+            text.contains('-'),
+            "weak key drill should contain weak punct char '-'"
+        );
+    }
+
+    #[test]
+    fn weak_key_text_includes_digits_when_enabled() {
+        let text = generate_weak_key_text(&['5'], 200, false, true);
+        assert!(
+            text.contains('5'),
+            "weak key drill should contain weak digit char '5'"
+        );
+    }
+
+    #[test]
+    fn mixed_text_produces_correct_word_count() {
+        let text = generate_text_mixed(WordList::English200, 50, true, true);
+        let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(count, 50);
+    }
+
+    #[test]
+    fn mixed_text_injects_punctuation_and_numbers() {
+        let text = generate_text_mixed(WordList::English200, 200, true, true);
+        let has_punct = text
+            .chars()
+            .any(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '"' | '-'));
+        let has_digit = text.chars().any(|c| c.is_ascii_digit());
+        assert!(has_punct, "should contain punctuation marks");
+        assert!(has_digit, "should contain digits");
     }
 }

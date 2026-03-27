@@ -48,3 +48,13 @@ cargo test test_name           # Run a single test by name
 - The `App` struct syncs display toggles back to `Settings` in the main loop (not inside `handle_event`)
 - All lesson text is compiled into the binary — no runtime file loading for built-in content
 - Platform-specific modifier labels: macOS uses ⌘⌥⌃, others use Win/Alt/Ctrl
+
+## Code Guidelines
+
+- Do not add self-explanatory comments; only add comments where the logic is non-obvious
+- Avoid magic strings and numbers — use named constants
+- Keep code DRY — extract shared logic into helpers
+- Handle unwraps — prefer returning errors or using safe alternatives
+- Tests should be self-contained and only cover important behavior
+- After each new feature, update README.md and CHANGELOG.md (under `[Unreleased]`)
+- After each session, double-check all changes against these guidelines before finishing

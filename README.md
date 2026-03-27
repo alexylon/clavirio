@@ -33,7 +33,7 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 ## Features
 
 - **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1–9 are layout-specific, 10–15 are shared
-- **Practice mode** — weak keys, common bigrams, quotes, zen free-typing mode, random words (english 200/1k), and timed sessions (30s/60s), toggle with `m`
+- **Practice mode** — weak keys, common bigrams, quotes, zen free-typing mode, random words (english 200/1k), and timed sessions (30s/60s), toggle with `m`; optional punctuation and numbers injection (`5`/`6`)
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
 - **WPM sparkline** — see your speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
@@ -110,6 +110,8 @@ clavirio -w 50 -l 1k            # practice: 50 words (english 1k)
 clavirio -t 60                  # practice: 60-second timed
 clavirio -t 30 -l 1k            # practice: 30-second timed (english 1k)
 clavirio -f path/to/file.txt    # custom file
+clavirio -w -p -n               # practice: words with punctuation and numbers
+clavirio -t 60 -p               # practice: 60s timed with punctuation
 ```
 
 | Flag | Description |
@@ -118,6 +120,8 @@ clavirio -f path/to/file.txt    # custom file
 | `-w, --words [<WORDS>]` | Start practice mode with N random words (default: 100) |
 | `-t, --time <TIME>` | Start practice mode for N seconds (e.g. 30, 60) |
 | `-l, --list <LIST>` | Word list to use: "200" or "1k" (default: 200) |
+| `-p, --punctuation` | Include punctuation in word practice |
+| `-n, --numbers` | Include numbers in word practice |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
@@ -136,6 +140,7 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 | `m` | Toggle between lessons and practice |
 | `l` | Cycle layout |
 | `1`–`4` | Toggle fingers / hints / keyboard / theme |
+| `5`/`6` | Toggle punctuation / numbers (practice mode only) |
 | `h` | Session history |
 | `Ctrl-F` | Load file |
 | `q` / `Esc` | Quit |
@@ -180,6 +185,8 @@ show_keyboard = true
 show_hints = true
 show_fingers = true
 theme = "dark"          # dark, light
+include_punctuation = false
+include_numbers = false
 ```
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)

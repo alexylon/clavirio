@@ -217,6 +217,8 @@ pub struct App {
     last_sample_time: Option<Instant>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
+    pub include_punctuation: bool,
+    pub include_numbers: bool,
 }
 
 impl App {
@@ -258,6 +260,8 @@ impl App {
             last_sample_time: None,
             zen_mode: false,
             zen_lines: Vec::new(),
+            include_punctuation: false,
+            include_numbers: false,
         }
     }
 
@@ -739,6 +743,12 @@ impl App {
             KeyCode::Char('4') => {
                 self.theme = self.theme.cycle();
             }
+            KeyCode::Char('5') if self.menu_mode == MenuMode::Practice => {
+                self.include_punctuation = !self.include_punctuation;
+            }
+            KeyCode::Char('6') if self.menu_mode == MenuMode::Practice => {
+                self.include_numbers = !self.include_numbers;
+            }
             _ => {}
         }
     }
@@ -823,7 +833,7 @@ impl App {
     }
 
     pub fn start_word_practice(&mut self, list: WordList) {
-        let text = crate::words::generate_text(list, self.word_count);
+        let text = self.generate_word_text(list, self.word_count);
         self.start_practice_from_text(
             &text,
             &format!("words_{}", list.label().replace(' ', "_")),
@@ -833,13 +843,22 @@ impl App {
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
         let estimated_words = ((secs as usize) * 80 / 60) + 20;
-        let text = crate::words::generate_text(list, estimated_words);
+        let text = self.generate_word_text(list, estimated_words);
         self.start_practice_from_text(
             &text,
             &format!("timed_{secs}s_{}", list.label().replace(' ', "_")),
             &format!("Random Words ({secs}s · {})", list.label()),
         );
         self.time_limit = Some(secs);
+    }
+
+    fn generate_word_text(&self, list: WordList, count: usize) -> String {
+        crate::words::generate_text_mixed(
+            list,
+            count,
+            self.include_punctuation,
+            self.include_numbers,
+        )
     }
 
     pub fn start_bigram_practice(&mut self) {
@@ -919,7 +938,12 @@ impl App {
             self.error = Some("No weak keys yet — complete a session first".into());
             return;
         }
-        let text = crate::words::generate_weak_key_text(&weak, self.word_count);
+        let text = crate::words::generate_weak_key_text(
+            &weak,
+            self.word_count,
+            self.include_punctuation,
+            self.include_numbers,
+        );
         self.start_practice_from_text(&text, "weak_keys", "Weak Keys");
     }
 
