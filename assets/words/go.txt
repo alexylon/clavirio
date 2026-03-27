@@ -1,0 +1,25 @@
+func main package import return if else for range switch case default break continue
+var const type struct interface map chan select go defer panic recover fallthrough goto
+true false nil iota append cap close copy delete len make new print println complex
+int int8 int16 int32 int64 uint uint8 uint16 uint32 uint64 float32 float64
+complex64 complex128 byte rune string bool error uintptr any comparable
+fmt.Println() fmt.Printf() fmt.Sprintf() fmt.Errorf() fmt.Fprintf()
+os.Open() os.Create() os.Exit() os.Args os.Stdin os.Stdout os.Stderr
+io.Reader io.Writer io.ReadAll() io.Copy() io.EOF bufio.Scanner bufio.NewReader()
+strings.Contains() strings.Split() strings.Join() strings.Replace() strings.TrimSpace()
+strconv.Atoi() strconv.Itoa() strconv.ParseFloat() strconv.FormatInt()
+json.Marshal() json.Unmarshal() json.NewEncoder() json.NewDecoder()
+http.Get() http.Post() http.ListenAndServe() http.HandleFunc() http.NewRequest()
+context.Background() context.WithCancel() context.WithTimeout() context.TODO()
+sync.Mutex sync.RWMutex sync.WaitGroup sync.Once sync.Map sync.Pool
+time.Now() time.Sleep() time.Duration time.Second time.After() time.Tick()
+errors.New() errors.Is() errors.As() errors.Unwrap() fmt.Errorf("%w", err)
+sort.Slice() sort.Ints() sort.Strings() math.Max() math.Min() math.Abs()
+log.Println() log.Fatal() log.Printf() testing.T testing.B
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+if err != nil { return nil, err } defer f.Close()
+:= = == != < > <= >= + - * / % & | ^ &^ << >> && || !
+( ) [ ] { } ; , . : ... _ <- * &
+chan<- <-chan map[string]int []byte []*Node func() error
+go func() { }() select { case <-ctx.Done(): default: }
+type Config struct { Host string `json:"host"` Port int `json:"port"` }

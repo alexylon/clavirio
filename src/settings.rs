@@ -82,6 +82,8 @@ pub struct DisplaySettings {
     pub include_punctuation: bool,
     #[serde(default)]
     pub include_numbers: bool,
+    #[serde(default)]
+    pub practice_mode: bool,
 }
 
 impl Default for DisplaySettings {
@@ -93,6 +95,7 @@ impl Default for DisplaySettings {
             theme: Theme::default(),
             include_punctuation: false,
             include_numbers: false,
+            practice_mode: false,
         }
     }
 }

@@ -1,0 +1,29 @@
+public private protected static final abstract class interface extends implements
+new this super return if else for while do switch case default break continue
+try catch finally throw throws import package void boolean int long double float
+char byte short enum instanceof synchronized volatile transient native strictfp
+true false null assert var record sealed permits yield
+String Integer Long Double Float Boolean Character Byte Short
+Object Class System Thread Runnable Callable Future
+ArrayList LinkedList HashMap TreeMap HashSet TreeSet LinkedHashMap ConcurrentHashMap
+List Map Set Queue Deque Stack Iterator Iterable Collection Collections Arrays
+Optional Stream Collectors Predicate Function Consumer Supplier BiFunction
+System.out.println() System.err.println() System.exit() System.currentTimeMillis()
+String.format() String.valueOf() Integer.parseInt() Double.parseDouble()
+.toString() .equals() .hashCode() .compareTo() .getClass() .clone() .notify()
+.length() .charAt() .substring() .indexOf() .contains() .replace() .split()
+.trim() .toLowerCase() .toUpperCase() .startsWith() .endsWith() .isEmpty()
+.add() .remove() .get() .set() .size() .clear() .contains() .isEmpty() .toArray()
+.put() .get() .containsKey() .containsValue() .keySet() .values() .entrySet()
+.stream() .filter() .map() .collect() .forEach() .reduce() .sorted() .distinct()
+.of() .ofNullable() .isPresent() .isEmpty() .get() .orElse() .orElseThrow()
+new ArrayList<>() new HashMap<>() new StringBuilder() new Thread(() -> {})
+@Override @Deprecated @SuppressWarnings @FunctionalInterface @SafeVarargs
+@Autowired @Component @Service @Repository @Controller @RequestMapping
+public static void main(String[] args) { } throws Exception
+try { } catch (IOException e) { e.printStackTrace(); } finally { }
+for (int i = 0; i < n; i++) { } for (var item : list) { }
+( ) [ ] { } ; , . : ? ! @ # _ = == != < > <= >= + - * / % & | ^ ~ && || !
+-> :: += -= *= /= %= &= |= ^= <<= >>= >>> <> ? :
+List<String> Map<String, Integer> Optional<T> Comparable<T> Iterable<T>
+public record Point(int x, int y) {} sealed interface Shape permits Circle {}

@@ -38,9 +38,9 @@ struct Cli {
     #[arg(short, long)]
     time: Option<u64>,
 
-    /// Word list to use: "200" or "1k"
-    #[arg(short, long, default_value = "200")]
-    list: String,
+    /// Word list: "200", "1k", "rust", "python", "javascript"/"js", "go", "c"/"cpp", "java", "html"/"css"
+    #[arg(short, long, default_value = "200", value_parser = parse_word_list)]
+    list: words::WordList,
 
     /// Include punctuation in word practice
     #[arg(short, long)]
@@ -55,7 +55,16 @@ fn parse_word_list(s: &str) -> std::result::Result<words::WordList, String> {
     match s {
         "200" => Ok(words::WordList::English200),
         "1k" => Ok(words::WordList::English1k),
-        _ => Err(format!("Unknown word list '{s}'. Use '200' or '1k'.")),
+        "rust" => Ok(words::WordList::Rust),
+        "python" => Ok(words::WordList::Python),
+        "javascript" | "js" => Ok(words::WordList::JavaScript),
+        "go" => Ok(words::WordList::Go),
+        "c" | "cpp" | "c++" => Ok(words::WordList::CCpp),
+        "java" => Ok(words::WordList::Java),
+        "html" | "css" => Ok(words::WordList::HtmlCss),
+        _ => Err(format!(
+            "Unknown word list '{s}'. Use '200', '1k', 'rust', 'python', 'javascript', 'go', 'c', 'java', or 'html'."
+        )),
     }
 }
 
@@ -114,6 +123,9 @@ async fn run_app(cli: Cli) -> Result<()> {
     app.theme = settings.display.theme;
     app.include_punctuation = settings.display.include_punctuation;
     app.include_numbers = settings.display.include_numbers;
+    if settings.display.practice_mode {
+        app.menu_mode = crate::app::MenuMode::Practice;
+    }
     app.selected_lesson = crate::history::resume_lesson(app.layout);
 
     // CLI flags override persisted settings
@@ -125,7 +137,7 @@ async fn run_app(cli: Cli) -> Result<()> {
     }
 
     // Handle CLI flags: --time > --words > --file
-    let list = parse_word_list(&cli.list).unwrap_or(words::WordList::English200);
+    let list = cli.list;
     if let Some(secs) = cli.time {
         app.start_timed_practice(secs, list);
     } else if let Some(maybe_count) = cli.words {
@@ -163,7 +175,8 @@ async fn run_app(cli: Cli) -> Result<()> {
             || app.show_fingers != settings.display.show_fingers
             || app.theme != settings.display.theme
             || app.include_punctuation != settings.display.include_punctuation
-            || app.include_numbers != settings.display.include_numbers;
+            || app.include_numbers != settings.display.include_numbers
+            || (app.menu_mode == crate::app::MenuMode::Practice) != settings.display.practice_mode;
         let layout_changed = app.layout != settings.keyboard.layout;
 
         if layout_changed || display_changed {
@@ -174,6 +187,7 @@ async fn run_app(cli: Cli) -> Result<()> {
             settings.display.theme = app.theme;
             settings.display.include_punctuation = app.include_punctuation;
             settings.display.include_numbers = app.include_numbers;
+            settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
             settings::save_settings(&settings);
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);

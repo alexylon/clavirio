@@ -1,0 +1,25 @@
+const let var function return if else for while do switch case break default
+class extends constructor super new this typeof instanceof delete void
+import export from as default async await yield throw try catch finally
+true false null undefined NaN Infinity arguments
+console.log() console.error() console.warn() console.table() console.dir()
+document.getElementById() document.querySelector() document.createElement()
+addEventListener() removeEventListener() preventDefault() stopPropagation()
+setTimeout() setInterval() clearTimeout() clearInterval() requestAnimationFrame()
+Promise resolve reject then catch finally async/await Promise.all() Promise.race()
+Array Object String Number Boolean Symbol BigInt Map Set WeakMap WeakSet
+JSON.parse() JSON.stringify() parseInt() parseFloat() isNaN() encodeURIComponent()
+.map() .filter() .reduce() .forEach() .find() .some() .every() .flat() .flatMap()
+.push() .pop() .shift() .unshift() .splice() .slice() .concat() .join() .sort()
+.includes() .indexOf() .lastIndexOf() .keys() .values() .entries() .from()
+.split() .trim() .replace() .match() .search() .startsWith() .endsWith()
+.toString() .valueOf() .hasOwnProperty() .toFixed() .toUpperCase() .toLowerCase()
+Object.keys() Object.values() Object.entries() Object.assign() Object.freeze()
+Array.isArray() Array.from() structuredClone() globalThis fetch() Response
+module.exports require() __dirname __filename process.env process.argv
+window.location window.history window.localStorage window.sessionStorage
+=> === !== == != < > <= >= + - * / % ** && || ! ?? ?.
+( ) [ ] { } ; , . : ? ! @ # _ = += -= *= /= %= **=
+`template ${literal}` ...spread /regex/gi new Error("message")
+get set static #private public protected extends implements
+class Foo { constructor() { this.x = 0; } } export default

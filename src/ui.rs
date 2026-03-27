@@ -693,34 +693,19 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
-                    const WEAK_KEYS_IDX: usize = 0;
                     let special_items =
                         ["Weak Keys", "Common Bigrams (english 1k)", "Quotes", "Zen"];
                     let mix_suffix = mix_label_suffix(app.include_punctuation, app.include_numbers);
                     let suffix_len = mix_suffix.len();
-                    // " (+punct +num)" = suffix content trimmed + parens + spaces
-                    let weak_suffix_len = if suffix_len > 0 {
-                        suffix_len + 2 // " (" + trimmed suffix + ")"
-                    } else {
-                        0
-                    };
                     let max_label: usize =
                         special_items
                             .iter()
-                            .enumerate()
-                            .map(|(j, s)| {
-                                s.len()
-                                    + if j == WEAK_KEYS_IDX {
-                                        weak_suffix_len
-                                    } else {
-                                        0
-                                    }
-                            })
+                            .map(|s| s.len())
                             .chain(word_lists.iter().map(|wl| {
-                                "Random Words".len() + 2 + wl.label().len() + suffix_len + 1
+                                wl.category().len() + 2 + wl.label().len() + suffix_len + 1
                             }))
                             .chain(timed_options.iter().map(|(s, wl)| {
-                                "Random Words".len()
+                                wl.category().len()
                                     + 2
                                     + format!("{s}s · {}", wl.label()).chars().count()
                                     + suffix_len
@@ -736,12 +721,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
                         if i < special_items.len() {
-                            let base_title = special_items[i];
-                            let title = if i == WEAK_KEYS_IDX && !mix_suffix.is_empty() {
-                                format!("{base_title} ({})", mix_suffix.trim())
-                            } else {
-                                base_title.to_string()
-                            };
+                            let title = special_items[i];
                             let current_len = title.len();
                             let mut spans = vec![
                                 Span::styled(
@@ -758,12 +738,12 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         }
 
                         let idx = i - special_items.len();
-                        let title = "Random Words";
-                        let mut keys = if idx < word_lists.len() {
-                            word_lists[idx].label().to_string()
+                        let (title, mut keys) = if idx < word_lists.len() {
+                            let wl = word_lists[idx];
+                            (wl.category(), wl.label().to_string())
                         } else {
                             let (secs, wl) = timed_options[idx - word_lists.len()];
-                            format!("{secs}s · {}", wl.label())
+                            (wl.category(), format!("{secs}s · {}", wl.label()))
                         };
                         keys.push_str(&mix_suffix);
                         let current_len = title.len() + 2 + keys.chars().count() + 1;

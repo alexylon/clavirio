@@ -1,0 +1,20 @@
+fn let mut const pub mod use struct enum impl trait type where self Self super crate
+match if else for while loop break continue return async await move unsafe extern ref
+Option Some None Result Ok Err Vec String Box Rc Arc HashMap HashSet BTreeMap
+println! eprintln! format! vec! macro_rules! todo! unimplemented! assert! assert_eq!
+i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 bool char usize isize str
+&str &self &mut #[derive(Debug)] #[cfg(test)] #[allow(unused)] #[inline]
+-> => :: .. ..= += -= *= /= %= &= |= ^= <<= >>=
+pub(crate) pub(super) dyn as in mod use where
+unwrap() expect() map() filter() collect() iter() into_iter() enumerate()
+clone() to_string() to_owned() as_ref() as_mut() is_some() is_none() is_ok() is_err()
+push() pop() len() is_empty() contains() insert() remove() get() set()
+impl Display for fmt write! writeln! std::io std::fs std::path std::collections
+fn main() { } ( ) [ ] < > ; , . : | & * ? ! @ # _ =
+tokio::spawn .await? async fn -> Result<()> Box<dyn Error>
+'a 'static &'a str lifetime where T: Clone + Send + Sync + 'static
+if let Some(x) = while let Ok(val) = match result { Ok(v) => Err(e) =>
+pub fn new() -> Self { Self { } } Default::default()
+.map(|x| x) .filter(|x| x) .fold(0, |acc, x|) .flat_map(|x|)
+cfg! env! include_str! include_bytes! concat! stringify! file! line! column!
+serde::Serialize serde::Deserialize #[serde(default)] #[serde(rename_all)]

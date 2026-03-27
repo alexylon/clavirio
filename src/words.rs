@@ -1,11 +1,25 @@
 const ENGLISH_200: &str = include_str!("../assets/words/english_200.txt");
 const ENGLISH_1K: &str = include_str!("../assets/words/english_1k.txt");
+const RUST: &str = include_str!("../assets/words/rust.txt");
+const PYTHON: &str = include_str!("../assets/words/python.txt");
+const JAVASCRIPT: &str = include_str!("../assets/words/javascript.txt");
+const GO: &str = include_str!("../assets/words/go.txt");
+const C_CPP: &str = include_str!("../assets/words/c_cpp.txt");
+const JAVA: &str = include_str!("../assets/words/java.txt");
+const HTML_CSS: &str = include_str!("../assets/words/html_css.txt");
 const QUOTES: &str = include_str!("../assets/quotes/english.txt");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WordList {
     English200,
     English1k,
+    Rust,
+    Python,
+    JavaScript,
+    Go,
+    CCpp,
+    Java,
+    HtmlCss,
 }
 
 impl WordList {
@@ -13,6 +27,13 @@ impl WordList {
         let src = match self {
             Self::English200 => ENGLISH_200,
             Self::English1k => ENGLISH_1K,
+            Self::Rust => RUST,
+            Self::Python => PYTHON,
+            Self::JavaScript => JAVASCRIPT,
+            Self::Go => GO,
+            Self::CCpp => C_CPP,
+            Self::Java => JAVA,
+            Self::HtmlCss => HTML_CSS,
         };
         src.split_whitespace().collect()
     }
@@ -21,11 +42,35 @@ impl WordList {
         match self {
             Self::English200 => "english 200",
             Self::English1k => "english 1k",
+            Self::Rust => "rust",
+            Self::Python => "python",
+            Self::JavaScript => "javascript",
+            Self::Go => "go",
+            Self::CCpp => "c/c++",
+            Self::Java => "java",
+            Self::HtmlCss => "html/css",
+        }
+    }
+
+    pub fn category(self) -> &'static str {
+        match self {
+            Self::English200 | Self::English1k => "Random Words",
+            _ => "Code",
         }
     }
 
     pub fn all() -> &'static [WordList] {
-        &[Self::English200, Self::English1k]
+        &[
+            Self::English200,
+            Self::English1k,
+            Self::Rust,
+            Self::Python,
+            Self::JavaScript,
+            Self::Go,
+            Self::CCpp,
+            Self::Java,
+            Self::HtmlCss,
+        ]
     }
 }
 
@@ -175,12 +220,7 @@ pub fn generate_bigram_text(word_count: usize) -> String {
     weighted_text(&scored, word_count)
 }
 
-pub fn generate_weak_key_text(
-    weak_chars: &[char],
-    word_count: usize,
-    include_punctuation: bool,
-    include_numbers: bool,
-) -> String {
+pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String {
     if weak_chars.is_empty() {
         return generate_text(WordList::English1k, word_count);
     }
@@ -190,24 +230,16 @@ pub fn generate_weak_key_text(
         .copied()
         .filter(|c| c.is_alphabetic())
         .collect();
-    let punct_chars: Vec<char> = if include_punctuation {
-        weak_chars
-            .iter()
-            .copied()
-            .filter(|c| !c.is_alphanumeric())
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let digit_chars: Vec<char> = if include_numbers {
-        weak_chars
-            .iter()
-            .copied()
-            .filter(|c| c.is_ascii_digit())
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let punct_chars: Vec<char> = weak_chars
+        .iter()
+        .copied()
+        .filter(|c| !c.is_alphanumeric())
+        .collect();
+    let digit_chars: Vec<char> = weak_chars
+        .iter()
+        .copied()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
 
     let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
     let scored: Vec<(&str, usize)> = pool
@@ -337,11 +369,30 @@ mod tests {
     }
 
     #[test]
-    fn word_list_all_contains_both() {
+    fn word_list_all_contains_all_variants() {
         let all = WordList::all();
-        assert_eq!(all.len(), 2);
+        assert_eq!(all.len(), 9);
         assert_eq!(all[0], WordList::English200);
         assert_eq!(all[1], WordList::English1k);
+    }
+
+    #[test]
+    fn code_word_lists_are_nonempty() {
+        for &list in &[
+            WordList::Rust,
+            WordList::Python,
+            WordList::JavaScript,
+            WordList::Go,
+            WordList::CCpp,
+            WordList::Java,
+            WordList::HtmlCss,
+        ] {
+            assert!(
+                !list.words().is_empty(),
+                "{} should not be empty",
+                list.label()
+            );
+        }
     }
 
     #[test]
@@ -389,14 +440,14 @@ mod tests {
 
     #[test]
     fn weak_key_text_produces_correct_word_count() {
-        let text = generate_weak_key_text(&['e', 'a'], 25, false, false);
+        let text = generate_weak_key_text(&['e', 'a'], 25);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 25);
     }
 
     #[test]
     fn weak_key_text_contains_target_chars() {
-        let text = generate_weak_key_text(&['z', 'x'], 50, false, false);
+        let text = generate_weak_key_text(&['z', 'x'], 50);
         let has_target = text.chars().any(|c| c == 'z' || c == 'x');
         assert!(has_target, "text should contain weak key chars");
     }
@@ -417,7 +468,7 @@ mod tests {
 
     #[test]
     fn weak_key_text_fallback_on_empty_chars() {
-        let text = generate_weak_key_text(&[], 20, false, false);
+        let text = generate_weak_key_text(&[], 20);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 20);
     }
@@ -425,7 +476,7 @@ mod tests {
     #[test]
     fn weak_key_text_includes_punct_when_enabled() {
         // Large sample to guarantee at least one '-' appears
-        let text = generate_weak_key_text(&['-'], 200, true, false);
+        let text = generate_weak_key_text(&['-'], 200);
         assert!(
             text.contains('-'),
             "weak key drill should contain weak punct char '-'"
@@ -434,7 +485,7 @@ mod tests {
 
     #[test]
     fn weak_key_text_includes_digits_when_enabled() {
-        let text = generate_weak_key_text(&['5'], 200, false, true);
+        let text = generate_weak_key_text(&['5'], 200);
         assert!(
             text.contains('5'),
             "weak key drill should contain weak digit char '5'"

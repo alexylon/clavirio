@@ -834,20 +834,22 @@ impl App {
 
     pub fn start_word_practice(&mut self, list: WordList) {
         let text = self.generate_word_text(list, self.word_count);
+        let slug = list.label().replace(['/', ' '], "_");
         self.start_practice_from_text(
             &text,
-            &format!("words_{}", list.label().replace(' ', "_")),
-            &format!("Random Words ({})", list.label()),
+            &format!("words_{slug}"),
+            &format!("{} ({})", list.category(), list.label()),
         );
     }
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
         let estimated_words = ((secs as usize) * 80 / 60) + 20;
         let text = self.generate_word_text(list, estimated_words);
+        let slug = list.label().replace(['/', ' '], "_");
         self.start_practice_from_text(
             &text,
-            &format!("timed_{secs}s_{}", list.label().replace(' ', "_")),
-            &format!("Random Words ({secs}s · {})", list.label()),
+            &format!("timed_{secs}s_{slug}"),
+            &format!("{} ({secs}s · {})", list.category(), list.label()),
         );
         self.time_limit = Some(secs);
     }
@@ -938,12 +940,7 @@ impl App {
             self.error = Some("No weak keys yet — complete a session first".into());
             return;
         }
-        let text = crate::words::generate_weak_key_text(
-            &weak,
-            self.word_count,
-            self.include_punctuation,
-            self.include_numbers,
-        );
+        let text = crate::words::generate_weak_key_text(&weak, self.word_count);
         self.start_practice_from_text(&text, "weak_keys", "Weak Keys");
     }
 

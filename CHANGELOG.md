@@ -5,6 +5,12 @@
 ### Added
 - Punctuation and numbers toggle for word practice — press `5`/`6` in practice mode to inject punctuation marks and numbers into random word and timed drills; affected menu labels update to show `+punct`/`+num`
 - CLI flags `--punctuation` (`-p`) and `--numbers` (`-n`) for word practice
+- Programming language word lists: Rust, Python, JavaScript, Go, C/C++, Java, HTML/CSS — available in the practice menu and via `-l` CLI flag
+- Menu mode (lessons/practice) persisted across sessions in `settings.toml`
+
+### Changed
+- Weak keys drill now always includes all character types (punct/digits) regardless of toggle state
+- Invalid `--list` values now show an error and exit instead of silently falling back to english 200
 
 ## [0.3.6] - 2026-03-26
 

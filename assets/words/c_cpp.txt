@@ -1,0 +1,41 @@
+int char float double void long short unsigned signed const static extern volatile
+if else for while do switch case default break continue return goto sizeof typedef
+struct union enum register auto inline restrict _Bool _Complex _Imaginary
+#include #define #ifdef #ifndef #endif #if #else #elif #undef #pragma #error
+NULL EOF stdin stdout stderr EXIT_SUCCESS EXIT_FAILURE
+printf() scanf() fprintf() fscanf() sprintf() snprintf() sscanf()
+malloc() calloc() realloc() free() memcpy() memset() memmove() memcmp()
+strlen() strcpy() strncpy() strcat() strncat() strcmp() strncmp() strstr() strchr()
+fopen() fclose() fread() fwrite() fgets() fputs() fseek() ftell() rewind() fflush()
+atoi() atof() atol() strtol() strtod() strtoul() abs() rand() srand()
+isalpha() isdigit() isalnum() isspace() isupper() islower() toupper() tolower()
+assert() exit() abort() atexit() system() getenv() qsort() bsearch()
+int main(int argc, char *argv[]) { return 0; }
+struct Node { int data; struct Node *next; };
+typedef struct { int x; int y; } Point;
+void *ptr = malloc(sizeof(int) * n);
+if (ptr == NULL) { fprintf(stderr, "error\n"); exit(1); }
+for (int i = 0; i < n; i++) { arr[i] = 0; }
+while (*src != '\0') { *dst++ = *src++; }
+#include <stdio.h> #include <stdlib.h> #include <string.h> #include <math.h>
+#include <stdbool.h> #include <stdint.h> #include <stddef.h> #include <limits.h>
+-> . * & [] () {} ; , : ? ! ~ + - / % ^ | = == != < > <= >= += -= *= /=
+&& || ! << >> &= |= ^= <<= >>= ++ -- sizeof() (int) (char *) (void *)
+int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t size_t ssize_t
+FILE *fp = fopen("data.txt", "r"); fclose(fp);
+char buf[256]; snprintf(buf, sizeof(buf), "%d", value);
+class public private protected virtual override final delete new this
+namespace using template typename constexpr consteval constinit noexcept
+try catch throw static_cast dynamic_cast reinterpret_cast const_cast
+std::string std::vector std::map std::set std::unordered_map std::array
+std::unique_ptr std::shared_ptr std::make_unique std::make_shared std::move()
+std::cout std::cerr std::endl std::cin std::getline() std::to_string()
+std::sort() std::find() std::begin() std::end() std::size() std::swap()
+std::optional std::variant std::tuple std::pair std::function std::thread
+auto decltype nullptr true false concept requires co_await co_return co_yield
+#include <iostream> #include <vector> #include <string> #include <algorithm>
+#include <memory> #include <functional> #include <optional> #include <map>
+std::vector<int> v; v.push_back(42); v.emplace_back(42); v.size();
+for (const auto& item : container) { } auto [key, value] = pair;
+template<typename T> class Container { T data; public: T get() const; };
+std::cout << "hello" << std::endl; std::cin >> value; :: -> . * & <>
