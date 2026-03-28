@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Error stop toggle (`4`) — when off (default), typing continues past mistakes like Monkeytype; wrong characters shown in red, backspace corrects within the current word; when on, cursor blocks until the error is corrected
+- Error stop toggle (`4`) — when off (default), typing continues past mistakes; wrong characters shown in red, backspace corrects within the current word; when on, cursor blocks until the error is corrected
 - Next lesson shortcut (`n`) on the finished screen and pause menu — only shown in lessons mode when a next lesson exists
 - Pause menu reorganized: Resume (Space), Restart (r), Next lesson (n), Menu (Esc), Quit (q) — with shortcuts shown inline
 - Punctuation and numbers toggle for word practice — press `5`/`6` in practice mode to inject punctuation marks and numbers into random word and timed drills; affected menu labels update to show `+punct`/`+num`
