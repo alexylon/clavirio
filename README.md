@@ -29,6 +29,8 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 - [CLI](#cli)
 - [Controls](#controls)
 - [Settings](#settings)
+- [License](#license)
+- [Attribution](#attribution)
 
 ## Methodology
 
@@ -216,5 +218,22 @@ include_numbers = false
 practice_mode = false
 error_stop = false              # true = block on error, false = advance past errors
 ```
+
+## License
+
+This project is licensed under the Apache License 2.0.
+
+## Attribution
+
+If you use or redistribute this project, please preserve the copyright,
+license, and NOTICE information.
+
+If your distribution includes a credits page, acknowledgements, about page,
+documentation, or similar project metadata, please mention the original author:
+
+- Author: Alexander Alexandrov
+- Project: Clavirio
+- Homepage: https://www.clavir.io
+- Repository: https://github.com/alexylon/clavirio
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
