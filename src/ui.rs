@@ -767,7 +767,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled("h", Style::new().fg(tc.accent)),
                 Span::styled(" history  ", Style::new().fg(tc.dim_text)),
                 Span::styled("t", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {} ", app.theme), Style::new().fg(tc.dim_text)),
+                Span::styled(format!(" {}  ", app.theme), Style::new().fg(tc.dim_text)),
                 Span::styled("l", Style::new().fg(tc.accent)),
                 Span::styled(format!(" {}  ", app.layout), Style::new().fg(tc.dim_text)),
                 Span::styled("^F", Style::new().fg(tc.accent)),

@@ -32,11 +32,15 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 ## Methodology
 
-[Research on typing skill](https://www.crumplab.com/publications/Crump/files/3900/Liu%20et%20al.%20-%202010%20-%20Do%20you%20know%20where%20your%20fingers%20have%20been%20Explicit.pdf) shows that skilled typists don't consciously know where keys are — their fingers find them through implicit muscle memory built by repetitive practice. Clavirio's lesson system is designed around this: instead of teaching keyboard geography, it trains finger-to-key associations through a strict, repeating structure.
+[Research on typing skill](https://www.crumplab.com/publications/Crump/files/3900/Liu%20et%20al.%20-%202010%20-%20Do%20you%20know%20where%20your%20fingers%20have%20been%20Explicit.pdf) suggests that skilled typing relies more on **implicit procedural control** than on **explicit knowledge** of key locations. The paper also suggests that the keyboard is represented in terms of its **row-and-column structure**, not as a memorized list of individual letters.
 
-Each keyboard row is taught in 7 lessons following the same pattern: index pair → middle pair → ring pair → pinky pair → reach pair → full row → row + Shift. The pattern repeats identically for all three rows — the learner only needs to internalize one progression. Each lesson introduces just 2 new keys and only uses characters from previous lessons.
+Clavirio follows that idea by teaching the keyboard **row by row** with the same 7-lesson progression for each row:
 
-Less thinking, more muscle memory. The system builds consistent procedural memory by keeping the structure predictable and the progression cumulative.
+*index pair → middle pair → ring pair → pinky pair → reach pair → full row → row + Shift*
+
+Each lesson introduces only 2 new keys and uses only characters from earlier lessons. The same progression is used for **QWERTY, Dvorak, and Colemak**, so the lesson structure stays consistent across layouts.
+
+The paper does not compare typing tutors directly, so it does not prove that this exact sequence is optimal. It does support the broader design choice: **structured, incremental repetition** that builds reliable finger-to-key habits instead of relying on conscious recall of key positions.
 
 ## Features
 
