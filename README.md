@@ -44,8 +44,6 @@ This is meant to reduce reliance on **explicit recall** of key locations and bui
 
 Each lesson introduces only 2 new keys and uses only characters from earlier lessons. The same progression is used for **QWERTY, Dvorak, and Colemak**, so the lesson structure stays consistent across layouts.
 
-The paper does not compare typing tutors directly, so it does not prove that this exact sequence is optimal. It does support the broader design choice: **structured, incremental repetition** that builds reliable finger-to-key habits instead of relying on conscious recall of key positions.
-
 ## Features
 
 - **Lessons mode** — 27 progressive drills: home row → top row → bottom row (2 keys per lesson, by finger pair), numbers, and symbols; lessons 1-21 are layout-specific, 22-27 are shared
