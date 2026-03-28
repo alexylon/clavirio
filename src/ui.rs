@@ -888,8 +888,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) => {
-            let pos = doc.cursor_position();
             let line_chars: Vec<char> = doc.current_line.chars().collect();
+            let pos = doc.cursor_position().min(line_chars.len());
             let mut spans = Vec::new();
             if !app.error_chars.is_empty() {
                 for (i, &ch) in line_chars[..pos].iter().enumerate() {
@@ -982,7 +982,7 @@ pub(crate) fn friendly_timestamp(ts: &str) -> String {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     // Expected format: YYYY-MM-DDThh:mm:ss
-    if ts.len() >= 16 {
+    if ts.len() >= 19 {
         let mo: usize = ts[5..7].parse().unwrap_or(1);
         let day = &ts[8..10];
         let time = &ts[11..16]; // hh:mm

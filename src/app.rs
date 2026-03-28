@@ -15,7 +15,7 @@ fn chrono_now() -> String {
         .to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
     let format = Iso8601::DEFAULT;
     now.format(&format)
-        .map(|s| s[..19].to_string())
+        .map(|s| s.get(..19).unwrap_or(&s).to_string())
         .unwrap_or_else(|_| "1970-01-01T00:00:00".into())
 }
 
@@ -481,7 +481,7 @@ impl App {
                 }
             }
             KeyCode::Home => self.pause_menu_index = 0,
-            KeyCode::End => self.pause_menu_index = menu_len - 1,
+            KeyCode::End => self.pause_menu_index = menu_len.saturating_sub(1),
             KeyCode::Enter | KeyCode::Char(' ') => return self.activate_pause_item(),
             KeyCode::Char('r' | 'R') => {
                 self.resume();

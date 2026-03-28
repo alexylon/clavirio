@@ -5,7 +5,7 @@ edition = "2021"
 
 authors = ["Alexander Alexandrov"]
 description = "A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking"
-license = "Apache License 2.0"
+license = "Apache-2.0"
 homepage = "https://www.clavir.io"
 repository = "https://github.com/alexylon/clavirio"
 documentation = "https://docs.rs/clavirio"

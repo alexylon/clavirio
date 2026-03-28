@@ -5,6 +5,15 @@
 ### Changed
 - Changed license to Apache License 2.0
 
+### Fixed
+- Settings and history files failing to save on Windows (`fs::rename` does not overwrite on Windows)
+- Timestamp formatting crash on unexpectedly short strings (safe slicing with bounds check)
+- Potential crash in pause menu End key on empty menu (use `saturating_sub`)
+- Unbounded history growth (capped at 10,000 records, oldest trimmed)
+- Cumulative key stats overflow after billions of keypresses (use `saturating_add`)
+- Empty word pool panic in weak-key text generation (guard with fallback)
+- Cursor position bounds check in text rendering (clamp to line length)
+
 ## [0.4.0] - 2026-03-28
 
 ### Added

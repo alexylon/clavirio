@@ -121,6 +121,9 @@ fn wrap_words<I: IntoIterator<Item = S>, S: AsRef<str>>(words: I) -> String {
 }
 
 fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
+    if pool.is_empty() {
+        return String::new();
+    }
     let mut rng = Rng::from_time();
     let words: Vec<&str> = (0..word_count)
         .map(|_| pool[rng.usize(pool.len())])
@@ -261,6 +264,9 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
             .flat_map(|&(w, score)| std::iter::repeat_n(w, score))
             .collect()
     };
+    if base_pool.is_empty() {
+        return generate_text(WordList::English1k, word_count);
+    }
 
     let mut rng = Rng::from_time();
     let words: Vec<String> = (0..word_count)

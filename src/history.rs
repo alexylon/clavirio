@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::PathBuf;
 
+const MAX_HISTORY_RECORDS: usize = 10_000;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,10 +36,14 @@ pub fn save_session(record: SessionRecord) {
         .unwrap_or_default();
 
     records.push(record);
+    if records.len() > MAX_HISTORY_RECORDS {
+        records.drain(..records.len() - MAX_HISTORY_RECORDS);
+    }
 
     if let Ok(json) = serde_json::to_string_pretty(&records) {
         let tmp = path.with_extension("json.tmp");
         if fs::write(&tmp, &json).is_ok() {
+            let _ = fs::remove_file(&path);
             let _ = fs::rename(&tmp, &path);
         }
     }
@@ -81,8 +87,8 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
     let mut cumulative = load_key_stats();
     for (&ch, &(hits, misses)) in session_stats {
         let entry = cumulative.entry(ch).or_insert((0, 0));
-        entry.0 += hits;
-        entry.1 += misses;
+        entry.0 = entry.0.saturating_add(hits);
+        entry.1 = entry.1.saturating_add(misses);
     }
 
     let map: BTreeMap<String, (u32, u32)> = cumulative
@@ -92,6 +98,7 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
     if let Ok(json) = serde_json::to_string_pretty(&map) {
         let tmp = path.with_extension("json.tmp");
         if fs::write(&tmp, &json).is_ok() {
+            let _ = fs::remove_file(&path);
             let _ = fs::rename(&tmp, &path);
         }
     }

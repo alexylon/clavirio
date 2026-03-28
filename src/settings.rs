@@ -138,6 +138,8 @@ pub fn save_settings(settings: &Settings) {
     if let Ok(content) = toml::to_string_pretty(settings) {
         let tmp = path.with_extension("toml.tmp");
         if fs::write(&tmp, &content).is_ok() {
+            // fs::rename fails on Windows if destination exists; remove first
+            let _ = fs::remove_file(&path);
             let _ = fs::rename(&tmp, &path);
         }
     }
