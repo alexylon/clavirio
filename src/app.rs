@@ -113,6 +113,10 @@ impl Document {
         self.current_chars.get(self.char_idx).copied()
     }
 
+    pub fn char_at(&self, idx: usize) -> Option<char> {
+        self.current_chars.get(idx).copied()
+    }
+
     pub fn upcoming_lines(&self, count: usize) -> Vec<&str> {
         let mut result = Vec::new();
         let mut idx = self.line_idx + 1;
@@ -136,6 +140,15 @@ impl Document {
             + 1)
         .min(total);
         (current, total)
+    }
+
+    pub fn retreat(&mut self) -> bool {
+        if self.char_idx > 0 {
+            self.char_idx -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn advance(&mut self) {
@@ -219,6 +232,8 @@ pub struct App {
     pub zen_lines: Vec<String>,
     pub include_punctuation: bool,
     pub include_numbers: bool,
+    pub error_stop: bool,
+    pub error_chars: Vec<(usize, char)>,
 }
 
 impl App {
@@ -262,6 +277,8 @@ impl App {
             zen_lines: Vec::new(),
             include_punctuation: false,
             include_numbers: false,
+            error_stop: false,
+            error_chars: Vec::new(),
         }
     }
 
@@ -396,6 +413,7 @@ impl App {
         self.end_time = None;
         self.key_stats.clear();
         self.last_error_char = None;
+        self.error_chars.clear();
         self.paused_at = None;
         self.wpm_samples.clear();
         self.last_sample_count = 0;
@@ -663,12 +681,16 @@ impl App {
             (KeyCode::Char('n'), _) if self.is_finished() && self.has_next_lesson() => {
                 self.next_lesson();
             }
-            (KeyCode::Char(typed), _) if self.last_error_char.is_none() => {
+            (KeyCode::Char(typed), _) if self.last_error_char.is_none() || !self.error_stop => {
                 self.handle_typed_char(typed);
             }
             (KeyCode::Backspace, _) => {
-                if self.last_error_char.is_some() {
-                    self.last_error_char = None;
+                if self.error_stop {
+                    if self.last_error_char.is_some() {
+                        self.last_error_char = None;
+                    }
+                } else {
+                    self.handle_backspace();
                 }
             }
             _ => {}
@@ -743,13 +765,16 @@ impl App {
                 self.show_keyboard = !self.show_keyboard;
             }
             KeyCode::Char('4') => {
-                self.theme = self.theme.cycle();
+                self.error_stop = !self.error_stop;
             }
             KeyCode::Char('5') if self.menu_mode == MenuMode::Practice => {
                 self.include_punctuation = !self.include_punctuation;
             }
             KeyCode::Char('6') if self.menu_mode == MenuMode::Practice => {
                 self.include_numbers = !self.include_numbers;
+            }
+            KeyCode::Char('t') => {
+                self.theme = self.theme.cycle();
             }
             _ => {}
         }
@@ -968,7 +993,9 @@ impl App {
         self.total_count += 1;
         let entry = self.key_stats.entry(expected).or_insert((0, 0));
 
-        if typed == expected {
+        let is_correct = typed == expected;
+
+        if is_correct {
             entry.0 += 1;
             self.correct_count += 1;
             self.last_correct = true;
@@ -995,9 +1022,23 @@ impl App {
                 self.last_sample_count = self.correct_count;
                 self.last_sample_time = Some(now);
             }
+        } else {
+            entry.1 += 1;
+            self.last_correct = false;
+            if self.error_stop {
+                self.last_error_char = Some(typed);
+            } else {
+                let pos = self.document.as_ref().map_or(0, |d| d.cursor_position());
+                self.error_chars.push((pos, typed));
+            }
+        }
 
+        if is_correct || !self.error_stop {
             if let Some(doc) = self.document.as_mut() {
                 doc.advance();
+                if doc.cursor_position() == 0 {
+                    self.error_chars.clear();
+                }
                 if doc.progress == Progress::Finished {
                     self.end_time = Some(Instant::now());
                     self.wpm_samples.push(self.wpm());
@@ -1009,10 +1050,6 @@ impl App {
                     }
                 }
             }
-        } else {
-            entry.1 += 1;
-            self.last_correct = false;
-            self.last_error_char = Some(typed);
         }
 
         self.highlight_until = Some(Instant::now() + std::time::Duration::from_millis(400));
@@ -1022,6 +1059,27 @@ impl App {
             typed.to_ascii_uppercase()
         };
         self.highlighted_key = Some(KeyCode::Char(display_char));
+    }
+
+    fn handle_backspace(&mut self) {
+        let doc = match self.document.as_ref() {
+            Some(d) => d,
+            None => return,
+        };
+        let pos = doc.cursor_position();
+        if pos == 0 {
+            return;
+        }
+        // Allow retreat past a space only if it was typed incorrectly
+        let prev_is_correct_space = doc.char_at(pos - 1) == Some(' ')
+            && !self.error_chars.iter().any(|&(p, _)| p == pos - 1);
+        if prev_is_correct_space {
+            return;
+        }
+        self.error_chars.retain(|&(p, _)| p != pos - 1);
+        if let Some(doc) = self.document.as_mut() {
+            doc.retreat();
+        }
     }
 }
 
@@ -1277,6 +1335,7 @@ mod tests {
     #[test]
     fn typing_wrong_char_sets_error() {
         let mut app = App::new();
+        app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
         assert_eq!(app.last_error_char, Some('x'));
@@ -1289,6 +1348,7 @@ mod tests {
     #[test]
     fn typing_blocked_during_error() {
         let mut app = App::new();
+        app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // error
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h')))); // blocked
@@ -1299,11 +1359,51 @@ mod tests {
     #[test]
     fn backspace_clears_error() {
         let mut app = App::new();
+        app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
         assert!(app.last_error_char.is_some());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
         assert!(app.last_error_char.is_none());
+    }
+
+    #[test]
+    fn no_error_stop_advances_past_errors() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hi").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong
+        assert_eq!(app.error_chars.len(), 1);
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 1);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('i')))); // correct
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 2);
+    }
+
+    #[test]
+    fn no_error_stop_backspace_removes_error() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hi").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong at pos 0
+        assert_eq!(app.error_chars.len(), 1);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 0);
+        assert!(app.error_chars.is_empty());
+    }
+
+    #[test]
+    fn no_error_stop_backspace_stops_at_correct_space() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("ab cd").unwrap());
+        // Type "ab " correctly
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
+        // Type wrong char then try to backspace past the space
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong at pos 3
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace))); // back to pos 3
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace))); // blocked by correct space
+        assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
     }
 
     #[test]

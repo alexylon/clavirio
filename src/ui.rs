@@ -14,6 +14,7 @@ use crate::settings::Theme;
 
 const KEYBOARD_ROWS: usize = 5;
 const MAX_WIDTH: u16 = 120;
+const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 
 #[derive(Clone, Copy)]
 pub struct ThemeColors {
@@ -23,6 +24,7 @@ pub struct ThemeColors {
     pub dim_text: Color,
     pub correct: Color,
     pub incorrect: Color,
+    pub error_text: Color,
     pub text: Color,
     pub key_label: Color,
     pub cursor_fg: Color,
@@ -42,6 +44,7 @@ impl ThemeColors {
                 dim_text: Color::DarkGray,
                 correct: Color::Rgb(100, 180, 255),
                 incorrect: Color::Rgb(255, 170, 60),
+                error_text: Color::Rgb(0xca, 0x47, 0x54),
                 text: Color::White,
                 key_label: Color::Gray,
                 cursor_fg: Color::Black,
@@ -57,6 +60,7 @@ impl ThemeColors {
                 dim_text: Color::Rgb(140, 140, 140),
                 correct: Color::Rgb(30, 120, 200),
                 incorrect: Color::Rgb(210, 100, 20),
+                error_text: Color::Rgb(0xca, 0x47, 0x54),
                 text: Color::Black,
                 key_label: Color::Rgb(80, 80, 80),
                 cursor_fg: Color::White,
@@ -762,6 +766,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled(format!(" {mode_label}  "), Style::new().fg(tc.dim_text)),
                 Span::styled("h", Style::new().fg(tc.accent)),
                 Span::styled(" history  ", Style::new().fg(tc.dim_text)),
+                Span::styled("t", Style::new().fg(tc.accent)),
+                Span::styled(format!(" {} ", app.theme), Style::new().fg(tc.dim_text)),
                 Span::styled("l", Style::new().fg(tc.accent)),
                 Span::styled(format!(" {}  ", app.layout), Style::new().fg(tc.dim_text)),
                 Span::styled("^F", Style::new().fg(tc.accent)),
@@ -798,7 +804,10 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     Style::new().fg(tc.dim_text),
                 ),
                 Span::styled("4", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {}  ", app.theme), Style::new().fg(tc.dim_text)),
+                Span::styled(
+                    format!(" error stop {}  ", on_off(app.error_stop)),
+                    Style::new().fg(tc.dim_text),
+                ),
             ];
             if app.menu_mode == MenuMode::Practice {
                 toggle_spans.extend([
@@ -880,44 +889,49 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         }
         Some(doc) => {
             let pos = doc.cursor_position();
-            let byte_pos = doc
-                .current_line
-                .char_indices()
-                .nth(pos)
-                .map(|(i, _)| i)
-                .unwrap_or(doc.current_line.len());
-            let (done, remaining) = doc.current_line.split_at(byte_pos);
-
+            let line_chars: Vec<char> = doc.current_line.chars().collect();
             let mut spans = Vec::new();
-            if !done.is_empty() {
+            if !app.error_chars.is_empty() {
+                for (i, &ch) in line_chars[..pos].iter().enumerate() {
+                    if app.error_chars.iter().any(|&(p, _)| p == i) {
+                        let display = if ch == ' ' {
+                            SPACE_ERROR_SYMBOL.to_string()
+                        } else {
+                            ch.to_string()
+                        };
+                        spans.push(Span::styled(display, Style::new().fg(tc.error_text)));
+                    } else {
+                        spans.push(Span::styled(ch.to_string(), Style::new().fg(tc.correct)));
+                    }
+                }
+            } else if pos > 0 {
+                let done: String = line_chars[..pos].iter().collect();
                 spans.push(Span::styled(done, Style::new().fg(tc.correct)));
             }
-
-            let mut chars = remaining.chars();
             if let Some(err_ch) = app.last_error_char {
-                if let Some(_expected) = chars.next() {
+                if pos < line_chars.len() {
                     spans.push(Span::styled(
                         err_ch.to_string(),
                         Style::new().fg(tc.cursor_fg).bg(tc.incorrect),
                     ));
                 }
-                if let Some(cursor_ch) = chars.next() {
+                if let Some(&cursor_ch) = line_chars.get(pos + 1) {
                     spans.push(Span::styled(
                         cursor_ch.to_string(),
                         Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
                     ));
                 }
-                let rest: String = chars.collect();
-                if !rest.is_empty() {
+                if pos + 2 < line_chars.len() {
+                    let rest: String = line_chars[pos + 2..].iter().collect();
                     spans.push(Span::styled(rest, Style::new().fg(tc.text)));
                 }
-            } else if let Some(next_ch) = chars.next() {
+            } else if let Some(&next_ch) = line_chars.get(pos) {
                 spans.push(Span::styled(
                     next_ch.to_string(),
                     Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
                 ));
-                let rest: String = chars.collect();
-                if !rest.is_empty() {
+                if pos + 1 < line_chars.len() {
+                    let rest: String = line_chars[pos + 1..].iter().collect();
                     spans.push(Span::styled(rest, Style::new().fg(tc.text)));
                 }
             }

@@ -123,6 +123,7 @@ async fn run_app(cli: Cli) -> Result<()> {
     app.theme = settings.display.theme;
     app.include_punctuation = settings.display.include_punctuation;
     app.include_numbers = settings.display.include_numbers;
+    app.error_stop = settings.display.error_stop;
     if settings.display.practice_mode {
         app.menu_mode = crate::app::MenuMode::Practice;
     }
@@ -176,7 +177,8 @@ async fn run_app(cli: Cli) -> Result<()> {
             || app.theme != settings.display.theme
             || app.include_punctuation != settings.display.include_punctuation
             || app.include_numbers != settings.display.include_numbers
-            || (app.menu_mode == crate::app::MenuMode::Practice) != settings.display.practice_mode;
+            || (app.menu_mode == crate::app::MenuMode::Practice) != settings.display.practice_mode
+            || app.error_stop != settings.display.error_stop;
         let layout_changed = app.layout != settings.keyboard.layout;
 
         if layout_changed || display_changed {
@@ -188,6 +190,7 @@ async fn run_app(cli: Cli) -> Result<()> {
             settings.display.include_punctuation = app.include_punctuation;
             settings.display.include_numbers = app.include_numbers;
             settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
+            settings.display.error_stop = app.error_stop;
             settings::save_settings(&settings);
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);

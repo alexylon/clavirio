@@ -47,7 +47,7 @@ Less thinking, more muscle memory. The system builds consistent procedural memor
 - **WPM sparkline** — speed over time on the results screen
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
 - **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
-- **Error feedback** — wrong keystrokes shown inline, blocked until corrected with Backspace
+- **Error feedback** — two modes: error stop off (default) lets you type past mistakes with backspace correction within the current word; error stop on blocks until corrected
 - **Weak key tracking** — per-key accuracy saved across sessions; press `w` after a drill to practice that session's weakest keys, or select Weak Keys from the menu for cumulative stats
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
 - **Progress tracking** — remembers your lesson and menu mode across sessions
@@ -158,12 +158,14 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 | `↑`/`↓` `k`/`j` | Navigate |
 | `Enter` | Start |
 | `m` | Toggle lessons / practice |
-| `l` | Cycle layout |
-| `1`-`4` | Toggle fingers / hints / keyboard / theme |
-| `5`/`6` | Toggle punctuation / numbers (practice only) |
 | `h` | Session history |
+| `t` | Cycle theme |
+| `l` | Cycle layout |
 | `Ctrl-F` | Load file |
 | `q` / `Esc` | Quit |
+| `1`-`3` | Toggle fingers / hints / keyboard |
+| `4` | Toggle error stop |
+| `5`/`6` | Toggle punctuation / numbers (practice only) |
 
 ### Typing
 
@@ -208,6 +210,7 @@ theme = "dark"              # dark, light
 include_punctuation = false
 include_numbers = false
 practice_mode = false
+error_stop = false              # true = block on error, false = advance past errors
 ```
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
