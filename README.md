@@ -40,6 +40,8 @@ Clavirio follows that idea by teaching the keyboard **row by row** with the same
 
 *index pair → middle pair → ring pair → pinky pair → reach pair → full row → row + Shift*
 
+This is meant to reduce reliance on **explicit recall** of key locations and build more **automatic control** within the keyboard’s **row-and-column structure**.
+
 Each lesson introduces only 2 new keys and uses only characters from earlier lessons. The same progression is used for **QWERTY, Dvorak, and Colemak**, so the lesson structure stays consistent across layouts.
 
 The paper does not compare typing tutors directly, so it does not prove that this exact sequence is optimal. It does support the broader design choice: **structured, incremental repetition** that builds reliable finger-to-key habits instead of relying on conscious recall of key positions.
