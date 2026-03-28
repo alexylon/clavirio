@@ -7,12 +7,12 @@ mod settings;
 mod ui;
 mod words;
 
-use std::io::{stdout, Result};
+use std::io::{Result, stdout};
 
 use clap::Parser;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::prelude::*;
 
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
         let mut hup = signal(SignalKind::hangup()).expect("SIGHUP handler");
         tokio::select! {

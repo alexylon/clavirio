@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crossterm::event::KeyCode;
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
-use ratatui::Frame;
 
 use crate::app::{App, Progress};
 use crate::keyboard::*;

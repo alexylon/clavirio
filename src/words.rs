@@ -207,11 +207,7 @@ pub fn generate_bigram_text(word_count: usize) -> String {
         .iter()
         .filter_map(|&w| {
             let score = BIGRAMS.iter().filter(|&&bg| w.contains(bg)).count();
-            if score > 0 {
-                Some((w, score))
-            } else {
-                None
-            }
+            if score > 0 { Some((w, score)) } else { None }
         })
         .collect();
     if scored.is_empty() {
@@ -246,11 +242,7 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
         .iter()
         .filter_map(|&w| {
             let score = w.chars().filter(|c| alpha_chars.contains(c)).count();
-            if score > 0 {
-                Some((w, score))
-            } else {
-                None
-            }
+            if score > 0 { Some((w, score)) } else { None }
         })
         .collect();
 

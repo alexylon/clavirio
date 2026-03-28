@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use time::{format_description::well_known::Iso8601, OffsetDateTime, UtcOffset};
+use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
 use crate::input::InputEvent;
 use crate::settings::{KeyboardLayout, Theme};
@@ -82,7 +82,7 @@ impl Document {
         if meta.len() > MAX_FILE_SIZE {
             return Err(format!(
                 "File too large ({:.1} MB, max 1 MB)",
-                meta.len() as f64 / 1_000_000.0
+                meta.len() as f64 / MAX_FILE_SIZE as f64
             ));
         }
 
@@ -339,6 +339,7 @@ impl App {
     }
 
     const SPARKLINE_WIDTH: usize = 16;
+    const HIGHLIGHT_DURATION_MS: u64 = 400;
 
     /// Returns (sparkline_string, min_wpm, max_wpm) or None if not enough data.
     pub fn sparkline(&self) -> Option<(String, f64, f64)> {
@@ -917,7 +918,9 @@ impl App {
                     c.to_ascii_uppercase()
                 };
                 self.highlighted_key = Some(KeyCode::Char(display_char));
-                self.highlight_until = Some(Instant::now() + std::time::Duration::from_millis(400));
+                self.highlight_until = Some(
+                    Instant::now() + std::time::Duration::from_millis(Self::HIGHLIGHT_DURATION_MS),
+                );
             }
             KeyCode::Backspace => {
                 if let Some(line) = self.zen_lines.last_mut() {
@@ -1052,7 +1055,8 @@ impl App {
             }
         }
 
-        self.highlight_until = Some(Instant::now() + std::time::Duration::from_millis(400));
+        self.highlight_until =
+            Some(Instant::now() + std::time::Duration::from_millis(Self::HIGHLIGHT_DURATION_MS));
         let display_char = if typed.is_whitespace() {
             ' '
         } else {
