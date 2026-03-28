@@ -186,11 +186,11 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 
 | Key | Action |
 |-----|--------|
-| `Space` | Resume |
+| `Space` / `Enter` | Resume |
 | `r` | Restart |
 | `n` | Next lesson (lessons mode) |
-| `q` | Quit |
 | `Esc` | Back to menu |
+| `q` | Quit |
 
 ## Settings
 

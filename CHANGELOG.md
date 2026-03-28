@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Next lesson shortcut (`n`) on the finished screen and pause menu — only shown in lessons mode when a next lesson exists
+- Pause menu reorganized: Resume (Space), Restart (r), Next lesson (n), Menu (Esc), Quit (q) — with shortcuts shown inline
 - Punctuation and numbers toggle for word practice — press `5`/`6` in practice mode to inject punctuation marks and numbers into random word and timed drills; affected menu labels update to show `+punct`/`+num`
 - CLI flags `--punctuation` (`-p`) and `--numbers` (`-n`) for word practice
 - Programming language word lists: Rust, Python, JavaScript, Go, C/C++, Java, HTML/CSS — available in the practice menu and via `-l` CLI flag

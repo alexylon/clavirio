@@ -378,6 +378,11 @@ impl App {
             .is_some_and(|d| d.progress == Progress::Finished)
     }
 
+    pub fn has_next_lesson(&self) -> bool {
+        self.menu_mode == MenuMode::Lessons
+            && self.selected_lesson + 1 < self.lesson_count_for_layout()
+    }
+
     pub fn save_on_exit(&self) {
         if (self.document.is_some() && !self.is_finished()) || self.zen_mode {
             self.save_history(false);
@@ -442,11 +447,7 @@ impl App {
     }
 
     pub fn pause_menu_len(&self) -> usize {
-        if self.is_practice_mode() {
-            2
-        } else {
-            3
-        }
+        self.pause_menu_items().len()
     }
 
     fn handle_pause_key(&mut self, code: KeyCode) -> bool {
@@ -462,13 +463,12 @@ impl App {
             }
             KeyCode::Home => self.pause_menu_index = 0,
             KeyCode::End => self.pause_menu_index = menu_len - 1,
-            KeyCode::Enter => return self.activate_pause_item(),
-            KeyCode::Char(' ') => self.resume(),
+            KeyCode::Enter | KeyCode::Char(' ') => return self.activate_pause_item(),
             KeyCode::Char('r' | 'R') => {
                 self.resume();
                 self.restart();
             }
-            KeyCode::Char('n' | 'N') if !self.is_practice_mode() => {
+            KeyCode::Char('n' | 'N') if self.has_next_lesson() => {
                 self.resume();
                 self.next_lesson();
             }
@@ -482,36 +482,35 @@ impl App {
     }
 
     fn activate_pause_item(&mut self) -> bool {
-        if self.is_practice_mode() {
-            match self.pause_menu_index {
-                0 => {
-                    self.resume();
-                    self.restart();
-                }
-                1 => {
-                    self.save_on_exit();
-                    return true;
-                }
-                _ => {}
+        let items = self.pause_menu_items();
+        match items.get(self.pause_menu_index) {
+            Some(("Resume", _)) => self.resume(),
+            Some(("Restart", _)) => {
+                self.resume();
+                self.restart();
             }
-        } else {
-            match self.pause_menu_index {
-                0 => {
-                    self.resume();
-                    self.restart();
-                }
-                1 => {
-                    self.resume();
-                    self.next_lesson();
-                }
-                2 => {
-                    self.save_on_exit();
-                    return true;
-                }
-                _ => {}
+            Some(("Next lesson", _)) => {
+                self.resume();
+                self.next_lesson();
             }
+            Some(("Menu", _)) => self.go_to_menu(),
+            Some(("Quit", _)) => {
+                self.save_on_exit();
+                return true;
+            }
+            _ => {}
         }
         false
+    }
+
+    pub fn pause_menu_items(&self) -> Vec<(&'static str, &'static str)> {
+        let mut items = vec![("Resume", " "), ("Restart", "r")];
+        if self.has_next_lesson() {
+            items.push(("Next lesson", "n"));
+        }
+        items.push(("Menu", ""));
+        items.push(("Quit", "q"));
+        items
     }
 
     pub fn remaining_secs(&self) -> Option<f64> {
@@ -660,6 +659,9 @@ impl App {
             }
             (KeyCode::Char('w'), _) if self.is_finished() => {
                 self.start_weak_key_practice();
+            }
+            (KeyCode::Char('n'), _) if self.is_finished() && self.has_next_lesson() => {
+                self.next_lesson();
             }
             (KeyCode::Char(typed), _) if self.last_error_char.is_none() => {
                 self.handle_typed_char(typed);

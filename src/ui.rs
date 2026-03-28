@@ -459,8 +459,8 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 
     let menu_width = 36_u16;
-    let is_practice = app.is_practice_mode();
-    let menu_height = if is_practice { 6_u16 } else { 7_u16 };
+    let items = app.pause_menu_items();
+    let menu_height = items.len() as u16 + 4; // items + border + padding
 
     let [v_area] = Layout::vertical([Constraint::Length(menu_height)])
         .flex(Flex::Center)
@@ -472,28 +472,12 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     // Clear the entire text area so no underlying borders bleed through
     frame.render_widget(Block::default().style(Style::default().bg(tc.bg)), area);
 
-    let items: Vec<(&str, &str)> = if is_practice {
-        vec![("Restart", "r"), ("Quit", "q")]
-    } else {
-        vec![("Restart lesson", "r"), ("Next lesson", "n"), ("Quit", "q")]
-    };
-
     let block = Block::new()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::new().fg(tc.dim_border))
         .padding(Padding::vertical(1))
-        .title(Span::styled(" Paused ", Style::new().fg(tc.accent).bold()))
-        .title_bottom(
-            Line::from(Span::styled(
-                " Resume [Space] ",
-                Style::new().fg(tc.dim_text),
-            ))
-            .left_aligned(),
-        )
-        .title_bottom(
-            Line::from(Span::styled(" Menu [Esc] ", Style::new().fg(tc.dim_text))).right_aligned(),
-        );
+        .title(Span::styled(" Paused ", Style::new().fg(tc.accent).bold()));
 
     let inner = block.inner(menu_area);
     frame.render_widget(block, menu_area);
@@ -508,14 +492,20 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         let shortcut_fg = if selected { tc.accent } else { tc.dim_text };
         let marker = if selected { "\u{25b8} " } else { "  " };
 
-        let pad_len = (inner.width as usize).saturating_sub(2 + label.len() + shortcut.len() + 1);
+        let display_shortcut = match *shortcut {
+            " " => "Space",
+            "" => "Esc",
+            s => s,
+        };
+        let pad_len =
+            (inner.width as usize).saturating_sub(2 + label.len() + display_shortcut.len() + 1);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(marker, Style::new().fg(tc.accent)),
                 Span::styled(*label, Style::new().fg(label_fg)),
                 Span::raw(" ".repeat(pad_len)),
-                Span::styled(*shortcut, Style::new().fg(shortcut_fg)),
+                Span::styled(display_shortcut, Style::new().fg(shortcut_fg)),
                 Span::raw(" "),
             ])),
             row,
@@ -833,7 +823,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             } else {
                 0.0
             };
-            let mut lines = vec![Line::from(vec![
+            let mut actions = vec![
                 Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
                 Span::styled(
                     format!("{:.0} wpm", app.wpm()),
@@ -848,9 +838,16 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
                 Span::styled("w", Style::new().fg(tc.accent).bold()),
                 Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
+            ];
+            if app.has_next_lesson() {
+                actions.push(Span::styled("n", Style::new().fg(tc.accent).bold()));
+                actions.push(Span::styled(" next  ", Style::new().fg(tc.dim_text)));
+            }
+            actions.extend_from_slice(&[
                 Span::styled("Esc", Style::new().fg(tc.accent).bold()),
                 Span::styled(" menu", Style::new().fg(tc.dim_text)),
-            ])];
+            ]);
+            let mut lines = vec![Line::from(actions)];
             if let Some((spark, min, max)) = app.sparkline() {
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
