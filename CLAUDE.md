@@ -31,7 +31,7 @@ cargo test test_name           # Run a single test by name
 
 **Keyboard layouts** (`keyboard.rs`): Static `KeyDef` arrays for 5 rows per layout. Each key has primary/secondary (shift) characters, a `KeyWidth`, and finger assignments via `GridCoord → Finger` mapping. `build_keycode_grid_map()` creates a `HashMap<KeyCode, GridCoord>` for O(1) lookup.
 
-**Lessons** (`lessons.rs`): 9 layout-specific + 6 shared lessons per layout, embedded via `include_str!()`. Progressive curriculum: home row → full alphabet → capitals → numbers → punctuation → common words → paragraphs → code.
+**Lessons** (`lessons.rs`): 21 layout-specific + 6 shared lessons per layout, embedded via `include_str!()`. Universal finger-pair system: 2 keys per lesson, same physical positions across all 3 layouts. Each row follows index → middle → ring → pinky → reach → full row → row + Shift. Shared lessons cover numbers and symbols.
 
 **Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility. Atomic writes (temp file + rename).
 

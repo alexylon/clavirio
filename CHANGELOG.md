@@ -9,6 +9,9 @@
 - Menu mode (lessons/practice) persisted across sessions in `settings.toml`
 
 ### Changed
+- Complete lesson redesign: 27 lessons (was 15) using a universal finger-pair system — 2 new keys per lesson, same physical positions across all 3 layouts (index → middle → ring → pinky → reach → full row → row + Shift for each of 3 rows), plus 6 shared lessons for numbers and symbols
+- Removed Common Words, Paragraphs, and Code lessons (redundant with practice mode)
+- Each lesson strictly uses only its declared characters, verified by automated audit
 - Weak keys drill now always includes all character types (punct/digits) regardless of toggle state
 - Invalid `--list` values now show an error and exit instead of silently falling back to english 200
 

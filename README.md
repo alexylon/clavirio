@@ -22,6 +22,7 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 ## Table of Contents
 
+- [Methodology](#methodology)
 - [Features](#features)
 - [Lessons](#lessons)
 - [Install](#install)
@@ -29,9 +30,17 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 - [Controls](#controls)
 - [Settings](#settings)
 
+## Methodology
+
+[Research on typing skill](https://www.crumplab.com/publications/Crump/files/3900/Liu%20et%20al.%20-%202010%20-%20Do%20you%20know%20where%20your%20fingers%20have%20been%20Explicit.pdf) shows that skilled typists don't consciously know where keys are — their fingers find them through implicit muscle memory built by repetitive practice. Clavirio's lesson system is designed around this: instead of teaching keyboard geography, it trains finger-to-key associations through a strict, repeating structure.
+
+Each keyboard row is taught in 7 lessons following the same pattern: index pair → middle pair → ring pair → pinky pair → reach pair → full row → row + Shift. The pattern repeats identically for all three rows — the learner only needs to internalize one progression. Each lesson introduces just 2 new keys and only uses characters from previous lessons.
+
+Less thinking, more muscle memory. The system builds consistent procedural memory by keeping the structure predictable and the progression cumulative.
+
 ## Features
 
-- **Lessons mode** — 15 progressive drills from home row to full paragraphs and code; lessons 1-9 are layout-specific, 10-15 are shared
+- **Lessons mode** — 27 progressive drills: home row → top row → bottom row (2 keys per lesson, by finger pair), numbers, and symbols; lessons 1-21 are layout-specific, 22-27 are shared
 - **Practice mode** — random words (english 200/1k), code keywords (Rust, Python, JavaScript, Go, C/C++, Java, HTML/CSS), timed sessions (30s/60s), weak keys, common bigrams, quotes, and zen free-typing
 - **Punctuation & numbers** — optional injection into word and code drills, toggle with `5`/`6` in practice mode
 - **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
@@ -47,28 +56,40 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 ## Lessons
 
-Lessons 1-9 are **layout-specific** (each layout has its own drills matched to that layout's finger positions). Lessons 10-15 are **shared** across all layouts.
+Lessons 1-21 are **layout-specific** — 7 lessons per row (home, top, bottom), 2 new keys each. Lessons 22-27 are **shared** (numbers and symbols).
 
 | # | Lesson | QWERTY | Dvorak | Colemak |
 |---|--------|--------|--------|---------|
-| 1 | Index Keys | f j | u h | t n |
-| 2 | Middle Keys | d k (+ f j) | e t (+ u h) | s e (+ t n) |
-| 3 | Ring & Pinky | s l ; (+ f j d k) | o n s (+ a) | r i o (+ a) |
-| 4 | Home Row | a s d f j k l ; | a o e u i d h t n s | a r s t d h n e i o |
-| 5 | Home Reach | g h | i d | d h |
-| 6 | Top Intro | e i r u | p c r l | f p l u |
-| 7 | Top Row | q w e r t y u i o p | ' , . p y f g c r l | q w f p g j l u y ; |
-| 8 | Bottom Row | z x c v b n m , . | ; q j k x b m w v z | z x c v b k m , . |
-| 9 | All Letters | Pangrams | Pangrams | Pangrams |
+| 1 | Home: Index | f j | u h | t n |
+| 2 | Home: Middle | d k | e t | s e |
+| 3 | Home: Ring | s l | o n | r i |
+| 4 | Home: Pinky | a ; | a s | a o |
+| 5 | Home: Reach | g h | i d | d h |
+| 6 | Home Row | full row | full row | full row |
+| 7 | Home + Shift | + caps | + caps | + caps |
+| 8 | Top: Index | r u | p g | p l |
+| 9 | Top: Middle | e i | . c | f u |
+| 10 | Top: Ring | w o | , r | w y |
+| 11 | Top: Pinky | q p | ' l | q ; |
+| 12 | Top: Reach | t y | y f | g j |
+| 13 | Top Row | full row | full row | full row |
+| 14 | Top + Shift | + caps | + caps | + caps |
+| 15 | Bottom: Index | v m | k m | v m |
+| 16 | Bottom: Middle | c , | j w | c , |
+| 17 | Bottom: Ring | x . | q v | x . |
+| 18 | Bottom: Pinky | z / | ; z | z / |
+| 19 | Bottom: Reach | b n | x b | b k |
+| 20 | Bottom Row | full row | full row | full row |
+| 21 | Bottom + Shift | + caps | + caps | + caps |
 
 | # | Lesson | Focus |
 |---|--------|-------|
-| 10 | Capitals & Shift | Mixed case |
-| 11 | 0-9 Numbers | Numbers in context |
-| 12 | Punctuation & Symbols | Special characters |
-| 13 | Common Words | High-frequency words |
-| 14 | Full Paragraphs | Real-world text |
-| 15 | Code (Rust) | Programming syntax |
+| 22 | Numbers | 1 2 3 4 5 6 7 8 9 0 |
+| 23 | Symbols I | / ? : ' " |
+| 24 | Symbols II | [ ] { } < > \| \ |
+| 25 | Symbols III | \` ~ ! - _ + = |
+| 26 | Symbols IV | @ # $ % ^ & * ( ) |
+| 27 | Numbers & Symbols | Review |
 
 ## Install
 

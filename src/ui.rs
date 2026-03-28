@@ -641,12 +641,14 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             match app.menu_mode {
                 MenuMode::Lessons => {
                     let lessons = crate::lessons::lessons_for_layout(app.layout);
+                    const NUM_PREFIX_LEN: usize = 4; // "01. "
                     let label_len = |l: &&crate::lessons::Lesson| {
-                        if l.keys.is_empty() {
-                            l.title.len()
+                        let keys_width = if l.keys.is_empty() {
+                            0
                         } else {
-                            l.title.len() + 2 + l.keys.len() + 1
-                        }
+                            2 + l.keys.len() + 1
+                        };
+                        NUM_PREFIX_LEN + l.title.len() + keys_width
                     };
                     let max_label: usize = [
                         crate::settings::KeyboardLayout::Qwerty,
@@ -669,8 +671,10 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let marker = if selected { "▸" } else { " " };
                         let title_fg = if selected { tc.text } else { tc.dim_text };
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
+                        let num = i + 1;
                         let mut spans = vec![
                             Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                            Span::styled(format!("{num:02}. "), Style::new().fg(tc.dim_text)),
                             Span::styled(lesson.title.to_string(), Style::new().fg(title_fg)),
                         ];
                         if !lesson.keys.is_empty() {
@@ -679,11 +683,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                                 Style::new().fg(tc.dim_text),
                             ));
                         }
-                        let current_len = if lesson.keys.is_empty() {
-                            lesson.title.len()
-                        } else {
-                            lesson.title.len() + 2 + lesson.keys.len() + 1
-                        };
+                        let current_len = label_len(&lesson);
                         if current_len < max_label {
                             spans.push(Span::raw(" ".repeat(max_label - current_len)));
                         }
