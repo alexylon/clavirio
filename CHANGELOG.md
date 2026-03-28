@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-28
+
 ### Added
 - Error stop toggle (`4`) — when off (default), typing continues past mistakes; wrong characters shown in red, backspace corrects within the current word; when on, cursor blocks until the error is corrected
 - Next lesson shortcut (`n`) on the finished screen and pause menu — only shown in lessons mode when a next lesson exists
