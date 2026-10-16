@@ -910,9 +910,9 @@ impl App {
     }
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
-        const WORDS_PER_MINUTE: usize = 80;
+        const FASTEST_WPM: usize = 200;
         const SPARE_WORDS: usize = 20;
-        let estimated_words = secs as usize * WORDS_PER_MINUTE / 60 + SPARE_WORDS;
+        let estimated_words = secs as usize * FASTEST_WPM / 60 + SPARE_WORDS;
         let text = self.generate_word_text(list, estimated_words);
         let slug = list.label().replace(['/', ' '], "_");
         self.start_practice_from_text(
@@ -1861,6 +1861,19 @@ mod tests {
         assert!(app.document.is_some());
         assert_eq!(app.time_limit, Some(60));
         assert!(app.lesson_title.contains("60s"));
+    }
+
+    #[test]
+    fn timed_text_lasts_for_fast_typists() {
+        const FAST_WPM: usize = 150;
+        for &(secs, list) in App::TIMED_OPTIONS {
+            let mut app = App::new();
+            app.start_timed_practice(secs, list);
+            let doc = app.document.as_ref().unwrap();
+            let chars: usize = doc.lines.iter().map(|l| l.chars().count()).sum();
+            let needed = FAST_WPM * secs as usize / 60;
+            assert!(chars / 5 >= needed, "{secs}s {}", list.label());
+        }
     }
 
     #[test]

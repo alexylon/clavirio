@@ -303,7 +303,7 @@ pub fn generate_quote_text(word_count: usize) -> String {
 
     let mut rng = Rng::from_time();
     let mut total_words = 0;
-    let mut lines: Vec<String> = Vec::new();
+    let mut wrapped: Vec<String> = Vec::new();
 
     // Shuffle indices to avoid repeats; reshuffle if we exhaust all quotes
     let mut indices: Vec<usize> = (0..quotes.len()).collect();
@@ -318,19 +318,10 @@ pub fn generate_quote_text(word_count: usize) -> String {
         }
         let quote = quotes[indices[pos]];
         pos += 1;
-        for word in quote.split_whitespace() {
-            match lines.last_mut() {
-                Some(line) if line.len() + 1 + word.len() <= LINE_WIDTH => {
-                    line.push(' ');
-                    line.push_str(word);
-                }
-                _ => lines.push(word.to_string()),
-            }
-            total_words += 1;
-        }
-        lines.push(String::new());
+        total_words += quote.split_whitespace().count();
+        wrapped.push(wrap_words(quote.split_whitespace()));
     }
-    lines.join("\n")
+    wrapped.join("\n\n")
 }
 
 #[cfg(test)]
@@ -431,6 +422,12 @@ mod tests {
             has_full_quote,
             "output should contain at least one complete quote"
         );
+    }
+
+    #[test]
+    fn quote_text_lines_do_not_start_with_space() {
+        let text = generate_quote_text(100);
+        assert!(text.lines().all(|line| !line.starts_with(' ')));
     }
 
     #[test]

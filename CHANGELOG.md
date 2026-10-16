@@ -15,6 +15,8 @@
 - The history view crashing on a timestamp with non-ASCII characters
 - `w` after a session without mistakes ignoring your saved weak keys
 - `Ctrl-R` while paused leaving the pause menu open after restarting
+- Quotes after the first starting with a space you had to type
+- Timed practice running out of text, and ending early, for typists above about 100 wpm (the text now lasts to about 200 wpm)
 
 ## [0.4.1] - 2026-03-28
 
