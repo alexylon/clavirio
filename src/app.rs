@@ -459,6 +459,7 @@ impl App {
     }
 
     fn restart(&mut self) {
+        self.resume();
         if let Some(doc) = self.document.as_mut() {
             doc.reset();
         }
@@ -518,10 +519,7 @@ impl App {
             KeyCode::Home => self.pause_menu_index = 0,
             KeyCode::End => self.pause_menu_index = menu_len.saturating_sub(1),
             KeyCode::Enter | KeyCode::Char(' ') => return self.activate_pause_item(),
-            KeyCode::Char('r' | 'R') => {
-                self.resume();
-                self.restart();
-            }
+            KeyCode::Char('r' | 'R') => self.restart(),
             KeyCode::Char('n' | 'N') if self.has_next_lesson() => {
                 self.resume();
                 self.next_lesson();
@@ -539,10 +537,7 @@ impl App {
         let items = self.pause_menu_items();
         match items.get(self.pause_menu_index) {
             Some(("Resume", _)) => self.resume(),
-            Some(("Restart", _)) => {
-                self.resume();
-                self.restart();
-            }
+            Some(("Restart", _)) => self.restart(),
             Some(("Next lesson", _)) => {
                 self.resume();
                 self.next_lesson();
@@ -1783,7 +1778,7 @@ mod tests {
         assert!(quit);
     }
 
-    // --- Ctrl-R no-op without document ---
+    // --- Ctrl-R ---
 
     #[test]
     fn ctrl_r_without_document_is_noop() {
@@ -1791,6 +1786,20 @@ mod tests {
         app.handle_event(InputEvent::Press(ctrl_key('r')));
         assert!(app.document.is_none());
         assert_eq!(app.correct_count, 0);
+    }
+
+    #[test]
+    fn ctrl_r_while_paused_restarts_and_resumes() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+
+        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        assert!(!app.paused);
+        assert_eq!(app.correct_count, 0);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
     }
 
     // --- search submit ---

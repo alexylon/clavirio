@@ -14,6 +14,7 @@
 - A weak space in the weak-key drill adding extra spaces after words
 - The history view crashing on a timestamp with non-ASCII characters
 - `w` after a session without mistakes ignoring your saved weak keys
+- `Ctrl-R` while paused leaving the pause menu open after restarting
 
 ## [0.4.1] - 2026-03-28
 
