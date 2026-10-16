@@ -255,6 +255,7 @@ pub struct App {
     pub wpm_samples: Vec<f64>,
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
+    ignore_keys_until: Option<Instant>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
     pub include_punctuation: bool,
@@ -262,6 +263,8 @@ pub struct App {
     pub error_stop: bool,
     pub error_chars: Vec<(usize, char)>,
 }
+
+type StartFn = fn(&mut App);
 
 impl App {
     pub const DEFAULT_WORD_COUNT: usize = 100;
@@ -302,6 +305,7 @@ impl App {
             wpm_samples: Vec::new(),
             last_sample_count: 0,
             last_sample_time: None,
+            ignore_keys_until: None,
             zen_mode: false,
             zen_lines: Vec::new(),
             include_punctuation: false,
@@ -369,6 +373,7 @@ impl App {
 
     const SPARKLINE_WIDTH: usize = 16;
     const HIGHLIGHT_DURATION_MS: u64 = 400;
+    const TIME_UP_GRACE_MS: u64 = 1000;
 
     /// Returns (sparkline_string, min_wpm, max_wpm) or None if not enough data.
     pub fn sparkline(&self) -> Option<(String, f64, f64)> {
@@ -456,6 +461,7 @@ impl App {
         self.wpm_samples.clear();
         self.last_sample_count = 0;
         self.last_sample_time = None;
+        self.ignore_keys_until = None;
         self.zen_mode = false;
         self.zen_lines.clear();
     }
@@ -571,17 +577,21 @@ impl App {
     }
 
     fn check_time_limit(&mut self) {
-        if self.start_time.is_some()
-            && !self.is_finished()
-            && self.remaining_secs().is_some_and(|r| r <= 0.0)
-        {
-            self.end_time = Some(Instant::now());
-            self.wpm_samples.push(self.wpm());
-            if let Some(doc) = self.document.as_mut() {
-                doc.progress = Progress::Finished;
-            }
-            self.save_history(true);
+        let (Some(start), Some(limit)) = (self.start_time, self.time_limit) else {
+            return;
+        };
+        if self.is_finished() || self.remaining_secs().is_some_and(|r| r > 0.0) {
+            return;
         }
+        // End at the limit itself, not when a tick or key press noticed it
+        self.end_time = Some(start + std::time::Duration::from_secs(limit));
+        self.ignore_keys_until =
+            Some(Instant::now() + std::time::Duration::from_millis(Self::TIME_UP_GRACE_MS));
+        self.wpm_samples.push(self.wpm());
+        if let Some(doc) = self.document.as_mut() {
+            doc.progress = Progress::Finished;
+        }
+        self.save_history(true);
     }
 
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
@@ -596,7 +606,10 @@ impl App {
                 self.check_time_limit();
                 false
             }
-            InputEvent::Press(key) => self.handle_key(key),
+            InputEvent::Press(key) => {
+                self.check_time_limit();
+                self.handle_key(key)
+            }
         }
     }
 
@@ -646,6 +659,8 @@ impl App {
                 self.save_on_exit();
                 return true;
             }
+            // Keys still being typed when the time ran out mustn't act on the results screen
+            _ if self.ignore_keys_until.is_some_and(|t| Instant::now() < t) => {}
             (KeyCode::Esc, KeyModifiers::NONE) => {
                 if self.viewing_history {
                     self.viewing_history = false;
@@ -734,7 +749,7 @@ impl App {
         false
     }
 
-    pub const SPECIAL_PRACTICE: &'static [(&'static str, fn(&mut Self))] = &[
+    pub const SPECIAL_PRACTICE: &'static [(&'static str, StartFn)] = &[
         ("Weak Keys", Self::start_weak_key_practice),
         ("Common Bigrams (english 1k)", Self::start_bigram_practice),
         ("Quotes", Self::start_quote_practice),
@@ -1900,6 +1915,41 @@ mod tests {
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
         assert_eq!(app.total_count, 1);
         assert!(app.is_finished());
+    }
+
+    #[test]
+    fn key_after_time_limit_ends_session() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.time_limit = Some(1);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
+
+        // No tick in between, as while typing; `r` must not restart either
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        assert!(app.is_finished());
+        assert_eq!(app.total_count, 1);
+        assert_eq!(app.elapsed_secs(), 1.0);
+    }
+
+    #[test]
+    fn keys_ignored_just_after_time_runs_out() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.time_limit = Some(1);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
+        app.handle_event(InputEvent::Tick);
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.is_finished());
+        assert!(app.document.is_some());
+        assert!(app.handle_event(InputEvent::Press(ctrl_key('c'))));
+
+        app.ignore_keys_until = Some(Instant::now());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        assert!(!app.is_finished());
     }
 
     // --- sparkline ---
