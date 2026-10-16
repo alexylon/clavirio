@@ -145,8 +145,8 @@ clavirio -f path/to/file.txt    # custom file
 | `-w, --words [N]` | Practice with N random words (default: 100) |
 | `-t, --time N` | Timed practice for N seconds |
 | `-l, --list LIST` | Word list (default: `200`) |
-| `-p, --punctuation` | Inject punctuation into word practice |
-| `-n, --numbers` | Inject numbers into word practice |
+| `-p, --punctuation` | Inject punctuation into word practice (this run only) |
+| `-n, --numbers` | Inject numbers into word practice (this run only) |
 | `-f, --file FILE` | Load a custom text file |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |

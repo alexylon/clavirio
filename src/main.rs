@@ -42,11 +42,11 @@ struct Cli {
     #[arg(short, long, default_value = "200", value_parser = parse_word_list)]
     list: words::WordList,
 
-    /// Include punctuation in word practice
+    /// Include punctuation in word practice (this run only)
     #[arg(short, long)]
     punctuation: bool,
 
-    /// Include numbers in word practice
+    /// Include numbers in word practice (this run only)
     #[arg(short, long)]
     numbers: bool,
 }
@@ -113,6 +113,14 @@ async fn shutdown_signal() {
     }
 }
 
+/// The value to save for a toggle that a CLI flag may have turned on for this
+/// run only: the flag's effect isn't saved, and changing the toggle in the app
+/// ends the override.
+fn toggle_to_save(cli_override: &mut bool, value: bool) -> bool {
+    *cli_override &= value;
+    value && !*cli_override
+}
+
 async fn run_app(cli: Cli) -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
@@ -134,13 +142,11 @@ async fn run_app(cli: Cli) -> Result<()> {
     }
     app.selected_lesson = crate::history::resume_lesson(app.layout);
 
-    // CLI flags override persisted settings
-    if cli.punctuation {
-        app.include_punctuation = true;
-    }
-    if cli.numbers {
-        app.include_numbers = true;
-    }
+    // CLI flags override the saved settings for this run only
+    let mut punctuation_override = cli.punctuation && !app.include_punctuation;
+    let mut numbers_override = cli.numbers && !app.include_numbers;
+    app.include_punctuation |= cli.punctuation;
+    app.include_numbers |= cli.numbers;
 
     // Handle CLI flags: --time > --words > --file
     let list = cli.list;
@@ -176,12 +182,15 @@ async fn run_app(cli: Cli) -> Result<()> {
             break;
         }
 
+        let include_punctuation =
+            toggle_to_save(&mut punctuation_override, app.include_punctuation);
+        let include_numbers = toggle_to_save(&mut numbers_override, app.include_numbers);
         let display_changed = app.show_keyboard != settings.display.show_keyboard
             || app.show_hints != settings.display.show_hints
             || app.show_fingers != settings.display.show_fingers
             || app.theme != settings.display.theme
-            || app.include_punctuation != settings.display.include_punctuation
-            || app.include_numbers != settings.display.include_numbers
+            || include_punctuation != settings.display.include_punctuation
+            || include_numbers != settings.display.include_numbers
             || (app.menu_mode == crate::app::MenuMode::Practice) != settings.display.practice_mode
             || app.error_stop != settings.display.error_stop;
         let layout_changed = app.layout != settings.keyboard.layout;
@@ -192,8 +201,8 @@ async fn run_app(cli: Cli) -> Result<()> {
             settings.display.show_hints = app.show_hints;
             settings.display.show_fingers = app.show_fingers;
             settings.display.theme = app.theme;
-            settings.display.include_punctuation = app.include_punctuation;
-            settings.display.include_numbers = app.include_numbers;
+            settings.display.include_punctuation = include_punctuation;
+            settings.display.include_numbers = include_numbers;
             settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
             settings.display.error_stop = app.error_stop;
             settings::save_settings(&settings);
@@ -210,4 +219,17 @@ async fn run_app(cli: Cli) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_override_saved_only_after_change_in_app() {
+        let mut cli_override = true;
+        assert!(!toggle_to_save(&mut cli_override, true));
+        assert!(!toggle_to_save(&mut cli_override, false));
+        assert!(toggle_to_save(&mut cli_override, true));
+    }
 }
