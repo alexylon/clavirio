@@ -690,6 +690,7 @@ impl App {
             (KeyCode::Char('n'), _) if self.is_finished() && self.has_next_lesson() => {
                 self.next_lesson();
             }
+            _ if self.is_finished() => {}
             (KeyCode::Char(typed), _) if self.last_error_char.is_none() || !self.error_stop => {
                 self.handle_typed_char(typed);
             }
@@ -1518,6 +1519,7 @@ mod tests {
     #[test]
     fn key_stats_tracks_hits_and_misses() {
         let mut app = App::new();
+        app.error_stop = true;
         app.document = Some(Document::from_text("aa").unwrap());
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a')))); // hit
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss
@@ -1651,6 +1653,19 @@ mod tests {
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('a'));
     }
 
+    #[test]
+    fn backspace_ignored_on_finished_screen() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("a").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        assert!(app.is_finished());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        assert_eq!(app.total_count, 1);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), None);
+    }
+
     // --- search ignores ctrl keys ---
 
     #[test]
@@ -1773,6 +1788,21 @@ mod tests {
         app.handle_event(InputEvent::Tick);
         assert!(app.is_finished());
         assert!(app.end_time.is_some());
+    }
+
+    #[test]
+    fn typing_ignored_after_time_expires() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.time_limit = Some(1);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
+        app.handle_event(InputEvent::Tick);
+        assert!(app.is_finished());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        assert_eq!(app.total_count, 1);
+        assert!(app.is_finished());
     }
 
     // --- sparkline ---

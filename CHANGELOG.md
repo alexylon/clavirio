@@ -4,6 +4,7 @@
 
 ### Fixed
 - Next lesson (`n`) after finishing a lesson skipping one lesson, and not offered after the second-to-last lesson (it now follows the lesson just typed, not the menu cursor)
+- Typing or backspace on the finished screen saving duplicate history records (in timed mode, one for every key pressed after time ran out)
 
 ## [0.4.1] - 2026-03-28
 
