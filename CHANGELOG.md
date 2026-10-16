@@ -9,6 +9,7 @@
 - Trailing whitespace in custom files having to be typed (lines are now trimmed, and whitespace-only lines count as blank)
 - Custom files with only blank lines opening a session that could never finish (now rejected as empty)
 - Custom files starting with a blank line making you type the first line twice
+- An unreadable history or key-stats file being overwritten by the next session, losing all earlier records (it is now kept next to it as a timestamped `.bak` file)
 
 ## [0.4.1] - 2026-03-28
 

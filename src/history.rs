@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
 const MAX_HISTORY_RECORDS: usize = 10_000;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRecord {
@@ -24,16 +27,32 @@ fn history_path() -> PathBuf {
     crate::settings::data_dir().join("history.json")
 }
 
+/// Loads a data file that is about to be rewritten. A file that can't be read
+/// or parsed is first renamed to a timestamped `.bak` file, so neither the
+/// rewrite nor a later backup destroys it; `None` means that rename failed and
+/// nothing should be written.
+fn load_for_rewrite<T: DeserializeOwned + Default>(path: &Path) -> Option<T> {
+    let loaded = match fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).ok(),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Some(T::default()),
+        Err(_) => None,
+    };
+    if loaded.is_none() {
+        let stamp = OffsetDateTime::now_utc().unix_timestamp();
+        fs::rename(path, path.with_extension(format!("json.{stamp}.bak"))).ok()?;
+    }
+    Some(loaded.unwrap_or_default())
+}
+
 pub fn save_session(record: SessionRecord) {
     let path = history_path();
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
 
-    let mut records: Vec<SessionRecord> = fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
+    let Some(mut records) = load_for_rewrite::<Vec<SessionRecord>>(&path) else {
+        return;
+    };
 
     records.push(record);
     if records.len() > MAX_HISTORY_RECORDS {
@@ -84,7 +103,10 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
         let _ = fs::create_dir_all(parent);
     }
 
-    let mut cumulative = load_key_stats();
+    let Some(saved) = load_for_rewrite(&path) else {
+        return;
+    };
+    let mut cumulative = key_stats_by_char(saved);
     for (&ch, &(hits, misses)) in session_stats {
         let entry = cumulative.entry(ch).or_insert((0, 0));
         entry.0 = entry.0.saturating_add(hits);
@@ -108,13 +130,16 @@ pub fn load_key_stats() -> HashMap<char, (u32, u32)> {
     let path = keystats_path();
     fs::read_to_string(&path)
         .ok()
-        .and_then(|s| serde_json::from_str::<HashMap<String, (u32, u32)>>(&s).ok())
-        .map(|m| {
-            m.into_iter()
-                .filter_map(|(k, v)| k.chars().next().map(|c| (c, v)))
-                .collect()
-        })
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .map(key_stats_by_char)
         .unwrap_or_default()
+}
+
+fn key_stats_by_char(stored: HashMap<String, (u32, u32)>) -> HashMap<char, (u32, u32)> {
+    stored
+        .into_iter()
+        .filter_map(|(k, v)| k.chars().next().map(|c| (c, v)))
+        .collect()
 }
 
 pub fn load_history() -> Vec<SessionRecord> {
@@ -253,6 +278,27 @@ mod tests {
             serde_json::from_str(json).unwrap();
         assert_eq!(map["a"], (10, 5));
         assert_eq!(map["b"], (20, 3));
+    }
+
+    #[test]
+    fn unparseable_file_kept_before_rewrite() {
+        let dir = std::env::temp_dir().join(format!("clavirio-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("history.json");
+
+        let missing: Option<Vec<u32>> = load_for_rewrite(&path);
+        fs::write(&path, "not json").unwrap();
+        let unparseable: Option<Vec<u32>> = load_for_rewrite(&path);
+        let files_left: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| fs::read_to_string(entry.ok()?.path()).ok())
+            .collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(missing, Some(vec![]));
+        assert_eq!(unparseable, Some(vec![]));
+        assert_eq!(files_left, ["not json"]);
     }
 
     #[test]
