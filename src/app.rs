@@ -476,14 +476,29 @@ impl App {
     }
 
     fn resume(&mut self) {
+        self.thaw_clock();
+        self.paused = false;
+        self.pause_menu_index = 0;
+    }
+
+    fn freeze_clock(&mut self) {
+        if self.start_time.is_some() && self.end_time.is_none() && self.paused_at.is_none() {
+            self.paused_at = Some(Instant::now());
+        }
+    }
+
+    /// Starts the clock stopped by `freeze_clock()`, leaving the frozen time out
+    /// of the session and the next sparkline sample.
+    fn thaw_clock(&mut self) {
         if let Some(paused_at) = self.paused_at.take() {
             let pause_duration = Instant::now().duration_since(paused_at);
             if let Some(ref mut start) = self.start_time {
                 *start += pause_duration;
             }
+            if let Some(ref mut sample_time) = self.last_sample_time {
+                *sample_time += pause_duration;
+            }
         }
-        self.paused = false;
-        self.pause_menu_index = 0;
     }
 
     fn next_lesson(&mut self) {
@@ -626,6 +641,7 @@ impl App {
                 KeyCode::Esc => {
                     self.searching = false;
                     self.file_path_buf.clear();
+                    self.thaw_clock();
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                     self.searching = false;
@@ -647,6 +663,9 @@ impl App {
             (KeyCode::Char('f'), KeyModifiers::CONTROL)
                 if !self.paused && !self.viewing_history =>
             {
+                // The search hides the text, and so may the error of a failed
+                // load, so the session clock waits until they close
+                self.freeze_clock();
                 self.searching = true;
                 self.file_path_buf.clear();
                 self.error = None;
@@ -674,6 +693,7 @@ impl App {
                 if self.error.is_some() {
                     // Only closes the message; a session behind it carries on
                     self.error = None;
+                    self.thaw_clock();
                     return false;
                 }
                 if self.zen_mode {
@@ -693,11 +713,7 @@ impl App {
                 }
                 // Active typing: open pause menu
                 self.paused = true;
-                self.paused_at = if self.start_time.is_some() {
-                    Some(Instant::now())
-                } else {
-                    None
-                };
+                self.freeze_clock();
                 self.pause_menu_index = 0;
             }
             // An error hides the text panel, so keys mustn't reach the session behind it
@@ -1833,11 +1849,7 @@ mod tests {
     #[test]
     fn search_enter_invalid_path_sets_error() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
-        for c in "/no/such/file.txt".chars() {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
-        }
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        load_missing_file(&mut app);
         assert!(!app.searching);
         assert!(app.error.is_some());
         assert!(app.document.is_none());
@@ -1859,16 +1871,28 @@ mod tests {
 
     // --- errors shown over a session ---
 
-    #[test]
-    fn esc_on_error_keeps_session() {
-        let mut app = App::new();
-        app.document = Some(Document::from_text("abc").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+    fn load_missing_file(app: &mut App) {
         app.handle_event(InputEvent::Press(ctrl_key('f')));
         for c in "/no/such/file.txt".chars() {
             app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
         }
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+    }
+
+    /// Moves the session clock back, as if `secs` seconds had passed.
+    fn advance_time(app: &mut App, secs: u64) {
+        let gap = std::time::Duration::from_secs(secs);
+        app.start_time = app.start_time.map(|t| t - gap);
+        app.paused_at = app.paused_at.map(|t| t - gap);
+        app.last_sample_time = app.last_sample_time.map(|t| t - gap);
+    }
+
+    #[test]
+    fn esc_on_error_keeps_session() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        load_missing_file(&mut app);
         assert!(app.error.is_some());
 
         // The error hides the text, so this isn't typed
@@ -1879,6 +1903,60 @@ mod tests {
         assert_eq!(app.correct_count, 1);
         assert!(app.start_time.is_some());
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('b'));
+    }
+
+    #[test]
+    fn file_search_pauses_session_clock() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.time_limit = Some(5);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        advance_time(&mut app, 10);
+        app.handle_event(InputEvent::Tick);
+        assert!(!app.is_finished());
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.elapsed_secs() < 1.0);
+    }
+
+    #[test]
+    fn error_message_pauses_session_clock() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        load_missing_file(&mut app);
+        advance_time(&mut app, 10);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.elapsed_secs() < 1.0);
+
+        // Running again once the message is closed
+        advance_time(&mut app, 2);
+        assert!(app.elapsed_secs() >= 2.0);
+    }
+
+    #[test]
+    fn frozen_time_left_out_of_sparkline() {
+        fn type_a(app: &mut App, times: usize) {
+            for _ in 0..times {
+                app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+            }
+        }
+        let mut app = App::new();
+        app.document = Some(Document::from_text("aaaaaaaaaaaa").unwrap());
+        type_a(&mut app, 1);
+        advance_time(&mut app, 4);
+        type_a(&mut app, 5);
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        advance_time(&mut app, 30);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+
+        // 5 chars in the 2 s since the last sample is 30 wpm; counting the
+        // frozen 30 s too would make it about 2
+        advance_time(&mut app, 2);
+        type_a(&mut app, 5);
+        let sample = app.wpm_samples.last().copied().unwrap_or_default();
+        assert!((sample - 30.0).abs() < 1.0, "got {sample} wpm");
     }
 
     #[test]

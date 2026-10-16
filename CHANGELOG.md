@@ -22,6 +22,8 @@
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)
 - Esc on an error message, such as a failed `Ctrl-F` load or `w` without weak keys, wiping the stats of the session behind it (it now only closes the message)
 - Keys reaching the session hidden behind an error message, so typing counted out of sight and `r` or `Ctrl-R` restarted behind it (only Esc and the Ctrl shortcuts work while it shows, and restarting closes it)
+- The session clock running while the file search or an error message covered the text, lowering WPM and letting a timed session run out behind them (the clock now waits until they close)
+- A dip in the WPM graph right after resuming from the pause menu (the paused time is now left out)
 
 ## [0.4.1] - 2026-03-28
 
