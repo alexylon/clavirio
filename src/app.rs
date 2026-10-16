@@ -264,6 +264,8 @@ pub struct App {
 }
 
 impl App {
+    pub const DEFAULT_WORD_COUNT: usize = 100;
+
     pub fn new() -> Self {
         Self {
             document: None,
@@ -293,7 +295,7 @@ impl App {
             paused: false,
             pause_menu_index: 0,
             paused_at: None,
-            word_count: 100,
+            word_count: Self::DEFAULT_WORD_COUNT,
             time_limit: None,
             menu_mode: MenuMode::Lessons,
             selected_practice: 0,
@@ -732,6 +734,13 @@ impl App {
         false
     }
 
+    pub const SPECIAL_PRACTICE: &'static [(&'static str, fn(&mut Self))] = &[
+        ("Weak Keys", Self::start_weak_key_practice),
+        ("Common Bigrams (english 1k)", Self::start_bigram_practice),
+        ("Quotes", Self::start_quote_practice),
+        ("Zen", Self::start_zen_mode),
+    ];
+
     pub const TIMED_OPTIONS: &'static [(u64, WordList)] = &[
         (30, WordList::English200),
         (60, WordList::English200),
@@ -740,7 +749,9 @@ impl App {
     ];
 
     pub fn practice_item_count() -> usize {
-        4 + crate::words::WordList::all().len() + Self::TIMED_OPTIONS.len()
+        Self::SPECIAL_PRACTICE.len()
+            + crate::words::WordList::all().len()
+            + Self::TIMED_OPTIONS.len()
     }
 
     pub fn lesson_count_for_layout(&self) -> usize {
@@ -824,21 +835,16 @@ impl App {
             }
             MenuMode::Practice => {
                 let word_lists = crate::words::WordList::all();
-                match self.selected_practice {
-                    0 => self.start_weak_key_practice(),
-                    1 => self.start_bigram_practice(),
-                    2 => self.start_quote_practice(),
-                    3 => self.start_zen_mode(),
-                    idx => {
-                        let idx = idx - 4;
-                        if let Some(&list) = word_lists.get(idx) {
-                            self.start_word_practice(list);
-                        } else if let Some(&(secs, list)) =
-                            Self::TIMED_OPTIONS.get(idx - word_lists.len())
-                        {
-                            self.start_timed_practice(secs, list);
-                        }
-                    }
+                let specials = Self::SPECIAL_PRACTICE.len();
+                let idx = self.selected_practice;
+                if let Some(&(_, start)) = Self::SPECIAL_PRACTICE.get(idx) {
+                    start(self);
+                } else if let Some(&list) = word_lists.get(idx - specials) {
+                    self.start_word_practice(list);
+                } else if let Some(&(secs, list)) =
+                    Self::TIMED_OPTIONS.get(idx - specials - word_lists.len())
+                {
+                    self.start_timed_practice(secs, list);
                 }
             }
         }
@@ -904,7 +910,9 @@ impl App {
     }
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
-        let estimated_words = ((secs as usize) * 80 / 60) + 20;
+        const WORDS_PER_MINUTE: usize = 80;
+        const SPARE_WORDS: usize = 20;
+        let estimated_words = secs as usize * WORDS_PER_MINUTE / 60 + SPARE_WORDS;
         let text = self.generate_word_text(list, estimated_words);
         let slug = list.label().replace(['/', ' '], "_");
         self.start_practice_from_text(
@@ -1837,13 +1845,13 @@ mod tests {
     fn select_word_practice_from_menu() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
-        app.selected_practice = 4; // 0=Weak Keys, 1=Bigrams, 2=Quotes, 3=Zen, 4=first word list
+        app.selected_practice = App::SPECIAL_PRACTICE.len(); // first word list
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
         let doc = app.document.as_ref().unwrap();
         let word_count: usize = doc.lines.iter().map(|l| l.split_whitespace().count()).sum();
-        assert_eq!(word_count, 100);
+        assert_eq!(word_count, App::DEFAULT_WORD_COUNT);
     }
 
     #[test]

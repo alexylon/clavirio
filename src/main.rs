@@ -94,8 +94,13 @@ async fn shutdown_signal() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
-        let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
-        let mut hup = signal(SignalKind::hangup()).expect("SIGHUP handler");
+        let (Ok(mut term), Ok(mut hup)) = (
+            signal(SignalKind::terminate()),
+            signal(SignalKind::hangup()),
+        ) else {
+            // Without the handlers, quitting relies on Esc/Ctrl-C, as on Windows
+            return std::future::pending().await;
+        };
         tokio::select! {
             _ = term.recv() => {}
             _ = hup.recv() => {}
@@ -142,7 +147,7 @@ async fn run_app(cli: Cli) -> Result<()> {
     if let Some(secs) = cli.time {
         app.start_timed_practice(secs, list);
     } else if let Some(maybe_count) = cli.words {
-        app.word_count = maybe_count.unwrap_or(100);
+        app.word_count = maybe_count.unwrap_or(App::DEFAULT_WORD_COUNT);
         app.start_word_practice(list);
     } else if let Some(path) = cli.file {
         app.load_file(&path);

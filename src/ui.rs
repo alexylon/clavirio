@@ -687,14 +687,13 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Practice => {
                     let word_lists = crate::words::WordList::all();
                     let timed_options = crate::app::App::TIMED_OPTIONS;
-                    let special_items =
-                        ["Weak Keys", "Common Bigrams (english 1k)", "Quotes", "Zen"];
+                    let special_items = crate::app::App::SPECIAL_PRACTICE;
                     let mix_suffix = mix_label_suffix(app.include_punctuation, app.include_numbers);
                     let suffix_len = mix_suffix.len();
                     let max_label: usize =
                         special_items
                             .iter()
-                            .map(|s| s.len())
+                            .map(|(title, _)| title.len())
                             .chain(word_lists.iter().map(|wl| {
                                 wl.category().len() + 2 + wl.label().len() + suffix_len + 1
                             }))
@@ -715,7 +714,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
                         if i < special_items.len() {
-                            let title = special_items[i];
+                            let title = special_items[i].0;
                             let current_len = title.len();
                             let mut spans = vec![
                                 Span::styled(
@@ -1036,12 +1035,12 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             Style::new().fg(tc.text).bold(),
         )));
 
+        let lessons = crate::lessons::lessons_for_layout(app.layout);
         for (i, r) in records.iter().enumerate().skip(scroll).take(visible_slots) {
             let display_ts = friendly_timestamp(&r.timestamp);
             let mins = (r.duration_secs as u64) / 60;
             let secs = (r.duration_secs as u64) % 60;
             let status = if r.completed { "" } else { "*" };
-            let lessons = crate::lessons::lessons_for_layout(app.layout);
             let lesson_display = if r.id.is_empty() {
                 "—".to_string()
             } else if let Some(lesson) = lessons.iter().find(|l| l.id == r.id) {

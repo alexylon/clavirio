@@ -319,15 +319,12 @@ pub fn generate_quote_text(word_count: usize) -> String {
         let quote = quotes[indices[pos]];
         pos += 1;
         for word in quote.split_whitespace() {
-            let need_new_line = match lines.last() {
-                None => true,
-                Some(line) => line.len() + 1 + word.len() > LINE_WIDTH,
-            };
-            if need_new_line {
-                lines.push(word.to_string());
-            } else {
-                lines.last_mut().unwrap().push(' ');
-                lines.last_mut().unwrap().push_str(word);
+            match lines.last_mut() {
+                Some(line) if line.len() + 1 + word.len() <= LINE_WIDTH => {
+                    line.push(' ');
+                    line.push_str(word);
+                }
+                _ => lines.push(word.to_string()),
             }
             total_words += 1;
         }

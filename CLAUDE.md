@@ -25,7 +25,7 @@ cargo test test_name           # Run a single test by name
 
 **Event loop** (`main.rs`): Single-threaded Tokio runtime. `run_input_loop()` spawns a blocking task reading crossterm events, sends them via mpsc channel. Main loop uses `tokio::select!` over events and shutdown signals, calling `app.handle_event()` then `draw()`.
 
-**App state** (`app.rs`, 1250+ lines — largest module): Contains `App` struct (all mutable state) and `Document` struct (text content, line/char position tracking). `handle_event()` is the central dispatcher — routes input based on current screen (menu, typing, finished, history, search, paused). Also holds per-key error stats (`key_stats: HashMap<char, (correct, total)>`).
+**App state** (`app.rs`, 1250+ lines — largest module): Contains `App` struct (all mutable state) and `Document` struct (text content, line/char position tracking). `handle_event()` is the central dispatcher — routes input based on current screen (menu, typing, finished, history, search, paused). Also holds per-key error stats (`key_stats: HashMap<char, (hits, misses)>`).
 
 **Rendering** (`ui.rs`): Stateless rendering via `draw()`. Uses `compute_regions()` to split the terminal into header, body, and keyboard areas. Themes are defined as `ThemeColors` structs with named color constants. Keyboard rendering calculates per-key rects with variable widths.
 
