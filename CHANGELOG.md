@@ -5,6 +5,10 @@
 ### Fixed
 - Next lesson (`n`) after finishing a lesson skipping one lesson, and not offered after the second-to-last lesson (it now follows the lesson just typed, not the menu cursor)
 - Typing or backspace on the finished screen saving duplicate history records (in timed mode, one for every key pressed after time ran out)
+- Tabs and other characters that can't be typed (a byte order mark, stray carriage returns, control characters) blocking custom files (tabs now become 4 spaces; the rest are removed)
+- Trailing whitespace in custom files having to be typed (lines are now trimmed, and whitespace-only lines count as blank)
+- Custom files with only blank lines opening a session that could never finish (now rejected as empty)
+- Custom files starting with a blank line making you type the first line twice
 
 ## [0.4.1] - 2026-03-28
 

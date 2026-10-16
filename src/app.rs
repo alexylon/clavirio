@@ -42,25 +42,36 @@ pub struct Document {
 }
 
 impl Document {
+    const TAB_WIDTH: usize = 4;
+    const BYTE_ORDER_MARK: char = '\u{feff}';
+
     pub fn from_text(text: &str) -> Result<Self, String> {
-        let lines: Vec<String> = text.lines().map(String::from).collect();
-        if lines.is_empty() {
+        let text = text.strip_prefix(Self::BYTE_ORDER_MARK).unwrap_or(text);
+        let tab = " ".repeat(Self::TAB_WIDTH);
+        let lines: Vec<String> = text
+            .split(['\n', '\r'])
+            .map(|line| {
+                let line: String = line
+                    .replace('\t', &tab)
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .collect();
+                line.trim_end().to_string()
+            })
+            .collect();
+        if lines.iter().all(String::is_empty) {
             return Err("Text is empty".into());
         }
-        let first_line = lines
-            .iter()
-            .find(|l| !l.is_empty())
-            .cloned()
-            .unwrap_or_default();
-        let current_chars = first_line.chars().collect();
-        Ok(Self {
+        let mut doc = Self {
             lines,
             line_idx: 0,
             char_idx: 0,
-            current_line: first_line,
-            current_chars,
+            current_line: String::new(),
+            current_chars: Vec::new(),
             progress: Progress::Active,
-        })
+        };
+        doc.reset();
+        Ok(doc)
     }
 
     pub fn load(raw_path: &str) -> Result<Self, String> {
@@ -93,14 +104,9 @@ impl Document {
     }
 
     pub fn reset(&mut self) {
-        self.line_idx = 0;
+        self.line_idx = self.lines.iter().position(|l| !l.is_empty()).unwrap_or(0);
         self.char_idx = 0;
-        self.current_line = self
-            .lines
-            .iter()
-            .find(|l| !l.is_empty())
-            .cloned()
-            .unwrap_or_default();
+        self.current_line = self.lines.get(self.line_idx).cloned().unwrap_or_default();
         self.current_chars = self.current_line.chars().collect();
         self.progress = Progress::Active;
     }
@@ -1122,6 +1128,36 @@ mod tests {
     }
 
     #[test]
+    fn leading_blank_lines_not_typed_twice() {
+        let mut doc = Document::from_text("\nab\ncd").unwrap();
+        doc.advance();
+        doc.advance();
+        assert_eq!(doc.current_line, "cd");
+
+        doc.reset();
+        doc.advance();
+        doc.advance();
+        assert_eq!(doc.current_line, "cd");
+    }
+
+    #[test]
+    fn from_text_expands_tabs() {
+        let doc = Document::from_text("\tx").unwrap();
+        let indent = " ".repeat(Document::TAB_WIDTH);
+        assert_eq!(doc.current_line, format!("{indent}x"));
+    }
+
+    #[test]
+    fn from_text_drops_untypeable_characters() {
+        let mut doc = Document::from_text("\u{feff}ab \t\r\n \t\rc\u{c}d").unwrap();
+        assert_eq!(doc.current_line, "ab");
+        doc.advance();
+        doc.advance();
+        assert_eq!(doc.current_line, "cd");
+        assert!(Document::from_text(" \t\r\n\u{c}").is_err());
+    }
+
+    #[test]
     fn advance_through_single_line() {
         let mut doc = Document::from_text("ab").unwrap();
         assert_eq!(doc.expected_char(), Some('a'));
@@ -2085,10 +2121,7 @@ mod tests {
 
     #[test]
     fn document_from_text_all_blank_lines() {
-        let doc = Document::from_text("\n\n\n");
-        assert!(doc.is_ok());
-        let doc = doc.unwrap();
-        assert_eq!(doc.current_line, "");
+        assert!(Document::from_text("\n\n\n").is_err());
     }
 
     #[test]
