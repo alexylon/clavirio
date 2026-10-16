@@ -10,6 +10,10 @@
 - Custom files with only blank lines opening a session that could never finish (now rejected as empty)
 - Custom files starting with a blank line making you type the first line twice
 - An unreadable history or key-stats file being overwritten by the next session, losing all earlier records (it is now kept next to it as a timestamped `.bak` file)
+- `Ctrl-F` while paused or in the history view starting a file search you couldn't see (it now does nothing there)
+- A weak space in the weak-key drill adding extra spaces after words
+- The history view crashing on a timestamp with non-ASCII characters
+- `w` after a session without mistakes ignoring your saved weak keys
 
 ## [0.4.1] - 2026-03-28
 

@@ -199,6 +199,27 @@ fn weakest_chars(stats: &HashMap<char, (u32, u32)>, count: usize) -> Vec<(char, 
     keys
 }
 
+fn weak_keys(
+    session: &HashMap<char, (u32, u32)>,
+    saved: impl FnOnce() -> HashMap<char, (u32, u32)>,
+) -> Vec<char> {
+    const DRILL_KEYS: usize = 10;
+    let drillable = |stats: &HashMap<char, (u32, u32)>| -> Vec<char> {
+        weakest_chars(stats, usize::MAX)
+            .into_iter()
+            .map(|(ch, _, _)| ch)
+            .filter(|ch| !ch.is_whitespace() && !ch.is_control())
+            .take(DRILL_KEYS)
+            .collect()
+    };
+    let weak = drillable(session);
+    if weak.is_empty() {
+        drillable(&saved())
+    } else {
+        weak
+    }
+}
+
 pub struct App {
     pub document: Option<Document>,
     pub file_path_buf: String,
@@ -612,7 +633,9 @@ impl App {
         }
 
         match (key.code, key.modifiers) {
-            (KeyCode::Char('f'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('f'), KeyModifiers::CONTROL)
+                if !self.paused && !self.viewing_history =>
+            {
                 self.searching = true;
                 self.file_path_buf.clear();
                 self.error = None;
@@ -972,17 +995,9 @@ impl App {
     }
 
     pub fn start_weak_key_practice(&mut self) {
-        let weak: Vec<char> = if !self.key_stats.is_empty() {
-            weakest_chars(&self.key_stats, 10)
-        } else {
-            let cumulative = crate::history::load_key_stats();
-            weakest_chars(&cumulative, 10)
-        }
-        .iter()
-        .map(|&(ch, _, _)| ch)
-        .collect();
+        let weak = weak_keys(&self.key_stats, crate::history::load_key_stats);
         if weak.is_empty() {
-            self.error = Some("No weak keys yet — complete a session first".into());
+            self.error = Some("No weak keys yet — keep practicing".into());
             return;
         }
         let text = crate::words::generate_weak_key_text(&weak, self.word_count);
@@ -1338,6 +1353,22 @@ mod tests {
         let mut app = App::new();
         app.handle_event(InputEvent::Press(ctrl_key('f')));
         assert!(app.searching);
+    }
+
+    #[test]
+    fn ctrl_f_ignored_while_paused_or_in_history() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("hello").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.paused);
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        assert!(!app.searching);
+
+        let mut app = App::new();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        assert!(app.viewing_history);
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        assert!(!app.searching);
     }
 
     #[test]
@@ -2134,6 +2165,26 @@ mod tests {
         assert_eq!(result[0].0, 'c');
         assert_eq!(result[1].0, 'b');
         assert_eq!(result[2].0, 'a');
+    }
+
+    #[test]
+    fn weak_keys_fall_back_to_saved_stats() {
+        let saved = || HashMap::from([('b', (1, 3))]);
+        assert_eq!(weak_keys(&HashMap::from([('a', (5, 0))]), saved), ['b']);
+        assert_eq!(weak_keys(&HashMap::from([('c', (1, 1))]), saved), ['c']);
+    }
+
+    #[test]
+    fn weak_keys_leave_out_whitespace() {
+        let saved = || HashMap::from([('q', (1, 3))]);
+        assert_eq!(weak_keys(&HashMap::from([(' ', (1, 3))]), saved), ['q']);
+
+        let mut session: HashMap<char, (u32, u32)> =
+            "abcdefghij".chars().map(|c| (c, (1, 1))).collect();
+        session.insert(' ', (0, 5));
+        let weak = weak_keys(&session, saved);
+        assert_eq!(weak.len(), 10);
+        assert!(!weak.contains(&' '));
     }
 
     #[test]

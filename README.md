@@ -54,7 +54,7 @@ Each lesson introduces only 2 new keys and uses only characters from earlier les
 - **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
 - **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
 - **Error feedback** — two modes: error stop off (default) lets you type past mistakes with backspace correction within the current word; error stop on blocks until corrected
-- **Weak key tracking** — per-key accuracy saved across sessions; press `w` after a drill to practice that session's weakest keys, or select Weak Keys from the menu for cumulative stats
+- **Weak key tracking** — per-key accuracy saved across sessions; press `w` after a drill to practice that session's weakest keys (or your saved ones if it had none), or select Weak Keys from the menu for cumulative stats
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
 - **Progress tracking** — remembers your lesson and menu mode across sessions
 - **Custom text** — load any file via `Ctrl-F` or `--file`

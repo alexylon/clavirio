@@ -982,14 +982,13 @@ pub(crate) fn friendly_timestamp(ts: &str) -> String {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     // Expected format: YYYY-MM-DDThh:mm:ss
-    if ts.len() >= 19 {
-        let mo: usize = ts[5..7].parse().unwrap_or(1);
-        let day = &ts[8..10];
-        let time = &ts[11..16]; // hh:mm
-        let month = MONTHS.get(mo.wrapping_sub(1)).unwrap_or(&"???");
-        format!("{month} {day}  {time}")
-    } else {
-        ts.to_string()
+    match (ts.get(5..7), ts.get(8..10), ts.get(11..16)) {
+        (Some(mo), Some(day), Some(time)) if ts.len() >= 19 => {
+            let mo: usize = mo.parse().unwrap_or(1);
+            let month = MONTHS.get(mo.wrapping_sub(1)).unwrap_or(&"???");
+            format!("{month} {day}  {time}")
+        }
+        _ => ts.to_string(),
     }
 }
 
@@ -1129,6 +1128,14 @@ mod tests {
     #[test]
     fn friendly_timestamp_short_string_passthrough() {
         assert_eq!(friendly_timestamp("short"), "short");
+    }
+
+    #[test]
+    fn friendly_timestamp_non_ascii_shown_as_is() {
+        assert_eq!(
+            friendly_timestamp("2026-1é-16T15:50:00"),
+            "2026-1é-16T15:50:00"
+        );
     }
 
     #[test]
