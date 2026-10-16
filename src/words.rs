@@ -131,13 +131,16 @@ fn random_pick_and_wrap(pool: &[&str], word_count: usize) -> String {
     wrap_words(words)
 }
 
-/// Build a weighted pool: repeat each word by its score, then pick randomly.
-fn weighted_text(scored: &[(&str, usize)], word_count: usize) -> String {
-    let weighted: Vec<&str> = scored
+/// Build a weighted pool: repeat each word by its score.
+fn weighted_pool<'a>(scored: &[(&'a str, usize)]) -> Vec<&'a str> {
+    scored
         .iter()
         .flat_map(|&(w, score)| std::iter::repeat_n(w, score))
-        .collect();
-    random_pick_and_wrap(&weighted, word_count)
+        .collect()
+}
+
+fn weighted_text(scored: &[(&str, usize)], word_count: usize) -> String {
+    random_pick_and_wrap(&weighted_pool(scored), word_count)
 }
 
 pub fn generate_text(list: WordList, word_count: usize) -> String {
@@ -159,7 +162,7 @@ const PCT_BASE: usize = 100;
 const NUMBER_CHANCE_PCT: usize = 15;
 const PUNCTUATION_CHANCE_PCT: usize = 20;
 // Higher rates for weak key drills where the point is to practice those chars
-const WEAK_NUMBER_CHANCE_PCT: usize = 30;
+const WEAK_LONE_CHAR_CHANCE_PCT: usize = 30;
 const WEAK_PUNCTUATION_CHANCE_PCT: usize = 40;
 
 pub fn generate_text_mixed(
@@ -220,70 +223,70 @@ pub fn generate_bigram_text(word_count: usize) -> String {
 }
 
 pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String {
-    if weak_chars.is_empty() {
-        return generate_text(WordList::English1k, word_count);
-    }
-
-    let alpha_chars: Vec<char> = weak_chars
+    let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
+    let letters: Vec<char> = weak_chars
         .iter()
         .copied()
-        .filter(|c| c.is_alphabetic())
+        .filter(|c| c.is_alphabetic() && !c.is_uppercase())
         .collect();
     let punct_chars: Vec<char> = weak_chars
         .iter()
         .copied()
         .filter(|c| !c.is_alphanumeric())
         .collect();
-    let digit_chars: Vec<char> = weak_chars
+    // The word list is lowercase, so a weak capital is drilled by capitalising the
+    // words that start with its letter. Digits, and capitals no word starts with,
+    // are drilled on their own.
+    let mut capital_starts: Vec<char> = Vec::new();
+    let mut lone_chars: Vec<char> = weak_chars
         .iter()
         .copied()
         .filter(|c| c.is_ascii_digit())
         .collect();
+    for &c in weak_chars.iter().filter(|c| c.is_uppercase()) {
+        let letter = c.to_ascii_lowercase();
+        if c.is_ascii() && pool.iter().any(|w| w.starts_with(letter)) {
+            capital_starts.push(letter);
+        } else {
+            lone_chars.push(c);
+        }
+    }
+    let starts_with_capital = |w: &str| w.starts_with(|c| capital_starts.contains(&c));
 
-    let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
     let scored: Vec<(&str, usize)> = pool
         .iter()
         .filter_map(|&w| {
-            let score = w.chars().filter(|c| alpha_chars.contains(c)).count();
+            let score = w.chars().filter(|c| letters.contains(c)).count()
+                + usize::from(starts_with_capital(w));
             if score > 0 { Some((w, score)) } else { None }
         })
         .collect();
-
-    if punct_chars.is_empty() && digit_chars.is_empty() {
-        if scored.is_empty() {
-            return generate_text(WordList::English1k, word_count);
-        }
-        return weighted_text(&scored, word_count);
-    }
-
-    let base_pool: Vec<&str> = if scored.is_empty() {
+    let base_pool = if scored.is_empty() {
         pool
     } else {
-        scored
-            .iter()
-            .flat_map(|&(w, score)| std::iter::repeat_n(w, score))
-            .collect()
+        weighted_pool(&scored)
     };
     if base_pool.is_empty() {
-        return generate_text(WordList::English1k, word_count);
+        return String::new();
     }
 
     let mut rng = Rng::from_time();
     let words: Vec<String> = (0..word_count)
         .map(|_| {
-            let word = base_pool[rng.usize(base_pool.len())];
-
-            if !digit_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_NUMBER_CHANCE_PCT {
-                let d = digit_chars[rng.usize(digit_chars.len())];
-                return d.to_string();
+            if !lone_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_LONE_CHAR_CHANCE_PCT {
+                return lone_chars[rng.usize(lone_chars.len())].to_string();
             }
 
+            let mut word = base_pool[rng.usize(base_pool.len())].to_string();
+            if starts_with_capital(&word) {
+                if let Some(first) = word.get_mut(..1) {
+                    first.make_ascii_uppercase();
+                }
+            }
             if !punct_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_PUNCTUATION_CHANCE_PCT {
-                let p = punct_chars[rng.usize(punct_chars.len())];
-                return format!("{word}{p}");
+                word.push(punct_chars[rng.usize(punct_chars.len())]);
             }
-
-            word.to_string()
+            word
         })
         .collect();
 
@@ -442,6 +445,22 @@ mod tests {
         let text = generate_weak_key_text(&['z', 'x'], 50);
         let has_target = text.chars().any(|c| c == 'z' || c == 'x');
         assert!(has_target, "text should contain weak key chars");
+    }
+
+    #[test]
+    fn weak_key_text_drills_capitals() {
+        let text = generate_weak_key_text(&['A'], 100);
+        assert!(text.split_whitespace().all(|w| w.starts_with('A')));
+    }
+
+    #[test]
+    fn weak_key_text_drills_unmatched_capitals_alone() {
+        let z_starts_no_word = !ENGLISH_1K.split_whitespace().any(|w| w.starts_with('z'));
+        assert!(z_starts_no_word, "needs a letter no word starts with");
+        let text = generate_weak_key_text(&['Z', 'É'], 200);
+        let words: Vec<&str> = text.split_whitespace().collect();
+        assert!(words.contains(&"Z"));
+        assert!(words.contains(&"É"));
     }
 
     #[test]
