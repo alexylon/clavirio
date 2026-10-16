@@ -13,6 +13,8 @@
 - `Ctrl-F` while paused or in the history view starting a file search you couldn't see (it now does nothing there)
 - A weak space in the weak-key drill adding extra spaces after words
 - Weak capitals, such as `A` from the Shift lessons, never appearing in the weak-key drill (it now capitalises the words starting with that letter, or drills the capital on its own when no word does)
+- The weak-key drill mostly practising your common weak letters and hardly the rare ones (each weak key now gets about an equal share, though digits and other characters drilled on their own fill at most every other word)
+- Weak brackets and quotes in the weak-key drill being added after a word, like `word(` (they now go around it, like `(word)`)
 - The history view crashing on a timestamp with non-ASCII characters
 - `w` after a session without mistakes ignoring your saved weak keys
 - `Ctrl-R` while paused leaving the pause menu open after restarting

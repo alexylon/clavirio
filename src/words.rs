@@ -161,9 +161,6 @@ const PARENS: &str = "()";
 const PCT_BASE: usize = 100;
 const NUMBER_CHANCE_PCT: usize = 15;
 const PUNCTUATION_CHANCE_PCT: usize = 20;
-// Higher rates for weak key drills where the point is to practice those chars
-const WEAK_LONE_CHAR_CHANCE_PCT: usize = 30;
-const WEAK_PUNCTUATION_CHANCE_PCT: usize = 40;
 
 pub fn generate_text_mixed(
     list: WordList,
@@ -222,73 +219,132 @@ pub fn generate_bigram_text(word_count: usize) -> String {
     weighted_text(&scored, word_count)
 }
 
+/// Words that hold a weak key, repeated by how many weak letters each has. The
+/// word list is lowercase, so `capital` drills a capital by capitalising the
+/// words that start with its letter.
+struct WordDrill<'a> {
+    words: Vec<&'a str>,
+    capital: bool,
+}
+
+impl WordDrill<'_> {
+    fn pick(&self, rng: &mut Rng) -> String {
+        let mut word = self.words[rng.usize(self.words.len())].to_string();
+        if self.capital {
+            if let Some(first) = word.get_mut(..1) {
+                first.make_ascii_uppercase();
+            }
+        }
+        word
+    }
+}
+
+/// How the weak-key drill practises one key: with words that hold it, on a word
+/// (punctuation), or on its own (digits, and keys no word has).
+enum KeyDrill<'a> {
+    Words(WordDrill<'a>),
+    Punctuation(char),
+    Alone(char),
+}
+
+/// Punctuation drilled around a word, like `(word)`, instead of after it.
+const PAIRED_PUNCTUATION: &[(char, char)] = &[
+    ('(', ')'),
+    ('[', ']'),
+    ('{', '}'),
+    ('<', '>'),
+    ('"', '"'),
+    ('\'', '\''),
+];
+
+fn with_punctuation(word: &str, punct: char) -> String {
+    match PAIRED_PUNCTUATION
+        .iter()
+        .find(|&&(open, close)| punct == open || punct == close)
+    {
+        Some((open, close)) => format!("{open}{word}{close}"),
+        None => format!("{word}{punct}"),
+    }
+}
+
 pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String {
     let pool: Vec<&str> = ENGLISH_1K.split_whitespace().collect();
+    if pool.is_empty() {
+        return String::new();
+    }
     let letters: Vec<char> = weak_chars
         .iter()
         .copied()
         .filter(|c| c.is_alphabetic() && !c.is_uppercase())
         .collect();
-    let punct_chars: Vec<char> = weak_chars
-        .iter()
-        .copied()
-        .filter(|c| !c.is_alphanumeric())
-        .collect();
-    // The word list is lowercase, so a weak capital is drilled by capitalising the
-    // words that start with its letter. Digits, and capitals no word starts with,
-    // are drilled on their own.
-    let mut capital_starts: Vec<char> = Vec::new();
-    let mut lone_chars: Vec<char> = weak_chars
-        .iter()
-        .copied()
-        .filter(|c| c.is_ascii_digit())
-        .collect();
-    for &c in weak_chars.iter().filter(|c| c.is_uppercase()) {
-        let letter = c.to_ascii_lowercase();
-        if c.is_ascii() && pool.iter().any(|w| w.starts_with(letter)) {
-            capital_starts.push(letter);
-        } else {
-            lone_chars.push(c);
-        }
-    }
-    let starts_with_capital = |w: &str| w.starts_with(|c| capital_starts.contains(&c));
+    let weak_letters_in = |w: &str| w.chars().filter(|c| letters.contains(c)).count();
 
-    let scored: Vec<(&str, usize)> = pool
+    let drills: Vec<KeyDrill> = weak_chars
         .iter()
-        .filter_map(|&w| {
-            let score = w.chars().filter(|c| letters.contains(c)).count()
-                + usize::from(starts_with_capital(w));
-            if score > 0 { Some((w, score)) } else { None }
+        .map(|&c| {
+            if !c.is_alphanumeric() {
+                return KeyDrill::Punctuation(c);
+            }
+            if !c.is_alphabetic() {
+                return KeyDrill::Alone(c);
+            }
+            let capital = c.is_ascii_uppercase();
+            let letter = c.to_ascii_lowercase();
+            let scored: Vec<(&str, usize)> = pool
+                .iter()
+                .filter(|w| {
+                    if capital {
+                        w.starts_with(letter)
+                    } else {
+                        w.contains(letter)
+                    }
+                })
+                .map(|&w| (w, weak_letters_in(w).max(1)))
+                .collect();
+            if scored.is_empty() {
+                KeyDrill::Alone(c)
+            } else {
+                KeyDrill::Words(WordDrill {
+                    words: weighted_pool(&scored),
+                    capital,
+                })
+            }
         })
         .collect();
-    let base_pool = if scored.is_empty() {
-        pool
-    } else {
-        weighted_pool(&scored)
+    if drills.is_empty() {
+        return random_pick_and_wrap(&pool, word_count);
+    }
+
+    // Punctuation goes on, and bare characters are spaced out with, words that
+    // drill a weak letter where there are any
+    let word_drills: Vec<&WordDrill> = drills
+        .iter()
+        .filter_map(|drill| match drill {
+            KeyDrill::Words(word_drill) => Some(word_drill),
+            _ => None,
+        })
+        .collect();
+    let any_word = |rng: &mut Rng| match word_drills.len() {
+        0 => pool[rng.usize(pool.len())].to_string(),
+        n => word_drills[rng.usize(n)].pick(rng),
     };
-    if base_pool.is_empty() {
-        return String::new();
-    }
 
+    // Each word drills one weak key, so every key gets an equal share, but two
+    // bare characters never come in a row
     let mut rng = Rng::from_time();
-    let words: Vec<String> = (0..word_count)
-        .map(|_| {
-            if !lone_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_LONE_CHAR_CHANCE_PCT {
-                return lone_chars[rng.usize(lone_chars.len())].to_string();
-            }
-
-            let mut word = base_pool[rng.usize(base_pool.len())].to_string();
-            if starts_with_capital(&word) {
-                if let Some(first) = word.get_mut(..1) {
-                    first.make_ascii_uppercase();
-                }
-            }
-            if !punct_chars.is_empty() && rng.usize(PCT_BASE) < WEAK_PUNCTUATION_CHANCE_PCT {
-                word.push(punct_chars[rng.usize(punct_chars.len())]);
-            }
-            word
-        })
-        .collect();
+    let mut words: Vec<String> = Vec::with_capacity(word_count);
+    let mut last_alone = false;
+    for _ in 0..word_count {
+        let drill = &drills[rng.usize(drills.len())];
+        let alone = matches!(drill, KeyDrill::Alone(_)) && !last_alone;
+        words.push(match drill {
+            KeyDrill::Words(word_drill) => word_drill.pick(&mut rng),
+            KeyDrill::Punctuation(punct) => with_punctuation(&any_word(&mut rng), *punct),
+            KeyDrill::Alone(c) if alone => c.to_string(),
+            KeyDrill::Alone(_) => any_word(&mut rng),
+        });
+        last_alone = alone;
+    }
 
     wrap_words(words)
 }
@@ -451,6 +507,48 @@ mod tests {
     fn weak_key_text_drills_capitals() {
         let text = generate_weak_key_text(&['A'], 100);
         assert!(text.split_whitespace().all(|w| w.starts_with('A')));
+    }
+
+    #[test]
+    fn weak_key_text_gives_rare_keys_an_equal_share() {
+        let text = generate_weak_key_text(&['q', 'e', 't'], 300);
+        let with_q = text.split_whitespace().filter(|w| w.contains('q')).count();
+        assert!(with_q >= 50, "only {with_q} of 300 words have a q");
+    }
+
+    #[test]
+    fn weak_key_text_never_puts_two_bare_chars_together() {
+        let text = generate_weak_key_text(&['5'], 200);
+        let tokens: Vec<&str> = text.split_whitespace().collect();
+        assert!(tokens.contains(&"5"));
+        assert!(tokens.windows(2).all(|pair| pair != ["5", "5"]));
+    }
+
+    #[test]
+    fn weak_key_text_puts_punctuation_on_weak_letter_words() {
+        let text = generate_weak_key_text(&['q', ';'], 200);
+        let with_semicolon: Vec<&str> = text
+            .split_whitespace()
+            .filter(|w| w.ends_with(';'))
+            .collect();
+        assert!(!with_semicolon.is_empty());
+        assert!(with_semicolon.iter().all(|w| w.contains('q')));
+    }
+
+    #[test]
+    fn weak_key_text_puts_brackets_around_words() {
+        let text = generate_weak_key_text(&['('], 50);
+        assert!(
+            text.split_whitespace()
+                .all(|w| w.starts_with('(') && w.ends_with(')'))
+        );
+    }
+
+    #[test]
+    fn weak_key_text_keeps_lowercase_when_its_capital_is_weak_too() {
+        let text = generate_weak_key_text(&['a', 'A'], 300);
+        assert!(text.split_whitespace().any(|w| w.starts_with('a')));
+        assert!(text.split_whitespace().any(|w| w.starts_with('A')));
     }
 
     #[test]
