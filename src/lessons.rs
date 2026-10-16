@@ -141,10 +141,6 @@ pub fn lessons_for_layout(layout: KeyboardLayout) -> Vec<&'static Lesson> {
     specific.iter().chain(SHARED_LESSONS.iter()).collect()
 }
 
-pub fn lesson_count() -> usize {
-    LESSON_META.len()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,11 +160,6 @@ mod tests {
             assert_eq!(QWERTY_LESSONS[i].id, DVORAK_LESSONS[i].id);
             assert_eq!(QWERTY_LESSONS[i].id, COLEMAK_LESSONS[i].id);
         }
-    }
-
-    #[test]
-    fn total_lesson_count() {
-        assert_eq!(lesson_count(), 27);
     }
 
     #[test]

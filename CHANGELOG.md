@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Next lesson (`n`) after finishing a lesson skipping one lesson, and not offered after the second-to-last lesson (it now follows the lesson just typed, not the menu cursor)
+
 ## [0.4.1] - 2026-03-28
 
 ### Changed

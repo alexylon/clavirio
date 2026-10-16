@@ -397,8 +397,16 @@ impl App {
     }
 
     pub fn has_next_lesson(&self) -> bool {
-        self.menu_mode == MenuMode::Lessons
-            && self.selected_lesson + 1 < self.lesson_count_for_layout()
+        self.find_next_lesson().is_some()
+    }
+
+    fn find_next_lesson(&self) -> Option<(usize, &'static crate::lessons::Lesson)> {
+        if self.is_practice_mode() {
+            return None;
+        }
+        let lessons = crate::lessons::lessons_for_layout(self.layout);
+        let next = lessons.iter().position(|l| l.id == self.lesson_id)? + 1;
+        lessons.get(next).map(|&lesson| (next, lesson))
     }
 
     pub fn save_on_exit(&self) {
@@ -442,14 +450,14 @@ impl App {
     }
 
     fn next_lesson(&mut self) {
+        let Some((next, lesson)) = self.find_next_lesson() else {
+            return;
+        };
         if !self.is_finished() {
             self.save_history(false);
         }
-        let lessons = crate::lessons::lessons_for_layout(self.layout);
-        self.selected_lesson = (self.selected_lesson + 1).min(lessons.len().saturating_sub(1));
-        if let Some(lesson) = lessons.get(self.selected_lesson) {
-            self.start_lesson(lesson);
-        }
+        self.selected_lesson = next;
+        self.start_lesson(lesson);
     }
 
     fn go_to_menu(&mut self) {
@@ -1046,10 +1054,8 @@ impl App {
                     self.end_time = Some(Instant::now());
                     self.wpm_samples.push(self.wpm());
                     self.save_history(true);
-                    if !self.is_practice_mode() {
-                        let lesson_count = crate::lessons::lesson_count();
-                        self.selected_lesson =
-                            (self.selected_lesson + 1).min(lesson_count.saturating_sub(1));
+                    if let Some((next, _)) = self.find_next_lesson() {
+                        self.selected_lesson = next;
                     }
                 }
             }
@@ -1819,7 +1825,10 @@ mod tests {
     #[test]
     fn lesson_mode_count() {
         let app = App::new();
-        assert_eq!(app.current_menu_count(), crate::lessons::lesson_count());
+        assert_eq!(
+            app.current_menu_count(),
+            crate::lessons::lessons_for_layout(app.layout).len()
+        );
     }
 
     #[test]
@@ -2018,17 +2027,30 @@ mod tests {
     }
 
     #[test]
-    fn next_lesson_advances() {
+    fn next_lesson_follows_finished_lesson() {
         let mut app = App::new();
-        app.selected_lesson = 0;
         app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
-        assert!(app.document.is_some());
-        // Complete the document manually
         app.document.as_mut().unwrap().progress = Progress::Finished;
-        app.end_time = Some(Instant::now());
-        app.next_lesson();
+        // Finishing a lesson moves the menu cursor on to the next one
+        app.selected_lesson = 1;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('n'))));
+        let lessons = crate::lessons::lessons_for_layout(app.layout);
+        assert_eq!(app.lesson_id, lessons[1].id);
         assert_eq!(app.selected_lesson, 1);
-        assert!(app.document.is_some());
+    }
+
+    #[test]
+    fn next_lesson_offered_up_to_last_lesson() {
+        let mut app = App::new();
+        let last = app.lesson_count_for_layout() - 1;
+        app.selected_lesson = last - 1;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.document.as_mut().unwrap().progress = Progress::Finished;
+        app.selected_lesson = last;
+        assert!(app.has_next_lesson());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('n'))));
+        assert_eq!(app.selected_lesson, last);
+        assert!(!app.has_next_lesson());
     }
 
     #[test]

@@ -101,7 +101,7 @@ Lessons 1-21 are **layout-specific** — 7 lessons per row (home, top, bottom), 
 
 ### Prebuilt binary
 
-Download from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest) (macOS, Linux, Windows):
+Download from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest) — standalone binaries for macOS (Intel + Apple Silicon), Linux (x86_64), and Windows (x86_64):
 
 ```bash
 # macOS / Linux
