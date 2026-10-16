@@ -112,6 +112,9 @@ pub struct Settings {
 }
 
 pub(crate) fn data_dir() -> PathBuf {
+    if cfg!(test) {
+        return std::env::temp_dir().join("clavirio-test-data");
+    }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".into());
