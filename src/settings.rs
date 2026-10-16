@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
+use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -121,6 +123,27 @@ pub(crate) fn data_dir() -> PathBuf {
     PathBuf::from(home).join(".clavirio")
 }
 
+/// Loads a data file that is about to be rewritten, using `parse`. A file that
+/// can't be read or parsed is first renamed to a timestamped `.bak` file, so
+/// neither the rewrite nor a later backup destroys it; `None` means that rename
+/// failed and nothing should be written.
+pub(crate) fn load_for_rewrite<T: Default>(
+    path: &Path,
+    parse: impl FnOnce(&str) -> Option<T>,
+) -> Option<T> {
+    let loaded = match fs::read_to_string(path) {
+        Ok(text) => parse(&text),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Some(T::default()),
+        Err(_) => None,
+    };
+    if loaded.is_none() {
+        let stamp = OffsetDateTime::now_utc().unix_timestamp();
+        let name = path.file_name()?.to_string_lossy();
+        fs::rename(path, path.with_file_name(format!("{name}.{stamp}.bak"))).ok()?;
+    }
+    Some(loaded.unwrap_or_default())
+}
+
 fn settings_path() -> PathBuf {
     data_dir().join("settings.toml")
 }
@@ -137,6 +160,9 @@ pub fn save_settings(settings: &Settings) {
     let path = settings_path();
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
+    }
+    if load_for_rewrite(&path, |text| toml::from_str::<Settings>(text).ok()).is_none() {
+        return;
     }
     if let Ok(content) = toml::to_string_pretty(settings) {
         let tmp = path.with_extension("toml.tmp");
@@ -207,5 +233,28 @@ mod tests {
     fn theme_display() {
         assert_eq!(Theme::Dark.to_string(), "dark");
         assert_eq!(Theme::Light.to_string(), "light");
+    }
+
+    #[test]
+    fn unparseable_file_kept_before_rewrite() {
+        let dir = std::env::temp_dir().join(format!("clavirio-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.toml");
+        let parse = |text: &str| toml::from_str::<Settings>(text).ok();
+        let broken = "[display]\ntheme = \"blue\"\n";
+
+        let missing = load_for_rewrite(&path, parse);
+        fs::write(&path, broken).unwrap();
+        let unparseable = load_for_rewrite(&path, parse);
+        let files_left: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| fs::read_to_string(entry.ok()?.path()).ok())
+            .collect();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(missing.is_some());
+        assert!(unparseable.is_some());
+        assert_eq!(files_left, [broken]);
     }
 }

@@ -17,6 +17,7 @@
 - `Ctrl-R` while paused leaving the pause menu open after restarting
 - Quotes after the first starting with a space you had to type
 - Timed practice running out of text, and ending early, for typists above about 100 wpm (the text now lasts to about 200 wpm)
+- An unreadable `settings.toml` being overwritten at the next settings change, losing all saved settings (it is now kept next to it as a timestamped `.bak` file)
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)
 
 ## [0.4.1] - 2026-03-28
