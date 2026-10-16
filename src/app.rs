@@ -468,6 +468,7 @@ impl App {
 
     fn restart(&mut self) {
         self.resume();
+        self.error = None;
         if let Some(doc) = self.document.as_mut() {
             doc.reset();
         }
@@ -670,19 +671,19 @@ impl App {
                     self.go_to_menu();
                     return false;
                 }
+                if self.error.is_some() {
+                    // Only closes the message; a session behind it carries on
+                    self.error = None;
+                    return false;
+                }
                 if self.zen_mode {
                     self.save_history(true);
                     self.reset_session();
                     self.lesson_title.clear();
                     return false;
                 }
-                if self.document.is_none() && self.error.is_none() {
+                if self.document.is_none() {
                     return true;
-                }
-                if self.error.is_some() {
-                    self.error = None;
-                    self.reset_session();
-                    return false;
                 }
                 if self.is_finished() {
                     self.document = None;
@@ -699,6 +700,8 @@ impl App {
                 };
                 self.pause_menu_index = 0;
             }
+            // An error hides the text panel, so keys mustn't reach the session behind it
+            _ if self.error.is_some() => {}
             _ if self.paused => {
                 return self.handle_pause_key(key.code);
             }
@@ -716,10 +719,10 @@ impl App {
             _ if self.zen_mode => {
                 self.handle_zen_key(key.code);
             }
-            (KeyCode::Char('q'), _) if self.document.is_none() && self.error.is_none() => {
+            (KeyCode::Char('q'), _) if self.document.is_none() => {
                 return true;
             }
-            _ if self.document.is_none() && self.error.is_none() => {
+            _ if self.document.is_none() => {
                 self.handle_menu_key(key.code);
             }
             (KeyCode::Char('r'), _) if self.is_finished() => {
@@ -1852,6 +1855,44 @@ mod tests {
         assert!(app.error.is_none());
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "sample.txt");
+    }
+
+    // --- errors shown over a session ---
+
+    #[test]
+    fn esc_on_error_keeps_session() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        for c in "/no/such/file.txt".chars() {
+            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+        }
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        assert!(app.error.is_some());
+
+        // The error hides the text, so this isn't typed
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        assert!(app.error.is_none());
+        assert!(!app.paused);
+        assert_eq!(app.correct_count, 1);
+        assert!(app.start_time.is_some());
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('b'));
+    }
+
+    #[test]
+    fn restart_clears_error() {
+        let mut app = App::new();
+        app.document = Some(Document::from_text("a").unwrap());
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.error = Some("No weak keys yet".into()); // as after `w` with none
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        assert!(app.is_finished());
+        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        assert!(app.error.is_none());
+        assert!(!app.is_finished());
     }
 
     // --- word practice ---

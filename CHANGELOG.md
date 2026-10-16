@@ -20,6 +20,8 @@
 - An unreadable `settings.toml` being overwritten at the next settings change, losing all saved settings (it is now kept next to it as a timestamped `.bak` file)
 - `-p` and `-n` being saved to `settings.toml`, so punctuation or numbers stayed on in later runs without the flag (they now apply to that run only)
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)
+- Esc on an error message, such as a failed `Ctrl-F` load or `w` without weak keys, wiping the stats of the session behind it (it now only closes the message)
+- Keys reaching the session hidden behind an error message, so typing counted out of sight and `r` or `Ctrl-R` restarted behind it (only Esc and the Ctrl shortcuts work while it shows, and restarting closes it)
 
 ## [0.4.1] - 2026-03-28
 
