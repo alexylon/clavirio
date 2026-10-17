@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::app::{App, Progress};
+use crate::app::{App, MenuMode, Progress};
 use crate::keyboard::*;
 use crate::settings::Theme;
 
@@ -28,9 +28,13 @@ const HEADER_SEPARATOR: &str = " \u{b7} ";
 /// The widest stats a session usually shows. Their space is kept at least this
 /// wide, so the title and the finger hint don't move as the numbers change.
 const HEADER_STATS_TEMPLATE: &str = "000 wpm \u{b7} 100% acc \u{b7} 000 err \u{b7} 00:00 ";
-/// The menu's rows around its items: the panel frame, a blank row, the controls
-/// and the settings
-const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + 3;
+/// The blank row between the menu's items and its controls
+const MENU_GAP_ROWS: u16 = 1;
+/// The menu's controls and settings, when each fits on one row
+const MENU_FOOTER_MIN_ROWS: u16 = 2;
+/// The menu's rows around its items when its controls and settings each fit on
+/// one row
+const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + MENU_GAP_ROWS + MENU_FOOTER_MIN_ROWS;
 const MIN_MENU_ITEMS: u16 = 5;
 /// The typing panel's rows: its frame, the current line and the next 2
 const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
@@ -39,7 +43,8 @@ const ZEN_TEXT_ROWS: u16 = 3;
 const ZEN_FOOTER_ROWS: u16 = 2;
 /// Enough for 5 menu items, the typing view, the results and the pause menu,
 /// but only 2 history sessions. The keyboard is hidden on terminals too short
-/// for this and the keyboard.
+/// for this and the keyboard. Where the menu's controls wrap onto more rows, it
+/// shows fewer items and scrolls.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const WIDEST_ROW_KEYS: u16 = 13;
 const MAX_KEY_WIDTH: u16 = 9;
@@ -698,10 +703,17 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         return;
     }
 
+    let footer_lines = if app.document.is_none() && !app.zen_mode {
+        let width = block.inner(area).width as usize;
+        menu_footer(app, keyboard_fits(frame.area().height), width, tc)
+    } else {
+        Vec::new()
+    };
+    let menu_chrome_rows = PANEL_FRAME_ROWS + MENU_GAP_ROWS + footer_lines.len() as u16;
     let ideal_height = if app.zen_mode {
         PANEL_FRAME_ROWS + ZEN_TEXT_ROWS + ZEN_FOOTER_ROWS
     } else if app.document.is_none() {
-        (app.current_menu_count() as u16) + MENU_CHROME_ROWS
+        (app.current_menu_count() as u16) + menu_chrome_rows
     } else {
         TYPING_PANEL_ROWS
     };
@@ -767,13 +779,12 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
     match &app.document {
         None => {
-            use crate::app::MenuMode;
             let total_items = app.current_menu_count();
             let cursor = match app.menu_mode {
                 MenuMode::Lessons => app.selected_lesson,
                 MenuMode::Practice => app.selected_practice,
             };
-            let visible_slots = inner.height.saturating_sub(MENU_CHROME_ROWS) as usize;
+            let visible_slots = inner.height.saturating_sub(menu_chrome_rows) as usize;
 
             let scroll = if visible_slots >= total_items || cursor < visible_slots / 2 {
                 0
@@ -904,70 +915,8 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     }
                 }
             }
-            let on_off = |on: bool| if on { "on" } else { "off" };
             lines.push(Line::from(""));
-            let mode_label = match app.menu_mode {
-                MenuMode::Lessons => "lessons",
-                MenuMode::Practice => "practice",
-            };
-            lines.push(Line::from(vec![
-                Span::styled("Enter", Style::new().fg(tc.accent)),
-                Span::styled(" start  ", Style::new().fg(tc.dim_text)),
-                Span::styled("m", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {mode_label}  "), Style::new().fg(tc.dim_text)),
-                Span::styled("h", Style::new().fg(tc.accent)),
-                Span::styled(" history  ", Style::new().fg(tc.dim_text)),
-                Span::styled("t", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {}  ", app.theme), Style::new().fg(tc.dim_text)),
-                Span::styled("l", Style::new().fg(tc.accent)),
-                Span::styled(format!(" {}  ", app.layout), Style::new().fg(tc.dim_text)),
-                Span::styled("^F", Style::new().fg(tc.accent)),
-                Span::styled(" file  ", Style::new().fg(tc.dim_text)),
-                Span::styled("q", Style::new().fg(tc.accent)),
-                Span::styled("/", Style::new().fg(tc.dim_text)),
-                Span::styled("Esc", Style::new().fg(tc.accent)),
-                Span::styled(" quit", Style::new().fg(tc.dim_text)),
-            ]));
-            let (fingers_key_fg, fingers_fg) = tc.toggle_colors(app.show_hints);
-            let (keyboard_key_fg, keyboard_fg) =
-                tc.toggle_colors(keyboard_fits(frame.area().height));
-            let mut toggle_spans = vec![
-                Span::styled("1", Style::new().fg(fingers_key_fg)),
-                Span::styled(
-                    format!(" fingers {}  ", on_off(app.show_fingers)),
-                    Style::new().fg(fingers_fg),
-                ),
-                Span::styled("2", Style::new().fg(tc.accent)),
-                Span::styled(
-                    format!(" hints {}  ", on_off(app.show_hints)),
-                    Style::new().fg(tc.dim_text),
-                ),
-                Span::styled("3", Style::new().fg(keyboard_key_fg)),
-                Span::styled(
-                    format!(" keyboard {}  ", on_off(app.show_keyboard)),
-                    Style::new().fg(keyboard_fg),
-                ),
-                Span::styled("4", Style::new().fg(tc.accent)),
-                Span::styled(
-                    format!(" error stop {}  ", on_off(app.error_stop)),
-                    Style::new().fg(tc.dim_text),
-                ),
-            ];
-            if app.menu_mode == MenuMode::Practice {
-                toggle_spans.extend([
-                    Span::styled("5", Style::new().fg(tc.accent)),
-                    Span::styled(
-                        format!(" punct {}  ", on_off(app.include_punctuation)),
-                        Style::new().fg(tc.dim_text),
-                    ),
-                    Span::styled("6", Style::new().fg(tc.accent)),
-                    Span::styled(
-                        format!(" num {}", on_off(app.include_numbers)),
-                        Style::new().fg(tc.dim_text),
-                    ),
-                ]);
-            }
-            lines.push(Line::from(toggle_spans));
+            lines.extend(footer_lines);
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {
@@ -1146,6 +1095,85 @@ fn visible_range(widths: &[usize], anchor: usize, max: usize) -> Range<usize> {
         used += widths[start];
     }
     start..end
+}
+
+/// The menu's controls and settings lines, wrapped to `width` between their
+/// shortcuts
+fn menu_footer(
+    app: &App,
+    keyboard_fits: bool,
+    width: usize,
+    tc: &ThemeColors,
+) -> Vec<Line<'static>> {
+    let shortcut = |key: &'static str, label: String, key_fg: Color, label_fg: Color| {
+        vec![
+            Span::styled(key, Style::new().fg(key_fg)),
+            Span::styled(format!(" {label}"), Style::new().fg(label_fg)),
+        ]
+    };
+    let control = |key, label: &str| shortcut(key, label.to_string(), tc.accent, tc.dim_text);
+    let on_off = |on: bool| if on { "on" } else { "off" };
+    let toggle = |key, name: &str, on: bool, enabled: bool| {
+        let (key_fg, label_fg) = tc.toggle_colors(enabled);
+        shortcut(key, format!("{name} {}", on_off(on)), key_fg, label_fg)
+    };
+
+    let mode_label = match app.menu_mode {
+        MenuMode::Lessons => "lessons",
+        MenuMode::Practice => "practice",
+    };
+    let quit = vec![
+        Span::styled("q", Style::new().fg(tc.accent)),
+        Span::styled("/", Style::new().fg(tc.dim_text)),
+        Span::styled("Esc", Style::new().fg(tc.accent)),
+        Span::styled(" quit", Style::new().fg(tc.dim_text)),
+    ];
+    let controls = vec![
+        control("Enter", "start"),
+        control("m", mode_label),
+        control("h", "history"),
+        control("t", &app.theme.to_string()),
+        control("l", &app.layout.to_string()),
+        control("^F", "file"),
+        quit,
+    ];
+    let mut settings = vec![
+        toggle("1", "fingers", app.show_fingers, app.show_hints),
+        toggle("2", "hints", app.show_hints, true),
+        toggle("3", "keyboard", app.show_keyboard, keyboard_fits),
+        toggle("4", "error stop", app.error_stop, true),
+    ];
+    if app.menu_mode == MenuMode::Practice {
+        settings.push(toggle("5", "punct", app.include_punctuation, true));
+        settings.push(toggle("6", "num", app.include_numbers, true));
+    }
+
+    let mut lines = wrap_groups(controls, width);
+    lines.extend(wrap_groups(settings, width));
+    lines
+}
+
+/// Lines of `groups`, two spaces apart, with as many groups on each line as fit
+/// in `width`. A group is never split, so one wider than `width` is cut off.
+fn wrap_groups(groups: Vec<Vec<Span<'static>>>, width: usize) -> Vec<Line<'static>> {
+    const GAP: &str = "  ";
+    let mut lines: Vec<Vec<Span>> = Vec::new();
+    let mut used = 0;
+    for group in groups {
+        let group_width: usize = group.iter().map(Span::width).sum();
+        match lines.last_mut() {
+            Some(line) if used + GAP.width() + group_width <= width => {
+                line.push(Span::raw(GAP));
+                line.extend(group);
+                used += GAP.width() + group_width;
+            }
+            _ => {
+                lines.push(group);
+                used = group_width;
+            }
+        }
+    }
+    lines.into_iter().map(Line::from).collect()
 }
 
 fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
@@ -1413,6 +1441,36 @@ mod tests {
             assert!(keys.x >= KEYBOARD_FRAME_COLS, "width {width}");
             assert!(keys.right() + KEYBOARD_FRAME_COLS <= width, "width {width}");
         }
+    }
+
+    #[test]
+    fn menu_shows_all_shortcuts_on_narrow_terminals() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        let tc = ThemeColors::from_theme(Theme::Dark);
+
+        let rows = render(70, 40, |frame| {
+            let regions = compute_regions(frame.area(), false);
+            draw_text_panel(frame, &app, regions.text_area, &tc)
+        });
+        let text = rows.join("\n");
+
+        assert!(
+            text.contains("q/Esc quit") && text.contains("6 num off"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn groups_wrap_whole_within_width() {
+        let group = |text: &'static str| vec![Span::raw(text)];
+        let lines = wrap_groups(
+            vec![group("aaaa"), group("bb"), group("cccccc"), group("d")],
+            9,
+        );
+        let rows: Vec<String> = lines.iter().map(Line::to_string).collect();
+
+        assert_eq!(rows, ["aaaa  bb", "cccccc  d"]);
     }
 
     #[test]
