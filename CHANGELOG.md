@@ -28,6 +28,7 @@
 - Keys reaching the session hidden behind an error message, so typing counted out of sight and `r` or `Ctrl-R` restarted behind it (only Esc and the Ctrl shortcuts work while it shows, and restarting closes it)
 - The session clock running while the file search or an error message covered the text, lowering WPM and letting a timed session run out behind them (the clock now waits until they close)
 - A dip in the WPM graph right after resuming from the pause menu (the paused time is now left out)
+- Failed saves of settings, sessions or key stats going unnoticed, for example on a full disk or a read-only `~/.clavirio` (the app now shows a message, or prints one after quitting)
 
 ## [0.4.1] - 2026-03-28
 

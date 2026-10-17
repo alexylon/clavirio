@@ -6,7 +6,13 @@ use time::OffsetDateTime;
 
 pub(crate) fn data_dir() -> PathBuf {
     if cfg!(test) {
-        return std::env::temp_dir().join("clavirio-test-data");
+        // A folder per test (each runs on a thread named after it), so a test can
+        // make its own saves fail
+        let test = std::thread::current()
+            .name()
+            .unwrap_or_default()
+            .replace("::", "-");
+        return std::env::temp_dir().join(format!("clavirio-test-data-{test}"));
     }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -16,23 +22,24 @@ pub(crate) fn data_dir() -> PathBuf {
 
 /// Loads a file that is about to be rewritten. If its content can't be parsed
 /// or isn't valid UTF-8, it is first renamed to `<name>.<timestamp>.bak` so it
-/// isn't lost. Returns `None` if the file can't be read or that rename fails,
-/// meaning the file must not be rewritten.
+/// isn't lost. An error means the file couldn't be read or renamed, and must
+/// not be rewritten.
 pub(crate) fn load_for_rewrite<T: Default>(
     path: &Path,
     parse: impl FnOnce(&str) -> Option<T>,
-) -> Option<T> {
+) -> io::Result<T> {
     let loaded = match fs::read(path) {
         Ok(bytes) => std::str::from_utf8(&bytes).ok().and_then(parse),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Some(T::default()),
-        Err(_) => return None,
+        Err(e) => return Err(e),
     };
     if loaded.is_none() {
         let stamp = OffsetDateTime::now_utc().unix_timestamp();
-        let name = path.file_name()?.to_string_lossy();
-        fs::rename(path, path.with_file_name(format!("{name}.{stamp}.bak"))).ok()?;
+        let mut backup = path.as_os_str().to_os_string();
+        backup.push(format!(".{stamp}.bak"));
+        fs::rename(path, backup)?;
     }
-    Some(loaded.unwrap_or_default())
+    Ok(loaded.unwrap_or_default())
 }
 
 /// Replaces `path` with `content` so that a crash or power cut leaves either the
@@ -96,8 +103,8 @@ mod tests {
         let files_left = file_contents(&dir);
         let _ = fs::remove_dir_all(&dir);
 
-        assert!(missing.is_some());
-        assert!(unparseable.is_some());
+        assert!(missing.is_ok());
+        assert!(unparseable.is_ok());
         assert_eq!(files_left, [broken.as_bytes()]);
     }
 
@@ -112,7 +119,7 @@ mod tests {
         let files_left = file_contents(&dir);
         let _ = fs::remove_dir_all(&dir);
 
-        assert!(loaded.is_some());
+        assert!(loaded.is_ok());
         assert_eq!(files_left, [broken]);
     }
 
@@ -126,7 +133,7 @@ mod tests {
         let still_there = path.is_dir();
         let _ = fs::remove_dir_all(&dir);
 
-        assert!(loaded.is_none());
+        assert!(loaded.is_err());
         assert!(still_there);
     }
 

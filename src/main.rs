@@ -88,7 +88,10 @@ async fn main() -> Result<()> {
     execute!(stdout(), LeaveAlternateScreen)?;
     disable_raw_mode()?;
 
-    result
+    if let Some(message) = result? {
+        eprintln!("{message}");
+    }
+    Ok(())
 }
 
 async fn shutdown_signal() {
@@ -122,7 +125,9 @@ fn toggle_to_save(cli_override: &mut bool, value: bool) -> bool {
     value && !*cli_override
 }
 
-async fn run_app(cli: Cli) -> Result<()> {
+/// Runs the app until it quits, and returns a message to print once the
+/// terminal is restored.
+async fn run_app(cli: Cli) -> Result<Option<String>> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
@@ -175,7 +180,6 @@ async fn run_app(cli: Cli) -> Result<()> {
         };
 
         let Some(event) = event else {
-            app.save_on_exit();
             break;
         };
 
@@ -206,7 +210,9 @@ async fn run_app(cli: Cli) -> Result<()> {
             settings.display.include_numbers = include_numbers;
             settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
             settings.display.error_stop = app.error_stop;
-            settings::save_settings(&settings);
+            if let Err(e) = settings::save_settings(&settings) {
+                app.show_error(format!("Couldn't save the settings: {e}"));
+            }
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);
                 grid_map = build_keycode_grid_map(&rows);
@@ -219,7 +225,7 @@ async fn run_app(cli: Cli) -> Result<()> {
         })?;
     }
 
-    Ok(())
+    Ok(app.save_on_exit())
 }
 
 #[cfg(test)]

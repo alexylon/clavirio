@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 const MAX_HISTORY_RECORDS: usize = 10_000;
@@ -25,24 +26,21 @@ fn history_path() -> PathBuf {
     crate::storage::data_dir().join("history.json")
 }
 
-fn load_json_for_rewrite<T: DeserializeOwned + Default>(path: &Path) -> Option<T> {
+fn load_json_for_rewrite<T: DeserializeOwned + Default>(path: &Path) -> io::Result<T> {
     crate::storage::load_for_rewrite(path, |text| serde_json::from_str(text).ok())
 }
 
-pub fn save_session(record: SessionRecord) {
+pub fn save_session(record: SessionRecord) -> io::Result<()> {
     let path = history_path();
-    let Some(mut records) = load_json_for_rewrite::<Vec<SessionRecord>>(&path) else {
-        return;
-    };
+    let mut records = load_json_for_rewrite::<Vec<SessionRecord>>(&path)?;
 
     records.push(record);
     if records.len() > MAX_HISTORY_RECORDS {
         records.drain(..records.len() - MAX_HISTORY_RECORDS);
     }
 
-    if let Ok(json) = serde_json::to_string_pretty(&records) {
-        let _ = crate::storage::write_atomically(&path, &json);
-    }
+    let json = serde_json::to_string_pretty(&records)?;
+    crate::storage::write_atomically(&path, &json)
 }
 
 pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> usize {
@@ -71,14 +69,12 @@ fn keystats_path() -> PathBuf {
     crate::storage::data_dir().join("keystats.json")
 }
 
-pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
+pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) -> io::Result<()> {
     if session_stats.is_empty() {
-        return;
+        return Ok(());
     }
     let path = keystats_path();
-    let Some(saved) = load_json_for_rewrite(&path) else {
-        return;
-    };
+    let saved = load_json_for_rewrite(&path)?;
     let mut cumulative = key_stats_by_char(saved);
     for (&ch, &(hits, misses)) in session_stats {
         let entry = cumulative.entry(ch).or_insert((0, 0));
@@ -90,9 +86,8 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
-    if let Ok(json) = serde_json::to_string_pretty(&map) {
-        let _ = crate::storage::write_atomically(&path, &json);
-    }
+    let json = serde_json::to_string_pretty(&map)?;
+    crate::storage::write_atomically(&path, &json)
 }
 
 pub fn load_key_stats() -> HashMap<char, (u32, u32)> {

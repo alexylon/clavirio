@@ -256,6 +256,7 @@ pub struct App {
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
     ignore_keys_until: Option<Instant>,
+    save_error: Option<String>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
     pub include_punctuation: bool,
@@ -306,6 +307,7 @@ impl App {
             last_sample_count: 0,
             last_sample_time: None,
             ignore_keys_until: None,
+            save_error: None,
             zen_mode: false,
             zen_lines: Vec::new(),
             include_punctuation: false,
@@ -348,13 +350,13 @@ impl App {
         self.total_count - self.correct_count
     }
 
-    fn save_history(&self, completed: bool) {
+    fn save_history(&mut self, completed: bool) {
         if self.total_count == 0 || self.lesson_id.is_empty() {
             return;
         }
         let elapsed = self.elapsed_secs();
         let accuracy = self.correct_count as f64 / self.total_count as f64 * 100.0;
-        crate::history::save_session(crate::history::SessionRecord {
+        let session = crate::history::save_session(crate::history::SessionRecord {
             timestamp: chrono_now(),
             wpm: self.wpm(),
             accuracy,
@@ -364,7 +366,10 @@ impl App {
             completed,
             id: self.lesson_id.clone(),
         });
-        crate::history::save_key_stats(&self.key_stats);
+        let key_stats = crate::history::save_key_stats(&self.key_stats);
+        if let Err(e) = session.and(key_stats) {
+            self.save_error = Some(format!("Couldn't save this session: {e}"));
+        }
     }
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
@@ -443,10 +448,13 @@ impl App {
         lessons.get(next).map(|&lesson| (next, lesson))
     }
 
-    pub fn save_on_exit(&self) {
+    /// Saves a session that hasn't finished, and returns the message of a failed
+    /// save to show after quitting.
+    pub fn save_on_exit(&mut self) -> Option<String> {
         if (self.document.is_some() && !self.is_finished()) || self.zen_mode {
             self.save_history(false);
         }
+        self.save_error.take()
     }
 
     fn reset_session(&mut self) {
@@ -501,6 +509,13 @@ impl App {
         }
     }
 
+    /// Shows `message` in place of the text, so the session clock waits until it
+    /// closes.
+    pub fn show_error(&mut self, message: String) {
+        self.freeze_clock();
+        self.error = Some(message);
+    }
+
     fn next_lesson(&mut self) {
         let Some((next, lesson)) = self.find_next_lesson() else {
             return;
@@ -548,10 +563,7 @@ impl App {
                 self.resume();
                 self.next_lesson();
             }
-            KeyCode::Char('q' | 'Q') => {
-                self.save_on_exit();
-                return true;
-            }
+            KeyCode::Char('q' | 'Q') => return true,
             _ => {}
         }
         false
@@ -567,10 +579,7 @@ impl App {
                 self.next_lesson();
             }
             Some(("Menu", _)) => self.go_to_menu(),
-            Some(("Quit", _)) => {
-                self.save_on_exit();
-                return true;
-            }
+            Some(("Quit", _)) => return true,
             _ => {}
         }
         false
@@ -611,7 +620,7 @@ impl App {
     }
 
     pub fn handle_event(&mut self, event: InputEvent) -> bool {
-        match event {
+        let quit = match event {
             InputEvent::Tick => {
                 if let Some(until) = self.highlight_until {
                     if Instant::now() >= until {
@@ -626,7 +635,15 @@ impl App {
                 self.check_time_limit();
                 self.handle_key(key)
             }
+        };
+        if quit {
+            return true;
         }
+        // Shown only now, so the action that saved, such as going to the menu, can't clear it
+        if let Some(message) = self.save_error.take() {
+            self.show_error(message);
+        }
+        false
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
@@ -646,7 +663,6 @@ impl App {
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                     self.searching = false;
                     self.file_path_buf.clear();
-                    self.save_on_exit();
                     return true;
                 }
                 _ if key.modifiers == KeyModifiers::CONTROL => {}
@@ -675,10 +691,7 @@ impl App {
                     self.restart();
                 }
             }
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                self.save_on_exit();
-                return true;
-            }
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => return true,
             // Keys still being typed when the time ran out mustn't act on the results screen
             _ if self.ignore_keys_until.is_some_and(|t| Instant::now() < t) => {}
             (KeyCode::Esc, KeyModifiers::NONE) => {
@@ -1719,7 +1732,7 @@ mod tests {
 
     #[test]
     fn save_on_exit_does_nothing_without_document() {
-        let app = App::new();
+        let mut app = App::new();
         app.save_on_exit();
     }
 
@@ -1730,6 +1743,23 @@ mod tests {
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
         app.save_on_exit();
+    }
+
+    #[test]
+    fn failed_save_shown_after_leaving_session() {
+        let data_dir = crate::storage::data_dir();
+        let _ = fs::remove_dir_all(&data_dir);
+        fs::write(&data_dir, "").unwrap(); // a file where the data folder goes, so saves fail
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.lesson_id = "test".into();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc))); // pause menu to main menu
+        let _ = fs::remove_file(&data_dir);
+
+        assert!(app.document.is_none());
+        assert!(app.error.is_some());
     }
 
     // --- vim-style keys ---

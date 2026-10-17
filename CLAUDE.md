@@ -45,6 +45,7 @@ cargo test test_name           # Run a single test by name
 
 - **No unsafe code** anywhere in the project
 - Settings, history and key stats use **atomic file writes** through `storage::write_atomically` (a temporary file in the same folder, flushed to disk, then renamed over the old one)
+- Failed saves are shown, never dropped: in the app through `App::error` once the event that saved has been handled, and on quitting printed after the terminal is restored
 - Document skips blank lines transparently when advancing
 - Keyboard events during typing are **blocked on error** until backspace is pressed
 - The `App` struct syncs display toggles back to `Settings` in the main loop (not inside `handle_event`)

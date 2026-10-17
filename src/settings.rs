@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use crate::storage::{data_dir, load_for_rewrite, write_atomically};
@@ -125,14 +126,11 @@ pub fn load_settings() -> Settings {
         .unwrap_or_default()
 }
 
-pub fn save_settings(settings: &Settings) {
+pub fn save_settings(settings: &Settings) -> io::Result<()> {
     let path = settings_path();
-    if load_for_rewrite(&path, |text| toml::from_str::<Settings>(text).ok()).is_none() {
-        return;
-    }
-    if let Ok(content) = toml::to_string_pretty(settings) {
-        let _ = write_atomically(&path, &content);
-    }
+    load_for_rewrite(&path, |text| toml::from_str::<Settings>(text).ok())?;
+    let content = toml::to_string_pretty(settings).map_err(io::Error::other)?;
+    write_atomically(&path, &content)
 }
 
 #[cfg(test)]
