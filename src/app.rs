@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::input::InputEvent;
 use crate::settings::{KeyboardLayout, Theme};
@@ -1106,7 +1107,7 @@ impl App {
                 self.correct_count += 1;
                 self.total_count += 1;
                 if let Some(line) = self.zen_lines.last_mut() {
-                    if line.len() + 1 >= ZEN_LINE_WIDTH {
+                    if line.width() + c.width().unwrap_or(0) >= ZEN_LINE_WIDTH {
                         self.zen_lines.push(c.to_string());
                     } else {
                         line.push(c);
@@ -2484,6 +2485,16 @@ mod tests {
         assert_eq!(app.correct_count, 2);
         assert_eq!(app.zen_lines.last().unwrap(), "hi");
         assert!(app.start_time.is_some());
+    }
+
+    #[test]
+    fn zen_lines_break_by_columns_not_bytes() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        for _ in 0..40 {
+            app.handle_event(InputEvent::Press(key_event(KeyCode::Char('é'))));
+        }
+        assert_eq!(app.zen_lines.len(), 1);
     }
 
     #[test]

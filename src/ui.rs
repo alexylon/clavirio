@@ -734,19 +734,18 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             .saturating_sub(PANEL_FRAME_ROWS + ZEN_FOOTER_ROWS)
             .max(1) as usize;
         let start = app.zen_lines.len().saturating_sub(visible);
+        let text_width = block.inner(inner).width as usize;
         for (i, line) in app.zen_lines[start..].iter().enumerate() {
-            let is_current = start + i == app.zen_lines.len() - 1;
-            if is_current {
-                lines.push(Line::from(vec![
-                    Span::styled(line.clone(), Style::new().fg(tc.correct)),
-                    Span::styled(" ", Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg)),
-                ]));
-            } else {
-                lines.push(Line::from(Span::styled(
-                    line.clone(),
-                    Style::new().fg(tc.correct),
-                )));
+            let mut cells = char_cells(line, Style::new().fg(tc.correct));
+            if start + i == app.zen_lines.len() - 1 {
+                cells.push(Span::styled(
+                    " ",
+                    Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
+                ));
             }
+            // A line too wide shows its end, the text typed last
+            let anchor = cells.len().saturating_sub(1);
+            lines.push(fit_line(cells, anchor, text_width, tc));
         }
         while lines.len() < visible {
             lines.push(Line::from(""));
@@ -1029,16 +1028,19 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
             let mut lines = vec![fit_line(cells, cursor, text_width, tc)];
             for upcoming in doc.upcoming_lines(2) {
-                let cells = upcoming
-                    .chars()
-                    .map(|ch| Span::styled(ch.to_string(), Style::new().fg(tc.dim_text)))
-                    .collect();
+                let cells = char_cells(upcoming, Style::new().fg(tc.dim_text));
                 lines.push(fit_line(cells, 0, text_width, tc));
             }
 
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
     }
+}
+
+fn char_cells(text: &str, style: Style) -> Vec<Span<'static>> {
+    text.chars()
+        .map(|ch| Span::styled(ch.to_string(), style))
+        .collect()
 }
 
 /// The part of a line, given as one span per character, that fits in `width`
@@ -1441,6 +1443,23 @@ mod tests {
             assert!(keys.x >= KEYBOARD_FRAME_COLS, "width {width}");
             assert!(keys.right() + KEYBOARD_FRAME_COLS <= width, "width {width}");
         }
+    }
+
+    #[test]
+    fn zen_line_wider_than_the_panel_scrolls_to_the_cursor() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        app.zen_lines = vec![format!("{}end", "a".repeat(50))];
+        let tc = ThemeColors::from_theme(Theme::Dark);
+
+        let rows = render(40, 20, |frame| {
+            draw_text_panel(frame, &app, frame.area(), &tc)
+        });
+
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("…aaa") && row.contains("end"))
+        );
     }
 
     #[test]
