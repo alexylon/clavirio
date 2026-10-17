@@ -347,6 +347,9 @@ pub struct App {
     save_message: Option<String>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
+    /// For each zen line, whether it was started by a line break of its own
+    /// rather than by Enter
+    zen_wrapped: Vec<bool>,
     pub include_punctuation: bool,
     pub include_numbers: bool,
     pub error_stop: bool,
@@ -398,6 +401,7 @@ impl App {
             save_message: None,
             zen_mode: false,
             zen_lines: Vec::new(),
+            zen_wrapped: Vec::new(),
             include_punctuation: false,
             include_numbers: false,
             error_stop: false,
@@ -577,6 +581,7 @@ impl App {
         self.ignore_keys_until = None;
         self.zen_mode = false;
         self.zen_lines.clear();
+        self.zen_wrapped.clear();
     }
 
     /// Saves the session before it is left: as incomplete, or in zen mode, which
@@ -1109,6 +1114,7 @@ impl App {
                 if let Some(line) = self.zen_lines.last_mut() {
                     if line.width() + c.width().unwrap_or(0) >= ZEN_LINE_WIDTH {
                         self.zen_lines.push(c.to_string());
+                        self.zen_wrapped.push(true);
                     } else {
                         line.push(c);
                     }
@@ -1124,10 +1130,16 @@ impl App {
                 );
             }
             KeyCode::Backspace => {
-                if let Some(line) = self.zen_lines.last_mut() {
-                    if line.pop().is_none() && self.zen_lines.len() > 1 {
-                        self.zen_lines.pop();
-                    }
+                let Some(line) = self.zen_lines.last_mut() else {
+                    return;
+                };
+                let deleted = line.pop().is_some();
+                let wrapped = self.zen_wrapped.last() == Some(&true);
+                // Removes the line break too once a wrapped line is emptied, or
+                // the Enter that started an empty line
+                if (!deleted || (line.is_empty() && wrapped)) && self.zen_lines.len() > 1 {
+                    self.zen_lines.pop();
+                    self.zen_wrapped.pop();
                 }
             }
             KeyCode::Enter => {
@@ -1135,6 +1147,7 @@ impl App {
                     self.start_time = Some(Instant::now());
                 }
                 self.zen_lines.push(String::new());
+                self.zen_wrapped.push(false);
             }
             _ => {}
         }
@@ -1150,6 +1163,7 @@ impl App {
         self.lesson_title = ZEN.title.into();
         self.zen_mode = true;
         self.zen_lines = vec![String::new()];
+        self.zen_wrapped = vec![false];
     }
 
     pub fn start_quote_practice(&mut self) {
@@ -2522,6 +2536,25 @@ mod tests {
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
         app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
         assert_eq!(app.zen_lines.last().unwrap(), "");
+    }
+
+    #[test]
+    fn zen_backspace_deletes_across_a_line_break() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        let press = |app: &mut App, code| app.handle_event(InputEvent::Press(key_event(code)));
+        while app.zen_lines.len() == 1 {
+            press(&mut app, KeyCode::Char('a'));
+        }
+        let full_line = app.zen_lines[0].clone();
+
+        press(&mut app, KeyCode::Backspace);
+        press(&mut app, KeyCode::Backspace);
+        assert_eq!(app.zen_lines, [&full_line[..full_line.len() - 1]]);
+
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Backspace);
+        assert_eq!(app.zen_lines.len(), 1);
     }
 
     #[test]
