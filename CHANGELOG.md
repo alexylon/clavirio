@@ -48,6 +48,7 @@
 - A crash leaving the terminal on the alternate screen when stderr didn't go to the terminal, such as with `clavirio 2>log`
 - The menu's shortcuts and settings being cut off below about 110 columns, hiding `q/Esc quit` and, in practice mode, the `5` and `6` toggles (they now wrap onto more lines)
 - Zen mode's lines being cut off on terminals narrower than 84 columns, so you typed past the edge without seeing the cursor, and lines with accented letters breaking after about 30 characters (lines too wide now scroll like the typing view, and lines break at the same length whatever the letters)
+- A word count given with `-w` also applying to practice started later from the menu, so `clavirio -w 5` made the word lists, Common Bigrams, Quotes and Weak Keys picked from the menu 5 words long too (it now applies only to the session `-w` starts)
 
 ## [0.4.1] - 2026-03-28
 

@@ -337,7 +337,6 @@ pub struct App {
     pub paused: bool,
     pub pause_menu_index: usize,
     pub paused_at: Option<Instant>,
-    pub word_count: usize,
     pub time_limit: Option<u64>,
     pub menu_mode: MenuMode,
     pub selected_practice: usize,
@@ -389,7 +388,6 @@ impl App {
             paused: false,
             pause_menu_index: 0,
             paused_at: None,
-            word_count: Self::DEFAULT_WORD_COUNT,
             time_limit: None,
             menu_mode: MenuMode::Lessons,
             selected_practice: 0,
@@ -1005,7 +1003,7 @@ impl App {
                 if let Some(&(_, start)) = Self::SPECIAL_PRACTICE.get(idx) {
                     start(self);
                 } else if let Some(&list) = word_lists.get(idx - specials) {
-                    self.start_word_practice(list);
+                    self.start_word_practice(list, Self::DEFAULT_WORD_COUNT);
                 } else if let Some(&(secs, list)) =
                     Self::TIMED_OPTIONS.get(idx - specials - word_lists.len())
                 {
@@ -1065,8 +1063,8 @@ impl App {
         }
     }
 
-    pub fn start_word_practice(&mut self, list: WordList) {
-        let text = self.generate_word_text(list, self.word_count);
+    pub fn start_word_practice(&mut self, list: WordList, count: usize) {
+        let text = self.generate_word_text(list, count);
         self.start_practice_from_text(&text, &word_practice_id(list), &word_practice_title(list));
     }
 
@@ -1093,7 +1091,7 @@ impl App {
     }
 
     pub fn start_bigram_practice(&mut self) {
-        let text = crate::words::generate_bigram_text(self.word_count);
+        let text = crate::words::generate_bigram_text(Self::DEFAULT_WORD_COUNT);
         self.start_practice_from_text(&text, BIGRAMS.id, BIGRAMS.title);
     }
 
@@ -1153,7 +1151,7 @@ impl App {
     }
 
     pub fn start_quote_practice(&mut self) {
-        let text = crate::words::generate_quote_text(self.word_count);
+        let text = crate::words::generate_quote_text(Self::DEFAULT_WORD_COUNT);
         self.start_practice_from_text(&text, QUOTES.id, QUOTES.title);
     }
 
@@ -1163,7 +1161,7 @@ impl App {
             self.error = Some("No weak keys yet — keep practicing".into());
             return;
         }
-        let text = crate::words::generate_weak_key_text(&weak, self.word_count);
+        let text = crate::words::generate_weak_key_text(&weak, Self::DEFAULT_WORD_COUNT);
         self.start_practice_from_text(&text, WEAK_KEYS.id, WEAK_KEYS.title);
     }
 

@@ -199,8 +199,7 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     if let Some(secs) = cli.time {
         app.start_timed_practice(secs, list);
     } else if let Some(maybe_count) = cli.words {
-        app.word_count = maybe_count.unwrap_or(App::DEFAULT_WORD_COUNT);
-        app.start_word_practice(list);
+        app.start_word_practice(list, maybe_count.unwrap_or(App::DEFAULT_WORD_COUNT));
     } else if let Some(path) = cli.file {
         app.load_file(&path);
     }
