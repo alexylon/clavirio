@@ -33,13 +33,13 @@ cargo test test_name           # Run a single test by name
 
 **Lessons** (`lessons.rs`): 21 layout-specific + 6 shared lessons per layout, embedded via `include_str!()`. Universal finger-pair system: 2 keys per lesson, same physical positions across all 3 layouts. Each row follows index → middle → ring → pinky → reach → full row → row + Shift. Shared lessons cover numbers and symbols.
 
-**Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility.
+**Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility. If the file can't be read at startup, the defaults are used and settings aren't saved during that run.
 
 **Words** (`words.rs`): English word lists (200 and 1k) embedded via `include_str!()`. Xorshift64 PRNG for random word selection, text generation with line wrapping. `WordList::all()` provides the menu entries.
 
 **History** (`history.rs`): JSON array of `SessionRecord` at `~/.clavirio/history.json`. Tracks WPM, accuracy, duration, completion status, lesson ID.
 
-**Storage** (`storage.rs`): The `~/.clavirio` data folder and the file helpers that settings and history share: `load_for_rewrite()` keeps a file that can't be parsed as a timestamped `.bak` before it is rewritten (a file that can't be read is left alone), and `write_atomically()` writes through a temp file and a rename, creating the folder if needed.
+**Storage** (`storage.rs`): The `~/.clavirio` data folder and the file helpers that settings and history share: `load()` tells a missing file, one that can't be read and one that can't be parsed apart, `load_for_rewrite()` keeps a file that can't be parsed as a timestamped `.bak` before it is rewritten (a file that can't be read is left alone), and `write_atomically()` writes through a temp file and a rename, creating the folder if needed.
 
 ## Key Patterns
 

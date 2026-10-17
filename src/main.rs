@@ -20,7 +20,7 @@ use ratatui::prelude::*;
 use app::App;
 use input::run_input_loop;
 use keyboard::{build_keyboard_rows, build_keycode_grid_map};
-use settings::load_settings;
+use settings::{Settings, load_settings};
 use ui::{compute_regions, draw};
 
 /// A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking
@@ -131,7 +131,10 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let mut settings = load_settings();
+    let (mut settings, settings_error) = match load_settings() {
+        Ok(settings) => (settings, None),
+        Err(e) => (Settings::default(), Some(e)),
+    };
     let mut rows = build_keyboard_rows(settings.keyboard.layout);
     let mut grid_map = build_keycode_grid_map(&rows);
     let mut app = App::new();
@@ -163,6 +166,11 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
         app.start_word_practice(list);
     } else if let Some(path) = cli.file {
         app.load_file(&path);
+    }
+    if let Some(e) = &settings_error {
+        app.show_error(format!(
+            "Couldn't read the settings: {e}\nUsing the defaults; changes won't be saved this time"
+        ));
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -210,8 +218,11 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
             settings.display.include_numbers = include_numbers;
             settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
             settings.display.error_stop = app.error_stop;
-            if let Err(e) = settings::save_settings(&settings) {
-                app.show_error(format!("Couldn't save the settings: {e}"));
+            // Saving over settings that couldn't be read would replace them with the defaults
+            if settings_error.is_none() {
+                if let Err(e) = settings::save_settings(&settings) {
+                    app.show_error(format!("Couldn't save the settings: {e}"));
+                }
             }
             if layout_changed {
                 rows = build_keyboard_rows(settings.keyboard.layout);

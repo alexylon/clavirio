@@ -20,7 +20,7 @@
 - `Ctrl-R` while paused leaving the pause menu open after restarting
 - Quotes after the first starting with a space you had to type
 - Timed practice running out of text, and ending early, for typists above about 100 wpm (the text now lasts to about 200 wpm)
-- A `settings.toml` that couldn't be read or parsed being overwritten at the next settings change, losing all saved settings (one that can't be parsed is now kept next to it as a timestamped `.bak` file, and one that can't be read is left alone)
+- A `settings.toml` that couldn't be read or parsed being overwritten at the next settings change, losing all saved settings (one that can't be parsed is now kept next to it as a timestamped `.bak` file, and one that can't be read is left alone; if it can't be read at startup, the app says so and doesn't save settings until it is restarted)
 - Saving settings, history or key stats deleting the old file before the new one was in place, so a crash at that moment could lose it (saves now replace the file in one step, after flushing the new one to disk)
 - `-p` and `-n` being saved to `settings.toml`, so punctuation or numbers stayed on in later runs without the flag (they now apply to that run only)
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)

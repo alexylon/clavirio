@@ -20,26 +20,44 @@ pub(crate) fn data_dir() -> PathBuf {
     PathBuf::from(home).join(".clavirio")
 }
 
-/// Loads a file that is about to be rewritten. If its content can't be parsed
-/// or isn't valid UTF-8, it is first renamed to `<name>.<timestamp>.bak` so it
-/// isn't lost. An error means the file couldn't be read or renamed, and must
-/// not be rewritten.
+pub(crate) enum Loaded<T> {
+    Missing,
+    /// Content that can't be parsed or isn't valid UTF-8
+    Unparseable,
+    Parsed(T),
+}
+
+/// Loads `path` with `parse`. An error means the file is there but can't be
+/// read.
+pub(crate) fn load<T>(path: &Path, parse: impl FnOnce(&str) -> Option<T>) -> io::Result<Loaded<T>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(parse)
+            .map_or(Loaded::Unparseable, Loaded::Parsed)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Loaded::Missing),
+        Err(e) => Err(e),
+    }
+}
+
+/// Loads a file that is about to be rewritten. If its content can't be parsed,
+/// it is first renamed to `<name>.<timestamp>.bak` so it isn't lost. An error
+/// means the file couldn't be read or renamed, and must not be rewritten.
 pub(crate) fn load_for_rewrite<T: Default>(
     path: &Path,
     parse: impl FnOnce(&str) -> Option<T>,
 ) -> io::Result<T> {
-    let loaded = match fs::read(path) {
-        Ok(bytes) => std::str::from_utf8(&bytes).ok().and_then(parse),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Some(T::default()),
-        Err(e) => return Err(e),
-    };
-    if loaded.is_none() {
-        let stamp = OffsetDateTime::now_utc().unix_timestamp();
-        let mut backup = path.as_os_str().to_os_string();
-        backup.push(format!(".{stamp}.bak"));
-        fs::rename(path, backup)?;
+    match load(path, parse)? {
+        Loaded::Parsed(value) => Ok(value),
+        Loaded::Missing => Ok(T::default()),
+        Loaded::Unparseable => {
+            let stamp = OffsetDateTime::now_utc().unix_timestamp();
+            let mut backup = path.as_os_str().to_os_string();
+            backup.push(format!(".{stamp}.bak"));
+            fs::rename(path, backup)?;
+            Ok(T::default())
+        }
     }
-    Ok(loaded.unwrap_or_default())
 }
 
 /// Replaces `path` with `content` so that a crash or power cut leaves either the

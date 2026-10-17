@@ -509,11 +509,14 @@ impl App {
         }
     }
 
-    /// Shows `message` in place of the text, so the session clock waits until it
-    /// closes.
+    /// Shows `message` in place of the text, below any message already there. The
+    /// session clock waits until it closes.
     pub fn show_error(&mut self, message: String) {
         self.freeze_clock();
-        self.error = Some(message);
+        self.error = Some(match self.error.take() {
+            Some(shown) => format!("{shown}\n{message}"),
+            None => message,
+        });
     }
 
     fn next_lesson(&mut self) {
@@ -2001,6 +2004,14 @@ mod tests {
         app.handle_event(InputEvent::Press(ctrl_key('r')));
         assert!(app.error.is_none());
         assert!(!app.is_finished());
+    }
+
+    #[test]
+    fn second_error_shown_below_the_first() {
+        let mut app = App::new();
+        load_missing_file(&mut app);
+        app.show_error("Couldn't read the settings".into());
+        assert_eq!(app.error.map(|e| e.lines().count()), Some(2));
     }
 
     // --- word practice ---

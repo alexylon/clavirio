@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use crate::storage::{data_dir, load_for_rewrite, write_atomically};
+use crate::storage::{Loaded, data_dir, load, load_for_rewrite, write_atomically};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -118,17 +117,22 @@ fn settings_path() -> PathBuf {
     data_dir().join("settings.toml")
 }
 
-pub fn load_settings() -> Settings {
-    let path = settings_path();
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| toml::from_str(&s).ok())
-        .unwrap_or_default()
+fn parse_settings(text: &str) -> Option<Settings> {
+    toml::from_str(text).ok()
+}
+
+/// Loads the saved settings, or the defaults if there are none or they can't be
+/// parsed. An error means the file is there but can't be read.
+pub fn load_settings() -> io::Result<Settings> {
+    Ok(match load(&settings_path(), parse_settings)? {
+        Loaded::Parsed(settings) => settings,
+        Loaded::Missing | Loaded::Unparseable => Settings::default(),
+    })
 }
 
 pub fn save_settings(settings: &Settings) -> io::Result<()> {
     let path = settings_path();
-    load_for_rewrite(&path, |text| toml::from_str::<Settings>(text).ok())?;
+    load_for_rewrite(&path, parse_settings)?;
     let content = toml::to_string_pretty(settings).map_err(io::Error::other)?;
     write_atomically(&path, &content)
 }
@@ -136,6 +140,7 @@ pub fn save_settings(settings: &Settings) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn default_layout_is_qwerty() {
@@ -192,5 +197,21 @@ mod tests {
     fn theme_display() {
         assert_eq!(Theme::Dark.to_string(), "dark");
         assert_eq!(Theme::Light.to_string(), "light");
+    }
+
+    #[test]
+    fn only_unreadable_settings_fail_to_load() {
+        let dir = data_dir();
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(settings_path(), "[display").unwrap();
+        let unparseable = load_settings();
+        fs::remove_file(settings_path()).unwrap();
+        fs::create_dir(settings_path()).unwrap(); // reading a folder fails, but not with "not found"
+        let unreadable = load_settings();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(unparseable.is_ok());
+        assert!(unreadable.is_err());
     }
 }
