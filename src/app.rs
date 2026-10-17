@@ -580,8 +580,10 @@ impl App {
     }
 
     /// Saves the session before it is left: as incomplete, or in zen mode, which
-    /// has no end of its own, as complete.
+    /// has no end of its own, as complete. A timed session whose time has run out
+    /// since the last tick or key press is finished first, and saved as complete.
     fn save_before_leaving(&mut self) {
+        self.check_time_limit();
         if !self.is_finished() {
             self.save_history(self.zen_mode);
         }
@@ -1939,6 +1941,24 @@ mod tests {
         assert_eq!(history[0].id, "test");
         assert!(!history[0].completed);
         assert_eq!(key_stats.get(&'a'), Some(&(2, 0)));
+    }
+
+    #[test]
+    fn timed_session_that_ran_out_saved_as_complete_on_exit() {
+        let data_dir = crate::storage::data_dir();
+        let _ = fs::remove_dir_all(&data_dir);
+        let mut app = App::new();
+        app.start_timed_practice(1, WordList::English200);
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
+        app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
+
+        app.save_on_exit();
+        let history = crate::history::load_history();
+        let _ = fs::remove_dir_all(&data_dir);
+
+        assert_eq!(history.len(), 1);
+        assert!(history[0].completed);
+        assert_eq!(history[0].duration_secs, 1.0);
     }
 
     #[test]
