@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crossterm::event::KeyCode;
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
@@ -18,6 +18,8 @@ const KEYBOARD_ROWS: usize = 5;
 /// Rows per key: 2 for its border and 2 for its shifted and unshifted labels
 const KEY_ROW_HEIGHT: u16 = 4;
 const KEYBOARD_FRAME_ROWS: u16 = 1;
+/// The keyboard frame's border and the space inside it, on each side
+const KEYBOARD_FRAME_COLS: u16 = 2;
 const KEYBOARD_HEIGHT: u16 = KEYBOARD_ROWS as u16 * KEY_ROW_HEIGHT + 2 * KEYBOARD_FRAME_ROWS;
 const HEADER_ROWS: u16 = 2;
 /// Columns between the header's parts, and before the title
@@ -36,7 +38,10 @@ const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
 /// but only 2 history sessions. The keyboard is hidden on terminals too short
 /// for this and the keyboard.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
-const MAX_WIDTH: u16 = 120;
+const WIDEST_ROW_KEYS: u16 = 13;
+const MAX_KEY_WIDTH: u16 = 9;
+/// Wide enough for the widest keys inside the keyboard frame
+const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const ELLIPSIS: &str = "\u{2026}";
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
@@ -216,6 +221,16 @@ pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     }
 }
 
+/// The part of the keyboard area inside its frame, where the keys go
+fn keys_area(keyboard_area: Rect) -> Rect {
+    Rect::new(
+        keyboard_area.x + KEYBOARD_FRAME_COLS,
+        keyboard_area.y + KEYBOARD_FRAME_ROWS,
+        keyboard_area.width.saturating_sub(2 * KEYBOARD_FRAME_COLS),
+        keyboard_area.height.saturating_sub(2 * KEYBOARD_FRAME_ROWS),
+    )
+}
+
 fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
     let row_rects = Layout::new(
         Direction::Vertical,
@@ -223,9 +238,9 @@ fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
     )
     .split(area);
 
-    // The widest odd key width that fits the 13 keys of the widest row. An odd
+    // The widest odd key width that fits the keys of the widest row. An odd
     // width leaves an odd space inside the border, so labels sit exactly centred.
-    let raw = area.width / 13;
+    let raw = area.width / WIDEST_ROW_KEYS;
     let unit_width = if raw.is_multiple_of(2) {
         raw.saturating_sub(1).max(1)
     } else {
@@ -371,16 +386,7 @@ pub fn draw(
     }
 
     if regions.keyboard_area.height > 0 {
-        let keys_area = Rect::new(
-            regions.keyboard_area.x,
-            regions.keyboard_area.y + KEYBOARD_FRAME_ROWS,
-            regions.keyboard_area.width,
-            regions
-                .keyboard_area
-                .height
-                .saturating_sub(2 * KEYBOARD_FRAME_ROWS),
-        );
-        let kbd_rects = build_keyboard_rects(keys_area, rows);
+        let kbd_rects = build_keyboard_rects(keys_area(regions.keyboard_area), rows);
         let highlight_coord: Option<GridCoord> = if app.show_hints {
             app.highlighted_key
                 .and_then(|code| grid_map.get(&code))
@@ -1371,6 +1377,18 @@ mod tests {
     }
 
     #[test]
+    fn keys_fit_inside_the_keyboard_frame() {
+        // The number row is the widest
+        let rows = &build_keyboard_rows(crate::settings::KeyboardLayout::Qwerty)[..1];
+        for width in 40..=MAX_WIDTH {
+            let area = Rect::new(0, 0, width, KEYBOARD_HEIGHT);
+            let keys = bounding_rect(&build_keyboard_rects(keys_area(area), rows)).unwrap();
+            assert!(keys.x >= KEYBOARD_FRAME_COLS, "width {width}");
+            assert!(keys.right() + KEYBOARD_FRAME_COLS <= width, "width {width}");
+        }
+    }
+
+    #[test]
     fn long_line_scrolls_to_keep_cursor_in_view() {
         let narrow = [1; 100];
 
@@ -1423,24 +1441,7 @@ fn draw_keyboard(
     tc: &ThemeColors,
 ) {
     if let Some(outer) = bounding_rect(kbd_rects) {
-        let pad_x: u16 = 2;
-        let pad_y: u16 = 1;
-        let padded = Rect::new(
-            outer.x.saturating_sub(pad_x),
-            outer.y.saturating_sub(pad_y),
-            (outer.width + pad_x * 2).min(
-                frame
-                    .area()
-                    .width
-                    .saturating_sub(outer.x.saturating_sub(pad_x)),
-            ),
-            (outer.height + pad_y * 2).min(
-                frame
-                    .area()
-                    .height
-                    .saturating_sub(outer.y.saturating_sub(pad_y)),
-            ),
-        );
+        let padded = outer.outer(Margin::new(KEYBOARD_FRAME_COLS, KEYBOARD_FRAME_ROWS));
         frame.render_widget(
             Block::new()
                 .borders(Borders::ALL)

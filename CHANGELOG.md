@@ -36,6 +36,7 @@
 - Lines wider than the text panel, such as long lines in a custom file or practice text on an 80-column terminal, being cut off so you typed past the edge without seeing the cursor (the current line now scrolls to keep the cursor in view, and an ellipsis shows where a line is cut off)
 - The header's stats and line count being cut off on terminals narrower than about 120 columns (the stats now come first, a long title is shortened, and the line count is left out rather than cut)
 - The results screen's shortcuts being cut off below about 100 columns, so `Esc menu` and others weren't shown (they now have their own line under the score)
+- The keyboard's keys covering or touching its frame at some widths, such as 65, 91 and 117 columns (keys are now sized to fit inside the frame, and the app is now up to 121 columns wide instead of 120, so the largest keys still fit)
 
 ## [0.4.1] - 2026-03-28
 
