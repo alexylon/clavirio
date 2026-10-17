@@ -44,6 +44,7 @@
 - Zen sessions being saved as incomplete when quitting, though leaving with Esc saves them as complete (they are now complete however they are left)
 - `~` not being expanded in the `Ctrl-F` file prompt or a quoted `-f` path, so `~/notes.txt` was looked for in the current folder
 - The timed-mode countdown showing a second less than was left, and `00:00` for the whole last second (it now rounds up)
+- The history showing practice sessions by their internal id, such as `words english 200` or `timed 30s english 1k`, and file names with `_` turned into spaces (it now shows the same titles as the menu, and file names as they are, shortened with an ellipsis when they don't fit)
 
 ## [0.4.1] - 2026-03-28
 

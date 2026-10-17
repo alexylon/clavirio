@@ -845,7 +845,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     let max_label: usize =
                         special_items
                             .iter()
-                            .map(|(title, _)| title.len())
+                            .map(|(kind, _)| kind.title.len())
                             .chain(word_lists.iter().map(|wl| {
                                 wl.category().len() + 2 + wl.label().len() + suffix_len + 1
                             }))
@@ -866,7 +866,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
                         if i < special_items.len() {
-                            let title = special_items[i].0;
+                            let title = special_items[i].0.title;
                             let current_len = title.len();
                             let mut spans = vec![
                                 Span::styled(
@@ -1237,6 +1237,7 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         )));
 
         let lessons = crate::lessons::lessons_for_layout(app.layout);
+        let text_width = block.inner(inner).width as usize;
         for (i, r) in records.iter().enumerate().skip(scroll).take(visible_slots) {
             let display_ts = friendly_timestamp(&r.timestamp);
             let mins = (r.duration_secs as u64) / 60;
@@ -1244,24 +1245,27 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             let status = if r.completed { "" } else { "*" };
             let lesson_display = if r.id.is_empty() {
                 "—".to_string()
+            } else if !r.title.is_empty() {
+                r.title.clone()
             } else if let Some(lesson) = lessons.iter().find(|l| l.id == r.id) {
                 lesson.title.to_string()
             } else {
-                r.id.replace('_', " ")
+                crate::app::practice_title(&r.id).unwrap_or_else(|| r.id.clone())
             };
             let selected = i == scroll_pos;
             let fg = if selected { tc.text } else { tc.dim_text };
             let marker = if selected { "▸ " } else { "  " };
+            let row = format!(
+                "{}{:<14} {:>5.0}  {:>4.0}%  {:>6}  ",
+                marker,
+                display_ts,
+                r.wpm,
+                r.accuracy,
+                format!("{mins}:{secs:02}{status}"),
+            );
+            let lesson_room = text_width.saturating_sub(row.width());
             lines.push(Line::from(Span::styled(
-                format!(
-                    "{}{:<14} {:>5.0}  {:>4.0}%  {:>6}  {}",
-                    marker,
-                    display_ts,
-                    r.wpm,
-                    r.accuracy,
-                    format!("{mins}:{secs:02}{status}"),
-                    lesson_display
-                ),
+                row + &shorten(&lesson_display, lesson_room),
                 Style::new().fg(fg),
             )));
         }

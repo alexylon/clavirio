@@ -43,6 +43,79 @@ fn expand_home(path: &str) -> PathBuf {
     }
 }
 
+/// A kind of practice with a fixed id in the history, and the title shown for it
+pub struct PracticeKind {
+    id: &'static str,
+    pub title: &'static str,
+}
+
+const WEAK_KEYS: PracticeKind = PracticeKind {
+    id: "weak_keys",
+    title: "Weak Keys",
+};
+const BIGRAMS: PracticeKind = PracticeKind {
+    id: "bigrams",
+    title: "Common Bigrams (english 1k)",
+};
+const QUOTES: PracticeKind = PracticeKind {
+    id: "quotes",
+    title: "Quotes",
+};
+const ZEN: PracticeKind = PracticeKind {
+    id: "zen",
+    title: "Zen",
+};
+
+const WORD_PRACTICE_PREFIX: &str = "words_";
+const TIMED_PRACTICE_PREFIX: &str = "timed_";
+/// Between the seconds and the word list in a timed practice id
+const TIMED_PRACTICE_SEPARATOR: &str = "s_";
+
+fn list_slug(list: WordList) -> String {
+    list.label().replace(['/', ' '], "_")
+}
+
+fn word_practice_id(list: WordList) -> String {
+    format!("{WORD_PRACTICE_PREFIX}{}", list_slug(list))
+}
+
+fn timed_practice_id(secs: u64, list: WordList) -> String {
+    format!(
+        "{TIMED_PRACTICE_PREFIX}{secs}{TIMED_PRACTICE_SEPARATOR}{}",
+        list_slug(list)
+    )
+}
+
+fn word_practice_title(list: WordList) -> String {
+    format!("{} ({})", list.category(), list.label())
+}
+
+fn timed_practice_title(secs: u64, list: WordList) -> String {
+    format!("{} ({secs}s · {})", list.category(), list.label())
+}
+
+/// The title of a practice session from its id, for history records saved
+/// before titles were kept, or `None` for a lesson or a file.
+pub fn practice_title(id: &str) -> Option<String> {
+    let list_with_slug = |slug: &str| {
+        WordList::all()
+            .iter()
+            .copied()
+            .find(|&list| list_slug(list) == slug)
+    };
+    if let Some((kind, _)) = App::SPECIAL_PRACTICE.iter().find(|(kind, _)| kind.id == id) {
+        return Some(kind.title.to_string());
+    }
+    if let Some(slug) = id.strip_prefix(WORD_PRACTICE_PREFIX) {
+        return list_with_slug(slug).map(word_practice_title);
+    }
+    let (secs, slug) = id
+        .strip_prefix(TIMED_PRACTICE_PREFIX)?
+        .split_once(TIMED_PRACTICE_SEPARATOR)?;
+    let secs = secs.parse().ok()?;
+    list_with_slug(slug).map(|list| timed_practice_title(secs, list))
+}
+
 #[derive(Debug, Clone)]
 pub struct Document {
     lines: Vec<String>,
@@ -381,6 +454,7 @@ impl App {
             duration_secs: elapsed,
             completed,
             id: self.lesson_id.clone(),
+            title: self.lesson_title.clone(),
         });
         self.note_save(session, "this session");
         self.save_key_stats();
@@ -824,11 +898,11 @@ impl App {
         false
     }
 
-    pub const SPECIAL_PRACTICE: &'static [(&'static str, StartFn)] = &[
-        ("Weak Keys", Self::start_weak_key_practice),
-        ("Common Bigrams (english 1k)", Self::start_bigram_practice),
-        ("Quotes", Self::start_quote_practice),
-        ("Zen", Self::start_zen_mode),
+    pub const SPECIAL_PRACTICE: &'static [(PracticeKind, StartFn)] = &[
+        (WEAK_KEYS, Self::start_weak_key_practice),
+        (BIGRAMS, Self::start_bigram_practice),
+        (QUOTES, Self::start_quote_practice),
+        (ZEN, Self::start_zen_mode),
     ];
 
     pub const TIMED_OPTIONS: &'static [(u64, WordList)] = &[
@@ -992,12 +1066,7 @@ impl App {
 
     pub fn start_word_practice(&mut self, list: WordList) {
         let text = self.generate_word_text(list, self.word_count);
-        let slug = list.label().replace(['/', ' '], "_");
-        self.start_practice_from_text(
-            &text,
-            &format!("words_{slug}"),
-            &format!("{} ({})", list.category(), list.label()),
-        );
+        self.start_practice_from_text(&text, &word_practice_id(list), &word_practice_title(list));
     }
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
@@ -1005,11 +1074,10 @@ impl App {
         const SPARE_WORDS: usize = 20;
         let estimated_words = secs as usize * FASTEST_WPM / 60 + SPARE_WORDS;
         let text = self.generate_word_text(list, estimated_words);
-        let slug = list.label().replace(['/', ' '], "_");
         self.start_practice_from_text(
             &text,
-            &format!("timed_{secs}s_{slug}"),
-            &format!("{} ({secs}s · {})", list.category(), list.label()),
+            &timed_practice_id(secs, list),
+            &timed_practice_title(secs, list),
         );
         self.time_limit = Some(secs);
     }
@@ -1025,7 +1093,7 @@ impl App {
 
     pub fn start_bigram_practice(&mut self) {
         let text = crate::words::generate_bigram_text(self.word_count);
-        self.start_practice_from_text(&text, "bigrams", "Common Bigrams (english 1k)");
+        self.start_practice_from_text(&text, BIGRAMS.id, BIGRAMS.title);
     }
 
     fn handle_zen_key(&mut self, code: KeyCode) {
@@ -1077,15 +1145,15 @@ impl App {
         self.reset_session();
         self.time_limit = None;
         self.menu_mode = MenuMode::Practice;
-        self.lesson_id = "zen".into();
-        self.lesson_title = "Zen".into();
+        self.lesson_id = ZEN.id.into();
+        self.lesson_title = ZEN.title.into();
         self.zen_mode = true;
         self.zen_lines = vec![String::new()];
     }
 
     pub fn start_quote_practice(&mut self) {
         let text = crate::words::generate_quote_text(self.word_count);
-        self.start_practice_from_text(&text, "quotes", "Quotes");
+        self.start_practice_from_text(&text, QUOTES.id, QUOTES.title);
     }
 
     pub fn start_weak_key_practice(&mut self) {
@@ -1095,7 +1163,7 @@ impl App {
             return;
         }
         let text = crate::words::generate_weak_key_text(&weak, self.word_count);
-        self.start_practice_from_text(&text, "weak_keys", "Weak Keys");
+        self.start_practice_from_text(&text, WEAK_KEYS.id, WEAK_KEYS.title);
     }
 
     fn handle_typed_char(&mut self, typed: char) {
@@ -1312,6 +1380,21 @@ mod tests {
         assert_eq!(doc.current_line, "ab");
         assert_eq!(doc.cursor_position(), 0);
         assert_eq!(doc.progress, Progress::Active);
+    }
+
+    #[test]
+    fn practice_titles_found_from_history_ids() {
+        assert_eq!(practice_title("zen").as_deref(), Some("Zen"));
+        assert_eq!(
+            practice_title("words_english_200").as_deref(),
+            Some("Random Words (english 200)")
+        );
+        assert_eq!(
+            practice_title("timed_30s_c_c++").as_deref(),
+            Some("Code (30s · c/c++)")
+        );
+        assert_eq!(practice_title("my_notes.txt"), None);
+        assert_eq!(practice_title("timed_xs_english_200"), None);
     }
 
     #[test]
@@ -1759,6 +1842,7 @@ mod tests {
                 duration_secs: 60.0,
                 completed: true,
                 id: String::new(),
+                title: String::new(),
             },
             crate::history::SessionRecord {
                 timestamp: "t2".into(),
@@ -1769,6 +1853,7 @@ mod tests {
                 duration_secs: 60.0,
                 completed: true,
                 id: String::new(),
+                title: String::new(),
             },
         ];
         app.history_scroll = 1;

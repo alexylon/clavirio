@@ -20,6 +20,9 @@ pub struct SessionRecord {
     pub completed: bool,
     #[serde(default, alias = "lesson")]
     pub id: String,
+    /// Empty in records saved before titles were kept
+    #[serde(default)]
+    pub title: String,
 }
 
 fn history_path() -> PathBuf {
@@ -135,6 +138,7 @@ mod tests {
             duration_secs: 120.0,
             completed: true,
             id: "home_row".into(),
+            title: "Home Row".into(),
         };
         let json = serde_json::to_string(&record).unwrap();
         let deserialized: SessionRecord = serde_json::from_str(&json).unwrap();
@@ -175,6 +179,7 @@ mod tests {
             duration_secs: 0.0,
             completed,
             id: id.into(),
+            title: String::new(),
         }
     }
 
