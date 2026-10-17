@@ -25,6 +25,11 @@ use keyboard::{GridCoord, KeyDef, build_keyboard_rows, build_keycode_grid_map};
 use settings::{Settings, load_settings};
 use ui::{compute_regions, draw, keyboard_fits};
 
+// Limits for -w and -t, so a huge number can't use up the memory while the text
+// is generated
+const MAX_WORDS: u64 = 10_000;
+const MAX_SECONDS: u64 = 3_600;
+
 /// A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking
 #[derive(Parser)]
 #[command(version, about)]
@@ -33,12 +38,16 @@ struct Cli {
     #[arg(short, long)]
     file: Option<String>,
 
-    /// Start practice mode with N random words (default: 100)
-    #[arg(short, long)]
+    /// Start practice mode with N random words, up to 10000 (default: 100)
+    #[arg(
+        short,
+        long,
+        value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..=MAX_WORDS)
+    )]
     words: Option<Option<usize>>,
 
-    /// Start practice mode for N seconds (e.g. 30, 60)
-    #[arg(short, long)]
+    /// Start practice mode for N seconds, up to 3600 (e.g. 30, 60)
+    #[arg(short, long, value_parser = clap::value_parser!(u64).range(1..=MAX_SECONDS))]
     time: Option<u64>,
 
     /// Word list: "200", "1k", "rust", "python", "javascript"/"js", "go", "c"/"cpp", "java", "html"/"css"
@@ -278,6 +287,18 @@ fn draw_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cli_rejects_word_and_second_counts_out_of_range() {
+        let parses = |flag: &str, value: u64| {
+            Cli::try_parse_from(["clavirio", flag, &value.to_string()]).is_ok()
+        };
+
+        assert!(Cli::try_parse_from(["clavirio", "-w"]).is_ok());
+        assert!(parses("-w", MAX_WORDS) && parses("-t", MAX_SECONDS));
+        assert!(!parses("-w", 0) && !parses("-w", MAX_WORDS + 1));
+        assert!(!parses("-t", 0) && !parses("-t", MAX_SECONDS + 1));
+    }
 
     #[test]
     fn cli_override_saved_only_after_change_in_app() {
