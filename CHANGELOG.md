@@ -52,6 +52,7 @@
 - A timed session whose time ran out just before the app was closed, such as by closing the terminal, being saved as unfinished and running past its limit
 - The terminal being left without echo when the app couldn't start because its output couldn't be written, such as to a closed pipe
 - Zen mode taking an extra Backspace to get back to the line before after a line broke by itself (each Backspace now deletes a character)
+- A session in progress not being saved when drawing to the terminal failed, such as when its window closed at the wrong moment
 
 ## [0.4.1] - 2026-03-28
 

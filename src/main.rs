@@ -9,7 +9,7 @@ mod ui;
 mod words;
 
 use std::collections::HashMap;
-use std::io::{Result, Stdout, stdout};
+use std::io::{Result, Stdout, Write, stdout};
 
 use clap::Parser;
 use ratatui::crossterm::event::KeyCode;
@@ -109,10 +109,12 @@ fn main() -> Result<()> {
     let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
 
     restore_terminal();
-    if let Some(message) = result? {
-        eprintln!("{message}");
+    let (message, session) = result?;
+    if let Some(message) = message {
+        // Unlike eprintln!, this doesn't panic if stderr is a terminal that has closed
+        let _ = writeln!(std::io::stderr(), "{message}");
     }
-    Ok(())
+    session
 }
 
 /// Leaves the alternate screen and raw mode. Errors are ignored, as the terminal
@@ -154,8 +156,8 @@ fn toggle_to_save(cli_override: &mut bool, value: bool) -> bool {
 }
 
 /// Runs the app until it quits, and returns a message to print once the
-/// terminal is restored.
-async fn run_app(cli: Cli) -> Result<Option<String>> {
+/// terminal is restored, and the error that ended the session early, if any.
+async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
@@ -213,66 +215,73 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(run_input_loop(tx));
 
-    app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+    // A failed draw, such as on a terminal that has closed, ends the session
+    // here, so that it is still saved below
+    let session: Result<()> = async {
+        app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
 
-    // Created once, so a signal that arrives while an event is handled isn't missed
-    let shutdown = shutdown_signal();
-    tokio::pin!(shutdown);
+        // Created once, so a signal that arrives while an event is handled isn't missed
+        let shutdown = shutdown_signal();
+        tokio::pin!(shutdown);
 
-    loop {
-        let event = tokio::select! {
-            ev = rx.recv() => ev,
-            _ = &mut shutdown => None,
-        };
+        loop {
+            let event = tokio::select! {
+                ev = rx.recv() => ev,
+                _ = &mut shutdown => None,
+            };
 
-        let Some(event) = event else {
-            break;
-        };
+            let Some(event) = event else {
+                break;
+            };
 
-        if app.handle_event(event) {
-            break;
-        }
+            if app.handle_event(event) {
+                break;
+            }
 
-        let include_punctuation =
-            toggle_to_save(&mut punctuation_override, app.include_punctuation);
-        let include_numbers = toggle_to_save(&mut numbers_override, app.include_numbers);
-        let display_changed = app.show_keyboard != settings.display.show_keyboard
-            || app.show_hints != settings.display.show_hints
-            || app.show_fingers != settings.display.show_fingers
-            || app.theme != settings.display.theme
-            || include_punctuation != settings.display.include_punctuation
-            || include_numbers != settings.display.include_numbers
-            || (app.menu_mode == crate::app::MenuMode::Practice) != settings.display.practice_mode
-            || app.error_stop != settings.display.error_stop;
-        let layout_changed = app.layout != settings.keyboard.layout;
+            let include_punctuation =
+                toggle_to_save(&mut punctuation_override, app.include_punctuation);
+            let include_numbers = toggle_to_save(&mut numbers_override, app.include_numbers);
+            let display_changed = app.show_keyboard != settings.display.show_keyboard
+                || app.show_hints != settings.display.show_hints
+                || app.show_fingers != settings.display.show_fingers
+                || app.theme != settings.display.theme
+                || include_punctuation != settings.display.include_punctuation
+                || include_numbers != settings.display.include_numbers
+                || (app.menu_mode == crate::app::MenuMode::Practice)
+                    != settings.display.practice_mode
+                || app.error_stop != settings.display.error_stop;
+            let layout_changed = app.layout != settings.keyboard.layout;
 
-        if layout_changed || display_changed {
-            settings.keyboard.layout = app.layout;
-            settings.display.show_keyboard = app.show_keyboard;
-            settings.display.show_hints = app.show_hints;
-            settings.display.show_fingers = app.show_fingers;
-            settings.display.theme = app.theme;
-            settings.display.include_punctuation = include_punctuation;
-            settings.display.include_numbers = include_numbers;
-            settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
-            settings.display.error_stop = app.error_stop;
-            if can_save_settings {
-                match settings::save_settings(&settings) {
-                    Ok(Some(notice)) => app.show_error(notice),
-                    Ok(None) => {}
-                    Err(e) => app.show_error(format!("Couldn't save the settings: {e}")),
+            if layout_changed || display_changed {
+                settings.keyboard.layout = app.layout;
+                settings.display.show_keyboard = app.show_keyboard;
+                settings.display.show_hints = app.show_hints;
+                settings.display.show_fingers = app.show_fingers;
+                settings.display.theme = app.theme;
+                settings.display.include_punctuation = include_punctuation;
+                settings.display.include_numbers = include_numbers;
+                settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
+                settings.display.error_stop = app.error_stop;
+                if can_save_settings {
+                    match settings::save_settings(&settings) {
+                        Ok(Some(notice)) => app.show_error(notice),
+                        Ok(None) => {}
+                        Err(e) => app.show_error(format!("Couldn't save the settings: {e}")),
+                    }
+                }
+                if layout_changed {
+                    rows = build_keyboard_rows(settings.keyboard.layout);
+                    grid_map = build_keycode_grid_map(&rows);
                 }
             }
-            if layout_changed {
-                rows = build_keyboard_rows(settings.keyboard.layout);
-                grid_map = build_keycode_grid_map(&rows);
-            }
+
+            app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
         }
-
-        app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+        Ok(())
     }
+    .await;
 
-    Ok(app.save_on_exit())
+    Ok((app.save_on_exit(), session))
 }
 
 /// Draws the app, and returns whether the keyboard fitted in the frame
