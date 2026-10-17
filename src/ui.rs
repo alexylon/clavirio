@@ -704,7 +704,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     let ideal_height = if app.is_finished() {
         let has_spark = app.sparkline().is_some();
         let has_worst = !app.worst_keys(5).is_empty();
-        let content = 1 + if has_spark { 3 } else { 0 } + if has_worst { 1 } else { 0 };
+        let content = 2 + if has_spark { 3 } else { 0 } + if has_worst { 1 } else { 0 };
         ideal_height.max(content + PANEL_FRAME_ROWS)
     } else {
         ideal_height
@@ -969,7 +969,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             } else {
                 0.0
             };
-            let mut actions = vec![
+            let score = Line::from(vec![
                 Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
                 Span::styled(
                     format!("{:.0} wpm", app.wpm()),
@@ -980,7 +980,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     format!("  ({}/{})", app.correct_count, app.total_count),
                     Style::new().fg(tc.dim_text),
                 ),
-                Span::styled("  r", Style::new().fg(tc.accent).bold()),
+            ]);
+            let mut actions = vec![
+                Span::styled("r", Style::new().fg(tc.accent).bold()),
                 Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
                 Span::styled("w", Style::new().fg(tc.accent).bold()),
                 Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
@@ -993,7 +995,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled("Esc", Style::new().fg(tc.accent).bold()),
                 Span::styled(" menu", Style::new().fg(tc.dim_text)),
             ]);
-            let mut lines = vec![Line::from(actions)];
+            let mut lines = vec![score, Line::from(actions)];
             if let Some((spark, min, max)) = app.sparkline() {
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
