@@ -34,6 +34,9 @@ const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + 3;
 const MIN_MENU_ITEMS: u16 = 5;
 /// The typing panel's rows: its frame, the current line and the next 2
 const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
+const ZEN_TEXT_ROWS: u16 = 3;
+/// Zen mode's rows below its text: a blank row, and the wpm and controls
+const ZEN_FOOTER_ROWS: u16 = 2;
 /// Enough for 5 menu items, the typing view, the results and the pause menu,
 /// but only 2 history sessions. The keyboard is hidden on terminals too short
 /// for this and the keyboard.
@@ -702,7 +705,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         return;
     }
 
-    let ideal_height = if app.document.is_none() && !app.zen_mode {
+    let ideal_height = if app.zen_mode {
+        PANEL_FRAME_ROWS + ZEN_TEXT_ROWS + ZEN_FOOTER_ROWS
+    } else if app.document.is_none() {
         (app.current_menu_count() as u16) + MENU_CHROME_ROWS
     } else {
         TYPING_PANEL_ROWS
@@ -719,7 +724,10 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
     if app.zen_mode {
         let mut lines: Vec<Line> = Vec::new();
-        let visible = inner.height.saturating_sub(4) as usize;
+        let visible = inner
+            .height
+            .saturating_sub(PANEL_FRAME_ROWS + ZEN_FOOTER_ROWS)
+            .max(1) as usize;
         let start = app.zen_lines.len().saturating_sub(visible);
         for (i, line) in app.zen_lines[start..].iter().enumerate() {
             let is_current = start + i == app.zen_lines.len() - 1;
@@ -1362,18 +1370,40 @@ mod tests {
         app.lesson_title = "Random Words (30s · english 200)".into();
         app.document = Some(crate::app::Document::from_text("a\nb").unwrap());
         let tc = ThemeColors::from_theme(Theme::Dark);
-        let mut terminal =
-            ratatui::Terminal::new(ratatui::backend::TestBackend::new(60, 2)).unwrap();
 
-        terminal
-            .draw(|frame| draw_header(frame, &app, frame.area(), Some(Finger::Index), &tc))
-            .unwrap();
-        let row: String = (0..60)
-            .map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_string())
-            .collect();
+        let rows = render(60, 2, |frame| {
+            draw_header(frame, &app, frame.area(), Some(Finger::Index), &tc)
+        });
+        let row = &rows[0];
 
         assert!(row.contains("Random… · 1/2 I index"), "{row}");
         assert!(row.trim_end().ends_with("0 err · 00:00"), "{row}");
+    }
+
+    #[test]
+    fn zen_mode_shows_its_controls_below_the_text() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        app.zen_lines = ["one", "two", "three", "four"].map(String::from).to_vec();
+        let tc = ThemeColors::from_theme(Theme::Dark);
+
+        let rows = render(80, 20, |frame| {
+            draw_text_panel(frame, &app, frame.area(), &tc)
+        });
+        let text = rows.join("\n");
+
+        assert!(text.contains("four") && !text.contains("one"), "{text}");
+        assert!(text.contains("Esc stop"), "{text}");
+    }
+
+    fn render(width: u16, height: u16, draw: impl FnOnce(&mut Frame)) -> Vec<String> {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+        terminal.draw(draw).unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..height)
+            .map(|y| (0..width).map(|x| buffer[(x, y)].symbol()).collect())
+            .collect()
     }
 
     #[test]

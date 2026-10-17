@@ -37,6 +37,7 @@
 - The header's stats and line count being cut off on terminals narrower than about 120 columns (the stats now come first, a long title is shortened, and the line count is left out rather than cut)
 - The results screen's shortcuts being cut off below about 100 columns, so `Esc menu` and others weren't shown (they now have their own line under the score)
 - The keyboard's keys covering or touching its frame at some widths, such as 65, 91 and 117 columns (keys are now sized to fit inside the frame, and the app is now up to 121 columns wide instead of 120, so the largest keys still fit)
+- Zen mode's wpm, time and `Esc stop` line never being shown, as the typed lines took all the room
 
 ## [0.4.1] - 2026-03-28
 
