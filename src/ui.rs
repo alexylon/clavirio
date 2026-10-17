@@ -20,6 +20,12 @@ const KEY_ROW_HEIGHT: u16 = 4;
 const KEYBOARD_FRAME_ROWS: u16 = 1;
 const KEYBOARD_HEIGHT: u16 = KEYBOARD_ROWS as u16 * KEY_ROW_HEIGHT + 2 * KEYBOARD_FRAME_ROWS;
 const HEADER_ROWS: u16 = 2;
+/// Columns between the header's parts, and before the title
+const HEADER_GAP: u16 = 1;
+const HEADER_SEPARATOR: &str = " \u{b7} ";
+/// The widest stats a session usually shows. Their space is kept at least this
+/// wide, so the title and the finger hint don't move as the numbers change.
+const HEADER_STATS_TEMPLATE: &str = "000 wpm \u{b7} 100% acc \u{b7} 000 err \u{b7} 00:00 ";
 /// The menu's rows around its items: the panel frame, a blank row, the controls
 /// and the settings
 const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + 3;
@@ -429,53 +435,6 @@ fn draw_header(
         return;
     }
 
-    let [left, center, right] = Layout::horizontal([
-        Constraint::Percentage(30),
-        Constraint::Min(0),
-        Constraint::Percentage(30),
-    ])
-    .areas(area);
-
-    // LEFT: lesson_title · cur/total
-    let mut left_spans: Vec<Span> = vec![Span::raw(" ")];
-    if !app.lesson_title.is_empty() {
-        left_spans.push(Span::styled(&app.lesson_title, Style::new().fg(tc.text)));
-        if app.document.is_some() {
-            left_spans.push(Span::styled(" \u{b7} ", Style::new().fg(tc.dim_text)));
-        }
-    }
-    if let Some(doc) = &app.document {
-        let (cur, total) = doc.line_progress();
-        left_spans.push(Span::styled(
-            format!("{cur}/{total}"),
-            Style::new().fg(tc.text),
-        ));
-    }
-    frame.render_widget(Paragraph::new(Line::from(left_spans)), left);
-
-    // MIDDLE: finger hint (dedicated reserved slot)
-    if let Some(finger) = hint_finger {
-        let name = match finger {
-            Finger::Pinky => "pinky",
-            Finger::Ring => "ring",
-            Finger::Middle => "middle",
-            Finger::Index => "index",
-            Finger::Thumb => "thumb",
-        };
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(
-                    format!("{} ", finger.label()),
-                    Style::new().fg(tc.finger_label).bold(),
-                ),
-                Span::styled(name, Style::new().fg(tc.dim_text)),
-            ]))
-            .centered(),
-            center,
-        );
-    }
-
-    // RIGHT: wpm · acc · err · mm:ss
     let wpm = app.wpm();
     let started = app.start_time.is_some();
     let acc_pct = if app.total_count > 0 {
@@ -518,22 +477,123 @@ fn draw_header(
         tc.dim_text
     };
 
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(wpm_str, Style::new().fg(wpm_fg)),
-            Span::styled(" wpm", dim),
-            Span::styled(" \u{b7} ", dim),
-            Span::styled(acc_str, Style::new().fg(acc_fg)),
-            Span::styled(" acc", dim),
-            Span::styled(" \u{b7} ", dim),
-            Span::styled(format!("{err}"), Style::new().fg(err_fg)),
-            Span::styled(" err", dim),
-            Span::styled(" \u{b7} ", dim),
-            Span::styled(time_str, Style::new().fg(time_fg)),
-        ]))
-        .right_aligned(),
-        right,
-    );
+    let stats = Line::from(vec![
+        Span::styled(wpm_str, Style::new().fg(wpm_fg)),
+        Span::styled(" wpm", dim),
+        Span::styled(HEADER_SEPARATOR, dim),
+        Span::styled(acc_str, Style::new().fg(acc_fg)),
+        Span::styled(" acc", dim),
+        Span::styled(HEADER_SEPARATOR, dim),
+        Span::styled(format!("{err}"), Style::new().fg(err_fg)),
+        Span::styled(" err", dim),
+        Span::styled(HEADER_SEPARATOR, dim),
+        Span::styled(time_str, Style::new().fg(time_fg)),
+    ]);
+    let [rest, right] = Layout::horizontal([
+        Constraint::Fill(1),
+        Constraint::Length(stats.width().max(HEADER_STATS_TEMPLATE.width()) as u16),
+    ])
+    .areas(area);
+    frame.render_widget(Paragraph::new(stats).right_aligned(), right);
+
+    let title_end_max = rest.right().saturating_sub(HEADER_GAP);
+    // The line count is left out unless it fits whole, as a cut one would be wrong
+    let progress = app
+        .document
+        .as_ref()
+        .map(|doc| {
+            let (cur, total) = doc.line_progress();
+            format!("{cur}/{total}")
+        })
+        .filter(|p| rest.x + HEADER_GAP + p.width() as u16 <= title_end_max);
+    let progress_width = progress.as_ref().map_or(0, |p| p.width()) as u16;
+    let separator_width = if progress.is_some() && !app.lesson_title.is_empty() {
+        HEADER_SEPARATOR.width()
+    } else {
+        0
+    };
+    let full_left_width =
+        HEADER_GAP + (app.lesson_title.width() + separator_width) as u16 + progress_width;
+    let mut title_end = title_end_max;
+
+    // The finger hint is centred on the row, or moved right to make room for the
+    // title, and left out when it would leave no room for the line count
+    if let Some(finger) = hint_finger {
+        let name = match finger {
+            Finger::Pinky => "pinky",
+            Finger::Ring => "ring",
+            Finger::Middle => "middle",
+            Finger::Index => "index",
+            Finger::Thumb => "thumb",
+        };
+        let hint = Line::from(vec![
+            Span::styled(
+                format!("{} ", finger.label()),
+                Style::new().fg(tc.finger_label).bold(),
+            ),
+            Span::styled(name, Style::new().fg(tc.dim_text)),
+        ]);
+        let hint_width = hint.width() as u16;
+        let min_x = rest.x + HEADER_GAP + progress_width + HEADER_GAP;
+        if min_x + hint_width <= title_end {
+            let centred = area.x + area.width.saturating_sub(hint_width) / 2;
+            let x = centred
+                .max(rest.x + full_left_width + HEADER_GAP)
+                .clamp(min_x, title_end - hint_width);
+            frame.render_widget(
+                hint,
+                Rect {
+                    x,
+                    width: hint_width,
+                    ..rest
+                },
+            );
+            title_end = x - HEADER_GAP;
+        }
+    }
+
+    let left = Rect {
+        width: title_end.saturating_sub(rest.x),
+        ..rest
+    };
+    let room = left.width.saturating_sub(HEADER_GAP + progress_width) as usize;
+    let title = shorten(&app.lesson_title, room.saturating_sub(separator_width));
+    let has_title = !title.is_empty();
+    let mut left_spans = vec![
+        Span::raw(" ".repeat(HEADER_GAP as usize)),
+        Span::styled(title, Style::new().fg(tc.text)),
+    ];
+    if let Some(progress) = progress {
+        if has_title {
+            left_spans.push(Span::styled(HEADER_SEPARATOR, dim));
+        }
+        left_spans.push(Span::styled(progress, Style::new().fg(tc.text)));
+    }
+    frame.render_widget(Paragraph::new(Line::from(left_spans)), left);
+}
+
+/// `text` cut to `width` columns, ending in an ellipsis when it is cut, or
+/// nothing if not even one character fits before the ellipsis
+fn shorten(text: &str, width: usize) -> String {
+    if text.width() <= width {
+        return text.to_string();
+    }
+    let mut shortened = String::new();
+    let mut used = ELLIPSIS.width();
+    if used > width {
+        return shortened;
+    }
+    for ch in text.chars() {
+        used += ch.width().unwrap_or(0);
+        if used > width {
+            break;
+        }
+        shortened.push(ch);
+    }
+    if shortened.is_empty() {
+        return shortened;
+    }
+    shortened + ELLIPSIS
 }
 
 fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
@@ -1286,6 +1346,26 @@ mod tests {
         assert_eq!(tall.keyboard_area.height, KEYBOARD_HEIGHT);
         assert_eq!(tall.body.height, MIN_BODY_ROWS);
         assert_eq!(tiny.header.height, HEADER_ROWS);
+    }
+
+    #[test]
+    fn header_keeps_stats_and_line_count_on_narrow_terminals() {
+        let mut app = App::new();
+        app.lesson_title = "Random Words (30s · english 200)".into();
+        app.document = Some(crate::app::Document::from_text("a\nb").unwrap());
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(60, 2)).unwrap();
+
+        terminal
+            .draw(|frame| draw_header(frame, &app, frame.area(), Some(Finger::Index), &tc))
+            .unwrap();
+        let row: String = (0..60)
+            .map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_string())
+            .collect();
+
+        assert!(row.contains("Random… · 1/2 I index"), "{row}");
+        assert!(row.trim_end().ends_with("0 err · 00:00"), "{row}");
     }
 
     #[test]
