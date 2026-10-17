@@ -7,6 +7,7 @@ use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::{App, Progress};
 use crate::keyboard::*;
@@ -15,6 +16,9 @@ use crate::settings::Theme;
 const KEYBOARD_ROWS: usize = 5;
 const MAX_WIDTH: u16 = 120;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
+const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
+/// Rows a panel takes around its text: its 2 border rows and its padding
+const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
 
 #[derive(Clone, Copy)]
 pub struct ThemeColors {
@@ -98,6 +102,49 @@ fn clamp_width(area: Rect) -> Rect {
     }
     let pad = (area.width - MAX_WIDTH) / 2;
     Rect::new(area.x + pad, area.y, MAX_WIDTH, area.height)
+}
+
+/// The middle `height` rows of `area`, or all of it if it is no taller.
+fn panel_area(area: Rect, height: u16) -> Rect {
+    if height >= area.height {
+        return area;
+    }
+    let [panel] = Layout::vertical([Constraint::Length(height)])
+        .flex(Flex::Center)
+        .areas(area);
+    panel
+}
+
+/// Splits `text` into lines at most `width` columns wide, breaking at spaces, or
+/// inside a word too wide for a line of its own.
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut lines = Vec::new();
+    for paragraph in text.lines() {
+        let mut line = String::new();
+        let mut line_width = 0;
+        for word in paragraph.split_whitespace() {
+            if !line.is_empty() && line_width + 1 + word.width() > width {
+                lines.push(std::mem::take(&mut line));
+                line_width = 0;
+            }
+            if !line.is_empty() {
+                line.push(' ');
+                line_width += 1;
+            }
+            for c in word.chars() {
+                let c_width = c.width().unwrap_or(0);
+                if !line.is_empty() && line_width + c_width > width {
+                    lines.push(std::mem::take(&mut line));
+                    line_width = 0;
+                }
+                line.push(c);
+                line_width += c_width;
+            }
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
@@ -517,12 +564,47 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 }
 
+/// Draws `message` in place of the text panel, wrapped to its width, in a panel
+/// as tall as the message needs.
+fn draw_error(frame: &mut Frame, message: &str, area: Rect, block: Block, tc: &ThemeColors) {
+    let lines = wrap_text(message, block.inner(area).width.into());
+    let height = lines.len() as u16 + PANEL_FRAME_ROWS;
+    // Short of rows, the padding goes before any line of the message does
+    let block = if height > area.height {
+        block.padding(Padding {
+            top: 0,
+            bottom: 0,
+            ..PANEL_PADDING
+        })
+    } else {
+        block
+    };
+    frame.render_widget(
+        Paragraph::new(lines.join("\n"))
+            .style(Style::new().fg(tc.incorrect))
+            .block(block)
+            .centered(),
+        panel_area(area, height),
+    );
+}
+
 fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     if app.searching {
         return;
     }
 
-    let ideal_height = if app.document.is_none() && app.error.is_none() && !app.zen_mode {
+    let block = Block::new()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(tc.dim_border))
+        .padding(PANEL_PADDING);
+
+    if let Some(err) = &app.error {
+        draw_error(frame, err, area, block, tc);
+        return;
+    }
+
+    let ideal_height = if app.document.is_none() && !app.zen_mode {
         (app.current_menu_count() as u16) + 7
     } else {
         7
@@ -531,37 +613,11 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         let has_spark = app.sparkline().is_some();
         let has_worst = !app.worst_keys(5).is_empty();
         let content = 1 + if has_spark { 3 } else { 0 } + if has_worst { 1 } else { 0 };
-        // borders(2) + padding(2) + content
-        ideal_height.max(content + 4)
+        ideal_height.max(content + PANEL_FRAME_ROWS)
     } else {
         ideal_height
     };
-    let panel_height = ideal_height.min(area.height);
-    let inner = if panel_height >= area.height {
-        area
-    } else {
-        let [r] = Layout::vertical([Constraint::Length(panel_height)])
-            .flex(Flex::Center)
-            .areas(area);
-        r
-    };
-
-    let block = Block::new()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(tc.dim_border))
-        .padding(Padding::symmetric(2, 1));
-
-    if let Some(ref err) = app.error {
-        frame.render_widget(
-            Paragraph::new(err.as_str())
-                .style(Style::new().fg(tc.incorrect))
-                .block(block)
-                .centered(),
-            inner,
-        );
-        return;
-    }
+    let inner = panel_area(area, ideal_height);
 
     if app.zen_mode {
         let mut lines: Vec<Line> = Vec::new();
@@ -1141,6 +1197,17 @@ mod tests {
     fn friendly_timestamp_invalid_month_shows_fallback() {
         // month "00" → wrapping_sub(1) overflows → fallback "???"
         assert_eq!(friendly_timestamp("2025-00-01T12:00:00"), "??? 01  12:00");
+    }
+
+    #[test]
+    fn wrap_text_fits_width_without_losing_text() {
+        let message = "Couldn't save: ~/文書/練習練習練習.toml\nUsing the defaults";
+        let lines = wrap_text(message, 12);
+        let squash = |text: &str| text.split_whitespace().collect::<String>();
+
+        assert!(lines.iter().all(|line| line.width() <= 12));
+        assert_eq!(squash(&lines.concat()), squash(message));
+        assert!(lines.iter().any(|line| line.starts_with("Using")));
     }
 }
 

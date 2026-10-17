@@ -29,6 +29,7 @@
 - The session clock running while the file search or an error message covered the text, lowering WPM and letting a timed session run out behind them (the clock now waits until they close)
 - A dip in the WPM graph right after resuming from the pause menu (the paused time is now left out)
 - Failed saves of settings, sessions or key stats going unnoticed, for example on a full disk or a read-only `~/.clavirio` (the app now shows a message, or prints one after quitting)
+- Long messages, such as a failed save on an 80-column terminal, being cut off at the edge (they now wrap, and the panel grows to fit them)
 
 ## [0.4.1] - 2026-03-28
 
