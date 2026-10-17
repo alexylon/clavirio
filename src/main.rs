@@ -91,8 +91,7 @@ fn main() -> Result<()> {
 
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = execute!(std::io::stderr(), LeaveAlternateScreen);
-        let _ = disable_raw_mode();
+        restore_terminal();
         default_hook(info);
     }));
 
@@ -106,14 +105,18 @@ fn main() -> Result<()> {
     runtime.shutdown_background();
     let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
 
-    // Errors are ignored, as the terminal may have closed, so the message is still printed
-    let _ = execute!(stdout(), LeaveAlternateScreen);
-    let _ = disable_raw_mode();
-
+    restore_terminal();
     if let Some(message) = result? {
         eprintln!("{message}");
     }
     Ok(())
+}
+
+/// Leaves the alternate screen and raw mode. Errors are ignored, as the terminal
+/// may have closed, and what comes after must still run.
+fn restore_terminal() {
+    let _ = execute!(stdout(), LeaveAlternateScreen);
+    let _ = disable_raw_mode();
 }
 
 async fn shutdown_signal() {
