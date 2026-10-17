@@ -1,0 +1,3 @@
+# Keep LF on every checkout: the lesson, word and quote files are embedded with
+# include_str!, and the quotes are split on "\n---\n"
+* text=auto eol=lf

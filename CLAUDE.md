@@ -42,7 +42,7 @@ cargo test test_name           # Run a single test by name
 ## Key Patterns
 
 - **No unsafe code** anywhere in the project
-- Settings and history use **atomic file writes** (write to `.tmp`, then rename)
+- Settings, history and key stats use **atomic file writes** through `settings::write_atomically` (a temporary file in the same folder, flushed to disk, then renamed over the old one)
 - Document skips blank lines transparently when advancing
 - Keyboard events during typing are **blocked on error** until backspace is pressed
 - The `App` struct syncs display toggles back to `Settings` in the main loop (not inside `handle_event`)

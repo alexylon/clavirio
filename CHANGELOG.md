@@ -21,6 +21,7 @@
 - Quotes after the first starting with a space you had to type
 - Timed practice running out of text, and ending early, for typists above about 100 wpm (the text now lasts to about 200 wpm)
 - An unreadable `settings.toml` being overwritten at the next settings change, losing all saved settings (it is now kept next to it as a timestamped `.bak` file)
+- Saving settings, history or key stats deleting the old file before the new one was in place, so a crash at that moment could lose it (saves now replace the file in one step, after flushing the new one to disk)
 - `-p` and `-n` being saved to `settings.toml`, so punctuation or numbers stayed on in later runs without the flag (they now apply to that run only)
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)
 - Esc on an error message, such as a failed `Ctrl-F` load or `w` without weak keys, wiping the stats of the session behind it (it now only closes the message)

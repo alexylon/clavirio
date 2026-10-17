@@ -45,11 +45,7 @@ pub fn save_session(record: SessionRecord) {
     }
 
     if let Ok(json) = serde_json::to_string_pretty(&records) {
-        let tmp = path.with_extension("json.tmp");
-        if fs::write(&tmp, &json).is_ok() {
-            let _ = fs::remove_file(&path);
-            let _ = fs::rename(&tmp, &path);
-        }
+        let _ = crate::settings::write_atomically(&path, &json);
     }
 }
 
@@ -103,11 +99,7 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
         .map(|(k, v)| (k.to_string(), v))
         .collect();
     if let Ok(json) = serde_json::to_string_pretty(&map) {
-        let tmp = path.with_extension("json.tmp");
-        if fs::write(&tmp, &json).is_ok() {
-            let _ = fs::remove_file(&path);
-            let _ = fs::rename(&tmp, &path);
-        }
+        let _ = crate::settings::write_atomically(&path, &json);
     }
 }
 
