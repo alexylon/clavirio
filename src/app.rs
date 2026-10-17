@@ -370,17 +370,27 @@ impl App {
             completed,
             id: self.lesson_id.clone(),
         });
-        let key_stats = crate::history::save_key_stats(&self.key_stats);
-        let mut messages: Vec<String> = self.save_message.take().into_iter().collect();
-        for saved in [session, key_stats] {
-            match saved {
-                Ok(notice) => messages.extend(notice),
-                Err(e) => messages.push(format!("Couldn't save this session: {e}")),
-            }
-        }
-        if !messages.is_empty() {
-            self.save_message = Some(messages.join("\n"));
-        }
+        self.note_save(session, "this session");
+        self.save_key_stats();
+    }
+
+    fn save_key_stats(&mut self) {
+        let saved = crate::history::save_key_stats(&self.key_stats);
+        self.note_save(saved, "the key stats");
+    }
+
+    /// Keeps what to tell the user about saving `what`: that it failed, or where
+    /// a file that couldn't be parsed was kept.
+    fn note_save(&mut self, saved: std::io::Result<Option<String>>, what: &str) {
+        let message = match saved {
+            Ok(None) => return,
+            Ok(Some(notice)) => notice,
+            Err(e) => format!("Couldn't save {what}: {e}"),
+        };
+        self.save_message = Some(match self.save_message.take() {
+            Some(earlier) => format!("{earlier}\n{message}"),
+            None => message,
+        });
     }
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
@@ -463,9 +473,7 @@ impl App {
     /// after quitting: a failed save, or where a file that couldn't be parsed was
     /// kept.
     pub fn save_on_exit(&mut self) -> Option<String> {
-        if (self.document.is_some() && !self.is_finished()) || self.zen_mode {
-            self.save_history(false);
-        }
+        self.save_before_leaving();
         self.save_message.take()
     }
 
@@ -486,7 +494,20 @@ impl App {
         self.zen_lines.clear();
     }
 
+    /// Saves the session before it is left: as incomplete, or in zen mode, which
+    /// has no end of its own, as complete.
+    fn save_before_leaving(&mut self) {
+        if !self.is_finished() {
+            self.save_history(self.zen_mode);
+        }
+    }
+
     fn restart(&mut self) {
+        // A restarted attempt is left out of the history, but its mistakes still
+        // count towards the weak keys
+        if !self.is_finished() {
+            self.save_key_stats();
+        }
         self.resume();
         self.error = None;
         if let Some(doc) = self.document.as_mut() {
@@ -535,17 +556,13 @@ impl App {
         let Some((next, lesson)) = self.find_next_lesson() else {
             return;
         };
-        if !self.is_finished() {
-            self.save_history(false);
-        }
+        self.save_before_leaving();
         self.selected_lesson = next;
         self.start_lesson(lesson);
     }
 
     fn go_to_menu(&mut self) {
-        if !self.is_finished() {
-            self.save_history(false);
-        }
+        self.save_before_leaving();
         self.document = None;
         self.error = None;
         self.reset_session();
@@ -725,7 +742,7 @@ impl App {
                     return false;
                 }
                 if self.zen_mode {
-                    self.save_history(true);
+                    self.save_before_leaving();
                     self.reset_session();
                     self.lesson_title.clear();
                     return false;
@@ -929,6 +946,7 @@ impl App {
     pub fn load_file(&mut self, path: &str) {
         match Document::load(path) {
             Ok(doc) => {
+                self.save_before_leaving();
                 self.document = Some(doc);
                 self.error = None;
                 self.reset_session();
@@ -1783,6 +1801,49 @@ mod tests {
 
         assert!(app.document.is_none());
         assert!(app.error.is_some());
+    }
+
+    #[test]
+    fn restart_keeps_key_stats_and_file_load_saves_the_session() {
+        let data_dir = crate::storage::data_dir();
+        let _ = fs::remove_dir_all(&data_dir);
+        fs::create_dir_all(&data_dir).unwrap();
+        let file = data_dir.join("text.txt");
+        fs::write(&file, "xyz").unwrap();
+        let mut app = App::new();
+        app.document = Some(Document::from_text("abc").unwrap());
+        app.lesson_id = "test".into();
+
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        let history_after_restart = crate::history::load_history().len();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.load_file(&file.to_string_lossy());
+        let history = crate::history::load_history();
+        let key_stats = crate::history::load_key_stats();
+        let _ = fs::remove_dir_all(&data_dir);
+
+        assert_eq!(history_after_restart, 0);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, "test");
+        assert!(!history[0].completed);
+        assert_eq!(key_stats.get(&'a'), Some(&(2, 0)));
+    }
+
+    #[test]
+    fn zen_session_saved_as_complete_when_quitting() {
+        let data_dir = crate::storage::data_dir();
+        let _ = fs::remove_dir_all(&data_dir);
+        let mut app = App::new();
+        app.start_zen_mode();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+
+        app.save_on_exit();
+        let history = crate::history::load_history();
+        let _ = fs::remove_dir_all(&data_dir);
+
+        assert_eq!(history.len(), 1);
+        assert!(history[0].completed);
     }
 
     #[test]

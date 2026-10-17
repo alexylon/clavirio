@@ -39,6 +39,9 @@
 - The keyboard's keys covering or touching its frame at some widths, such as 65, 91 and 117 columns (keys are now sized to fit inside the frame, and the app is now up to 121 columns wide instead of 120, so the largest keys still fit)
 - Zen mode's wpm, time and `Esc stop` line never being shown, as the typed lines took all the room
 - A huge `-w` or `-t` using up the memory, or crashing and leaving the terminal broken, and `0` being accepted (`-w` now takes 1 to 10000 words and `-t` 1 to 3600 seconds)
+- Loading a file with `Ctrl-F` during a session dropping the attempt in progress, so it was missing from the history and its key stats were lost (it is now saved, as when going to the menu or the next lesson)
+- Restarting with `Ctrl-R` or Restart in the pause menu dropping the attempt's key stats (its mistakes now count towards the weak keys, though the attempt stays out of the history)
+- Zen sessions being saved as incomplete when quitting, though leaving with Esc saves them as complete (they are now complete however they are left)
 
 ## [0.4.1] - 2026-03-28
 
