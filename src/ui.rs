@@ -12,7 +12,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::{App, MenuMode, Progress};
 use crate::keyboard::*;
-use crate::settings::Theme;
+use crate::settings::{KeyboardLayout, Theme};
 
 const KEYBOARD_ROWS: usize = 5;
 /// Rows per key: 2 for its border and 2 for its shifted and unshifted labels
@@ -42,9 +42,9 @@ const ZEN_TEXT_ROWS: u16 = 3;
 /// Zen mode's rows below its text: a blank row, and the wpm and controls
 const ZEN_FOOTER_ROWS: u16 = 2;
 /// Enough for 5 menu items, the typing view, the results and the pause menu,
-/// but only 2 history sessions. The keyboard is hidden on terminals too short
-/// for this and the keyboard. Where the menu's controls wrap onto more rows, it
-/// shows fewer items and scrolls.
+/// but only 2 history sessions, when the menu's controls and settings each fit
+/// on one row. The keyboard is hidden on terminals too short for this, any rows
+/// those wrap onto, and the keyboard.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const WIDEST_ROW_KEYS: u16 = 13;
 const MAX_KEY_WIDTH: u16 = 9;
@@ -55,6 +55,9 @@ const ELLIPSIS: &str = "\u{2026}";
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
 /// Rows a panel takes around its text: its 2 border rows and its padding
 const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
+const PANEL_FRAME_COLS: u16 = 2 + PANEL_PADDING.left + PANEL_PADDING.right;
+/// The text panel's share of the screen's width
+const TEXT_AREA_WIDTH: Constraint = Constraint::Percentage(80);
 
 #[derive(Clone, Copy)]
 pub struct ThemeColors {
@@ -192,14 +195,40 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-pub fn keyboard_fits(height: u16) -> bool {
-    height >= HEADER_ROWS + MIN_BODY_ROWS + KEYBOARD_HEIGHT
+/// Whether the keyboard fits on a screen of `area`, below the body's minimum
+/// rows and any the menu's controls and settings can wrap onto at that width.
+/// Those are counted with their longest labels and on every screen, so the
+/// keyboard doesn't come and go as settings change or between the menu and a
+/// session.
+pub fn keyboard_fits(area: Rect) -> bool {
+    let mut widest = App::new();
+    widest.menu_mode = MenuMode::Practice;
+    widest.theme = Theme::Light;
+    widest.layout = KeyboardLayout::Colemak;
+    widest.show_keyboard = false;
+    widest.show_hints = false;
+    widest.show_fingers = false;
+    widest.error_stop = false;
+    widest.include_punctuation = false;
+    widest.include_numbers = false;
+    let tc = ThemeColors::from_theme(widest.theme);
+    let footer_rows = menu_footer(&widest, true, panel_text_width(area), &tc).len() as u16;
+    let body_rows = MIN_BODY_ROWS + footer_rows.saturating_sub(MENU_FOOTER_MIN_ROWS);
+    area.height >= HEADER_ROWS + body_rows + KEYBOARD_HEIGHT
+}
+
+/// The width inside the text panel on a screen of `area`
+fn panel_text_width(area: Rect) -> usize {
+    let [text_area] = Layout::horizontal([TEXT_AREA_WIDTH])
+        .flex(Flex::Center)
+        .areas(clamp_width(area));
+    text_area.width.saturating_sub(PANEL_FRAME_COLS) as usize
 }
 
 pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     let clamped = clamp_width(area);
 
-    let kbd_height = if show_keyboard && keyboard_fits(clamped.height) {
+    let kbd_height = if show_keyboard && keyboard_fits(area) {
         KEYBOARD_HEIGHT
     } else {
         0
@@ -212,7 +241,7 @@ pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     ])
     .areas(clamped);
 
-    let [text_area] = Layout::horizontal([Constraint::Percentage(80)])
+    let [text_area] = Layout::horizontal([TEXT_AREA_WIDTH])
         .flex(Flex::Center)
         .areas(body);
 
@@ -705,7 +734,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
     let footer_lines = if app.document.is_none() && !app.zen_mode {
         let width = block.inner(area).width as usize;
-        menu_footer(app, keyboard_fits(frame.area().height), width, tc)
+        menu_footer(app, keyboard_fits(frame.area()), width, tc)
     } else {
         Vec::new()
     };
@@ -1380,15 +1409,34 @@ mod tests {
     #[test]
     fn keyboard_hidden_when_terminal_too_short() {
         let needed = HEADER_ROWS + MIN_BODY_ROWS + KEYBOARD_HEIGHT;
-        let short = compute_regions(Rect::new(0, 0, 80, needed - 1), true);
-        let tall = compute_regions(Rect::new(0, 0, 80, needed), true);
-        let tiny = compute_regions(Rect::new(0, 0, 80, HEADER_ROWS + 1), true);
+        let short = compute_regions(Rect::new(0, 0, MAX_WIDTH, needed - 1), true);
+        let tall = compute_regions(Rect::new(0, 0, MAX_WIDTH, needed), true);
+        let tiny = compute_regions(Rect::new(0, 0, MAX_WIDTH, HEADER_ROWS + 1), true);
 
         assert_eq!(short.keyboard_area.height, 0);
-        assert!(!keyboard_fits(needed - 1));
         assert_eq!(tall.keyboard_area.height, KEYBOARD_HEIGHT);
         assert_eq!(tall.body.height, MIN_BODY_ROWS);
         assert_eq!(tiny.header.height, HEADER_ROWS);
+    }
+
+    #[test]
+    fn keyboard_leaves_room_for_wrapped_menu_controls() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        let tc = ThemeColors::from_theme(Theme::Dark);
+
+        for width in [50, 60, 80, MAX_WIDTH] {
+            let height = (1..=100)
+                .find(|&height| keyboard_fits(Rect::new(0, 0, width, height)))
+                .unwrap();
+            let rows = render(width, height, |frame| {
+                let regions = compute_regions(frame.area(), app.show_keyboard);
+                draw_text_panel(frame, &app, regions.text_area, &tc)
+            });
+            // The fifth practice item, after the four special ones
+            let fifth_shown = rows.iter().any(|row| row.contains("Random Words"));
+            assert!(fifth_shown, "width {width}: {}", rows.join("\n"));
+        }
     }
 
     #[test]
@@ -1466,10 +1514,11 @@ mod tests {
     fn menu_shows_all_shortcuts_on_narrow_terminals() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
+        app.show_keyboard = false;
         let tc = ThemeColors::from_theme(Theme::Dark);
 
         let rows = render(70, 40, |frame| {
-            let regions = compute_regions(frame.area(), false);
+            let regions = compute_regions(frame.area(), app.show_keyboard);
             draw_text_panel(frame, &app, regions.text_area, &tc)
         });
         let text = rows.join("\n");

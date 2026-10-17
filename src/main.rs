@@ -286,7 +286,7 @@ fn draw_frame(
         let regions = compute_regions(frame.area(), app.show_keyboard);
         draw(frame, app, &regions, rows, grid_map);
     })?;
-    Ok(keyboard_fits(frame.area.height))
+    Ok(keyboard_fits(frame.area))
 }
 
 #[cfg(test)]

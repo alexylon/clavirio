@@ -32,7 +32,7 @@
 - Long messages, such as a failed save on an 80-column terminal, being cut off at the edge (they now wrap, and the panel grows to fit them)
 - A settings, history or key-stats file that couldn't be parsed being moved aside without a word (the app now says where it was kept, and says at startup when the settings couldn't be parsed)
 - The app staying open in the background and using a full CPU core after its terminal window was closed, until it was force-killed
-- The menu showing as an empty box, and the typing view showing a single line, on short terminals, such as the common 80×24 (the keyboard is now hidden below 36 rows to leave room for the text)
+- The menu showing as an empty box, and the typing view showing a single line, on short terminals, such as the common 80×24 (the keyboard is now hidden below 36 rows, or a few more on narrow terminals, to leave room for the text)
 - Lines wider than the text panel, such as long lines in a custom file or practice text on an 80-column terminal, being cut off so you typed past the edge without seeing the cursor (the current line now scrolls to keep the cursor in view, and an ellipsis shows where a line is cut off)
 - The header's stats and line count being cut off on terminals narrower than about 120 columns (the stats now come first, a long title is shortened, and the line count is left out rather than cut)
 - The results screen's shortcuts being cut off below about 100 columns, so `Esc menu` and others weren't shown (they now have their own line under the score)

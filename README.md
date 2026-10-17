@@ -155,7 +155,7 @@ Available word lists: `200`, `1k`, `rust`, `python`, `javascript` (`js`), `go`, 
 
 ## Controls
 
-Best with a maximized terminal window so text, keyboard, and stats fit comfortably. On a terminal shorter than 36 rows, the keyboard is hidden to leave room for the text.
+Best with a maximized terminal window so text, keyboard, and stats fit comfortably. On a terminal shorter than 36 rows, or a few more on narrow ones where the menu takes more rows, the keyboard is hidden to leave room for the text.
 
 ### Main Menu
 
