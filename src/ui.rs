@@ -14,7 +14,7 @@ use crate::keyboard::*;
 use crate::settings::Theme;
 
 const KEYBOARD_ROWS: usize = 5;
-/// A key's 2 border rows and its 2 labels, shifted and unshifted
+/// Rows per key: 2 for its border and 2 for its shifted and unshifted labels
 const KEY_ROW_HEIGHT: u16 = 4;
 const KEYBOARD_FRAME_ROWS: u16 = 1;
 const KEYBOARD_HEIGHT: u16 = KEYBOARD_ROWS as u16 * KEY_ROW_HEIGHT + 2 * KEYBOARD_FRAME_ROWS;
@@ -25,9 +25,9 @@ const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + 3;
 const MIN_MENU_ITEMS: u16 = 5;
 /// The typing panel's rows: its frame, the current line and the next 2
 const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
-/// Rows for 5 menu items, which also fit the typing view, the results and the
-/// pause menu, though only 2 sessions of the history. On a terminal too short
-/// for these and the keyboard, the keyboard is hidden.
+/// Enough for 5 menu items, the typing view, the results and the pause menu,
+/// but only 2 history sessions. The keyboard is hidden on terminals too short
+/// for this and the keyboard.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const MAX_WIDTH: u16 = 120;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
@@ -215,16 +215,16 @@ fn build_keyboard_rects(area: Rect, rows: &[Vec<KeyDef>]) -> Vec<Rc<[Rect]>> {
     )
     .split(area);
 
-    // Largest odd width that fits 13 keys (the widest row) in the area.
-    // Odd cell width → odd inner width (cell - 2 borders) → perfect centering.
+    // The widest odd key width that fits the 13 keys of the widest row. An odd
+    // width leaves an odd space inside the border, so labels sit exactly centred.
     let raw = area.width / 13;
     let unit_width = if raw.is_multiple_of(2) {
         raw.saturating_sub(1).max(1)
     } else {
         raw
     };
-    // Wide keys (Shift, Tab, etc.) are 1.5× normal width, spacebar is 6×.
-    // All widths forced odd so labels center perfectly in the inner area.
+    // Wide keys, such as Shift and Tab, are 1.5 times as wide and the spacebar 6
+    // times, also rounded down to odd widths
     let raw_wide = unit_width * 3 / 2;
     let wide_width = if raw_wide % 2 == 0 {
         raw_wide - 1
@@ -294,7 +294,7 @@ pub fn draw(
 
     let hint_coords: Vec<GridCoord> = if app.show_hints {
         if on_menu {
-            // Preview: highlight Enter key so the user sees the effect of display toggles
+            // On the menu, Enter is highlighted to show what the display toggles do
             grid_map.get(&KeyCode::Enter).copied().into_iter().collect()
         } else {
             app.document
@@ -502,7 +502,6 @@ fn draw_header(
     let err_fg = if err > 0 { tc.incorrect } else { tc.dim_text };
     let dim = Style::new().fg(tc.dim_text);
 
-    // Show countdown for timed mode, elapsed time otherwise
     let remaining = app.remaining_secs();
     let time_str = if let Some(r) = remaining {
         let r_mins = (r as u64) / 60;
@@ -668,7 +667,6 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 )));
             }
         }
-        // Pad remaining space
         while lines.len() < visible {
             lines.push(Line::from(""));
         }
@@ -1092,7 +1090,8 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             Style::new().fg(tc.dim_text),
         )));
     } else {
-        // chrome: borders 2 + padding 2 + header 1 + avg ~3 + footer 2 = 10
+        // Rows around the sessions: the panel frame, the column titles, the
+        // averages and the controls, with a row to spare
         let chrome = 10_u16;
         let visible_slots = inner.height.saturating_sub(chrome) as usize;
 
@@ -1124,7 +1123,6 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             } else if let Some(lesson) = lessons.iter().find(|l| l.id == r.id) {
                 lesson.title.to_string()
             } else {
-                // Show friendly label for word/timed sessions (e.g. "words_english_200" → "Random Words")
                 r.id.replace('_', " ")
             };
             let selected = i == scroll_pos;
@@ -1354,7 +1352,7 @@ fn draw_keyboard(
             };
 
             if let Some(sec_char) = has_secondary {
-                // Two-label key: secondary at top, primary at bottom half
+                // A key with a shifted character shows the unshifted one at the bottom
                 let cy = inner.y + inner.height.saturating_sub(1);
                 if cx < inner.x + inner.width && cy < inner.y + inner.height {
                     buf.set_string(cx, cy, label, Style::new().fg(label_fg));

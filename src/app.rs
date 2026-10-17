@@ -88,7 +88,7 @@ impl Document {
             return Err(format!("File not found: {}", resolved.display()));
         }
 
-        const MAX_FILE_SIZE: u64 = 1_000_000; // 1 MB
+        const MAX_FILE_SIZE: u64 = 1_000_000;
         let meta = fs::metadata(&resolved).map_err(|e| format!("Cannot read file: {e}"))?;
         if meta.len() > MAX_FILE_SIZE {
             return Err(format!(
@@ -403,7 +403,7 @@ impl App {
             return None;
         }
 
-        // Downsample to fixed width
+        // Average the samples down to the graph's width
         let condensed = if samples.len() <= Self::SPARKLINE_WIDTH {
             samples
         } else {
@@ -739,7 +739,6 @@ impl App {
                     self.lesson_title.clear();
                     return false;
                 }
-                // Active typing: open pause menu
                 self.paused = true;
                 self.freeze_clock();
                 self.pause_menu_index = 0;
@@ -1099,7 +1098,7 @@ impl App {
             self.last_correct = true;
             self.last_error_char = None;
 
-            // Sample interval WPM for sparkline; skip first 3 seconds
+            // Sample the WPM since the last sample for the graph, after the first 3 seconds
             const SAMPLE_INTERVAL: u32 = 5;
             if self.correct_count - self.last_sample_count >= SAMPLE_INTERVAL
                 && self.elapsed_secs() >= 3.0
@@ -1627,13 +1626,11 @@ mod tests {
     fn restart_resets_all_state() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
-        // Type two correct chars
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
         app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
         assert_eq!(app.correct_count, 2);
         assert!(app.start_time.is_some());
 
-        // Restart via Ctrl-R
         app.handle_event(InputEvent::Press(ctrl_key('r')));
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.total_count, 0);
@@ -1707,7 +1704,6 @@ mod tests {
     #[test]
     fn history_scroll_navigation() {
         let mut app = App::new();
-        // Manually set up history with entries
         app.history = vec![
             crate::history::SessionRecord {
                 timestamp: "t1".into(),
@@ -2191,7 +2187,7 @@ mod tests {
     fn wpm_samples_collected_during_typing() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abcdefghijklmnopqrstuvwxy").unwrap());
-        // Fake start_time 10 seconds ago so samples pass the 3-second warm-up filter
+        // Started 10 seconds ago, past the first 3 seconds the graph skips
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(10));
         for c in "abcdefghijklmnopqrstuvwxy".chars() {
             app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));

@@ -74,7 +74,8 @@ impl WordList {
     }
 }
 
-/// Simple xorshift64 PRNG seeded from system time — no extra dependencies.
+/// A simple random number generator (xorshift64) seeded from the clock, so no
+/// dependency is needed.
 struct Rng(u64);
 
 impl Rng {
@@ -83,7 +84,7 @@ impl Rng {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(42);
-        // Avoid zero seed
+        // A zero seed would only ever give zeros
         Self(seed | 1)
     }
 

@@ -87,16 +87,17 @@ fn main() -> Result<()> {
         default_hook(info);
     }));
 
-    // The input thread can be stuck reading a terminal that has closed, and
-    // dropping the runtime waits for it, so it is shut down without waiting even
-    // after a panic, such as ratatui failing to print to that terminal
+    // The input thread can hang reading a closed terminal, and dropping the
+    // runtime would wait for it forever. So the runtime is shut down without
+    // waiting, even after a panic, such as ratatui failing to write to that
+    // terminal.
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         runtime.block_on(run_app(cli))
     }));
     runtime.shutdown_background();
     let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
 
-    // Best effort, as the terminal may have closed and the message still has to be printed
+    // Errors are ignored, as the terminal may have closed, so the message is still printed
     let _ = execute!(stdout(), LeaveAlternateScreen);
     let _ = disable_raw_mode();
 
@@ -124,7 +125,7 @@ async fn shutdown_signal() {
     }
     #[cfg(not(unix))]
     {
-        // On Windows, graceful shutdown relies on Esc/Ctrl-C
+        // On Windows, quitting relies on Esc/Ctrl-C
         std::future::pending::<()>().await;
     }
 }
@@ -181,7 +182,7 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     app.include_punctuation |= cli.punctuation;
     app.include_numbers |= cli.numbers;
 
-    // Handle CLI flags: --time > --words > --file
+    // --time wins over --words, and --words over --file
     let list = cli.list;
     if let Some(secs) = cli.time {
         app.start_timed_practice(secs, list);
