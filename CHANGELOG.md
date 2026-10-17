@@ -42,6 +42,7 @@
 - Loading a file with `Ctrl-F` during a session dropping the attempt in progress, so it was missing from the history and its key stats were lost (it is now saved, as when going to the menu or the next lesson)
 - Restarting with `Ctrl-R` or Restart in the pause menu dropping the attempt's key stats (its mistakes now count towards the weak keys, though the attempt stays out of the history)
 - Zen sessions being saved as incomplete when quitting, though leaving with Esc saves them as complete (they are now complete however they are left)
+- `~` not being expanded in the `Ctrl-F` file prompt or a quoted `-f` path, so `~/notes.txt` was looked for in the current folder
 
 ## [0.4.1] - 2026-03-28
 

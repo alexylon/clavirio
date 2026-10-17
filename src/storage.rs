@@ -14,10 +14,17 @@ pub(crate) fn data_dir() -> PathBuf {
             .replace("::", "-");
         return std::env::temp_dir().join(format!("clavirio-test-data-{test}"));
     }
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".clavirio")
+    home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".clavirio")
+}
+
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    [std::env::var_os("HOME"), std::env::var_os("USERPROFILE")]
+        .into_iter()
+        .flatten()
+        .find(|home| !home.is_empty())
+        .map(PathBuf::from)
 }
 
 pub(crate) enum Loaded<T> {

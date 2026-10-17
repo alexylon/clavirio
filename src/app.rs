@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -29,6 +29,18 @@ pub enum Progress {
 pub enum MenuMode {
     Lessons,
     Practice,
+}
+
+/// `path` with a leading `~` replaced by the home folder, as a shell would do.
+/// Paths like `~user` are left as they are.
+fn expand_home(path: &str) -> PathBuf {
+    let home_relative = path
+        .strip_prefix('~')
+        .filter(|rest| rest.is_empty() || rest.starts_with(std::path::is_separator));
+    match (home_relative, crate::storage::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(std::path::is_separator)),
+        _ => PathBuf::from(path),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,13 +87,13 @@ impl Document {
     }
 
     pub fn load(raw_path: &str) -> Result<Self, String> {
-        let trimmed = raw_path.trim();
-        let resolved = if Path::new(trimmed).is_absolute() {
-            Path::new(trimmed).to_path_buf()
+        let expanded = expand_home(raw_path.trim());
+        let resolved = if expanded.is_absolute() {
+            expanded
         } else {
             std::env::current_dir()
                 .map_err(|e| format!("Cannot resolve working directory: {e}"))?
-                .join(trimmed)
+                .join(expanded)
         };
 
         if !resolved.exists() {
@@ -1300,6 +1312,21 @@ mod tests {
         assert_eq!(doc.current_line, "ab");
         assert_eq!(doc.cursor_position(), 0);
         assert_eq!(doc.progress, Progress::Active);
+    }
+
+    #[test]
+    fn leading_tilde_expands_to_home() {
+        assert_eq!(
+            expand_home("~user/notes.txt"),
+            PathBuf::from("~user/notes.txt")
+        );
+        assert_eq!(expand_home("notes/~/a.txt"), PathBuf::from("notes/~/a.txt"));
+
+        let Some(home) = crate::storage::home_dir() else {
+            return;
+        };
+        assert_eq!(expand_home("~"), home);
+        assert_eq!(expand_home("~/notes.txt"), home.join("notes.txt"));
     }
 
     #[test]
