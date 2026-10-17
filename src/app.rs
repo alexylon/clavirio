@@ -32,6 +32,15 @@ pub enum MenuMode {
     Practice,
 }
 
+/// Adds `line` below the message in `message`, or makes it the message if there
+/// is none.
+pub fn append_line(message: &mut Option<String>, line: String) {
+    *message = Some(match message.take() {
+        Some(earlier) => format!("{earlier}\n{line}"),
+        None => line,
+    });
+}
+
 /// `path` with a leading `~` replaced by the home folder, as a shell would do.
 /// Paths like `~user` are left as they are.
 fn expand_home(path: &str) -> PathBuf {
@@ -476,10 +485,7 @@ impl App {
             Ok(Some(notice)) => notice,
             Err(e) => format!("Couldn't save {what}: {e}"),
         };
-        self.save_message = Some(match self.save_message.take() {
-            Some(earlier) => format!("{earlier}\n{message}"),
-            None => message,
-        });
+        append_line(&mut self.save_message, message);
     }
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
@@ -638,10 +644,7 @@ impl App {
     /// session clock waits until it closes.
     pub fn show_error(&mut self, message: String) {
         self.freeze_clock();
-        self.error = Some(match self.error.take() {
-            Some(shown) => format!("{shown}\n{message}"),
-            None => message,
-        });
+        append_line(&mut self.error, message);
     }
 
     fn next_lesson(&mut self) {

@@ -19,7 +19,7 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::prelude::*;
 
-use app::App;
+use app::{App, append_line};
 use input::run_input_loop;
 use keyboard::{GridCoord, KeyDef, build_keyboard_rows, build_keycode_grid_map};
 use settings::{Settings, load_settings};
@@ -215,10 +215,14 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(run_input_loop(tx));
 
+    // The message showing in the last frame drawn, so one shown since but never
+    // drawn can be printed after quitting
+    let mut drawn_error = None;
     // A failed draw, such as on a terminal that has closed, ends the session
     // here, so that it is still saved below
     let session: Result<()> = async {
         app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+        drawn_error.clone_from(&app.error);
 
         // Created once, so a signal that arrives while an event is handled isn't missed
         let shutdown = shutdown_signal();
@@ -276,12 +280,38 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
             }
 
             app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+            drawn_error.clone_from(&app.error);
         }
         Ok(())
     }
     .await;
 
-    Ok((app.save_on_exit(), session))
+    let mut message = app
+        .error
+        .take()
+        .and_then(|shown| unseen_lines(shown, drawn_error));
+    if let Some(saved) = app.save_on_exit() {
+        append_line(&mut message, saved);
+    }
+    Ok((message, session))
+}
+
+/// The lines of the message `shown` that the last frame drawn didn't show. New
+/// lines are only ever added below a message.
+fn unseen_lines(shown: String, drawn: Option<String>) -> Option<String> {
+    let Some(drawn) = drawn else {
+        return Some(shown);
+    };
+    if shown == drawn {
+        return None;
+    }
+    match shown
+        .strip_prefix(&drawn)
+        .and_then(|rest| rest.strip_prefix('\n'))
+    {
+        Some(added) => Some(added.to_string()),
+        None => Some(shown),
+    }
 }
 
 /// Draws the app, and returns whether the keyboard fitted in the frame
@@ -312,6 +342,18 @@ mod tests {
         assert!(parses("-w", MAX_WORDS) && parses("-t", MAX_SECONDS));
         assert!(!parses("-w", 0) && !parses("-w", MAX_WORDS + 1));
         assert!(!parses("-t", 0) && !parses("-t", MAX_SECONDS + 1));
+    }
+
+    #[test]
+    fn only_lines_never_drawn_are_unseen() {
+        let unseen = |shown: &str, drawn: Option<&str>| {
+            unseen_lines(shown.to_string(), drawn.map(String::from))
+        };
+
+        assert_eq!(unseen("a", None).as_deref(), Some("a"));
+        assert_eq!(unseen("a", Some("a")), None);
+        assert_eq!(unseen("a\nb", Some("a")).as_deref(), Some("b"));
+        assert_eq!(unseen("b", Some("a")).as_deref(), Some("b"));
     }
 
     #[test]
