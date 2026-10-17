@@ -41,22 +41,48 @@ pub(crate) fn load<T>(path: &Path, parse: impl FnOnce(&str) -> Option<T>) -> io:
 }
 
 /// Loads a file that is about to be rewritten. If its content can't be parsed,
-/// it is first renamed to `<name>.<timestamp>.bak` so it isn't lost. An error
-/// means the file couldn't be read or renamed, and must not be rewritten.
+/// it is first renamed to `<name>.<timestamp>.bak` so it isn't lost, and that
+/// path is returned too. An error means the file couldn't be read or renamed,
+/// and must not be rewritten.
 pub(crate) fn load_for_rewrite<T: Default>(
     path: &Path,
     parse: impl FnOnce(&str) -> Option<T>,
-) -> io::Result<T> {
+) -> io::Result<(T, Option<PathBuf>)> {
     match load(path, parse)? {
-        Loaded::Parsed(value) => Ok(value),
-        Loaded::Missing => Ok(T::default()),
+        Loaded::Parsed(value) => Ok((value, None)),
+        Loaded::Missing => Ok((T::default(), None)),
         Loaded::Unparseable => {
             let stamp = OffsetDateTime::now_utc().unix_timestamp();
             let mut backup = path.as_os_str().to_os_string();
             backup.push(format!(".{stamp}.bak"));
-            fs::rename(path, backup)?;
-            Ok(T::default())
+            fs::rename(path, &backup)?;
+            Ok((T::default(), Some(backup.into())))
         }
+    }
+}
+
+/// Finishes the rewrite of `path` that `load_for_rewrite()` began, and returns a
+/// message saying where the old file was kept if it couldn't be parsed. A failed
+/// write still says so, as the old file has been moved by then.
+pub(crate) fn finish_rewrite(
+    path: &Path,
+    content: &str,
+    backup: Option<PathBuf>,
+) -> io::Result<Option<String>> {
+    let notice = backup.map(|backup| {
+        let name = path
+            .file_name()
+            .unwrap_or(path.as_os_str())
+            .to_string_lossy();
+        format!(
+            "Couldn't parse {name}, so it was kept as {}",
+            backup.display()
+        )
+    });
+    match (write_atomically(path, content), notice) {
+        (Ok(()), notice) => Ok(notice),
+        (Err(e), Some(notice)) => Err(io::Error::new(e.kind(), format!("{e}\n{notice}"))),
+        (Err(e), None) => Err(e),
     }
 }
 
@@ -118,11 +144,14 @@ mod tests {
         let missing = load_for_rewrite(&path, parse_number);
         fs::write(&path, broken).unwrap();
         let unparseable = load_for_rewrite(&path, parse_number);
+        let backup_kept = unparseable
+            .as_ref()
+            .is_ok_and(|(_, backup)| backup.as_ref().is_some_and(|b| b.exists()));
         let files_left = file_contents(&dir);
         let _ = fs::remove_dir_all(&dir);
 
-        assert!(missing.is_ok());
-        assert!(unparseable.is_ok());
+        assert!(missing.is_ok_and(|(_, backup)| backup.is_none()));
+        assert!(backup_kept);
         assert_eq!(files_left, [broken.as_bytes()]);
     }
 
@@ -153,6 +182,18 @@ mod tests {
 
         assert!(loaded.is_err());
         assert!(still_there);
+    }
+
+    #[test]
+    fn failed_rewrite_still_names_the_backup() {
+        let dir = test_dir("rewrite-failure");
+        let path = dir.join("taken");
+        fs::create_dir(&path).unwrap(); // a folder in the way, so the write fails
+
+        let result = finish_rewrite(&path, "new", Some(dir.join("taken.1.bak")));
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(result.is_err_and(|e| e.to_string().contains("taken.1.bak")));
     }
 
     #[test]

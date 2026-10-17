@@ -26,13 +26,17 @@ fn history_path() -> PathBuf {
     crate::storage::data_dir().join("history.json")
 }
 
-fn load_json_for_rewrite<T: DeserializeOwned + Default>(path: &Path) -> io::Result<T> {
+fn load_json_for_rewrite<T: DeserializeOwned + Default>(
+    path: &Path,
+) -> io::Result<(T, Option<PathBuf>)> {
     crate::storage::load_for_rewrite(path, |text| serde_json::from_str(text).ok())
 }
 
-pub fn save_session(record: SessionRecord) -> io::Result<()> {
+/// Adds `record` to the history, and returns a message saying where the old file
+/// was kept if it couldn't be parsed.
+pub fn save_session(record: SessionRecord) -> io::Result<Option<String>> {
     let path = history_path();
-    let mut records = load_json_for_rewrite::<Vec<SessionRecord>>(&path)?;
+    let (mut records, backup) = load_json_for_rewrite::<Vec<SessionRecord>>(&path)?;
 
     records.push(record);
     if records.len() > MAX_HISTORY_RECORDS {
@@ -40,7 +44,7 @@ pub fn save_session(record: SessionRecord) -> io::Result<()> {
     }
 
     let json = serde_json::to_string_pretty(&records)?;
-    crate::storage::write_atomically(&path, &json)
+    crate::storage::finish_rewrite(&path, &json, backup)
 }
 
 pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> usize {
@@ -69,12 +73,14 @@ fn keystats_path() -> PathBuf {
     crate::storage::data_dir().join("keystats.json")
 }
 
-pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) -> io::Result<()> {
+/// Adds `session_stats` to the saved key stats, and returns a message saying
+/// where the old file was kept if it couldn't be parsed.
+pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) -> io::Result<Option<String>> {
     if session_stats.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     let path = keystats_path();
-    let saved = load_json_for_rewrite(&path)?;
+    let (saved, backup) = load_json_for_rewrite(&path)?;
     let mut cumulative = key_stats_by_char(saved);
     for (&ch, &(hits, misses)) in session_stats {
         let entry = cumulative.entry(ch).or_insert((0, 0));
@@ -87,7 +93,7 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) -> io::Result<(
         .map(|(k, v)| (k.to_string(), v))
         .collect();
     let json = serde_json::to_string_pretty(&map)?;
-    crate::storage::write_atomically(&path, &json)
+    crate::storage::finish_rewrite(&path, &json, backup)
 }
 
 pub fn load_key_stats() -> HashMap<char, (u32, u32)> {

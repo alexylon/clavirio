@@ -131,9 +131,21 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let (mut settings, settings_error) = match load_settings() {
-        Ok(settings) => (settings, None),
-        Err(e) => (Settings::default(), Some(e)),
+    // Saving over settings that couldn't be read would replace them with the defaults
+    let loaded = load_settings();
+    let can_save_settings = loaded.is_ok();
+    let (mut settings, settings_message) = match loaded {
+        Ok(Some(settings)) => (settings, None),
+        Ok(None) => (
+            Settings::default(),
+            Some("Couldn't parse the settings, so the defaults are used".to_string()),
+        ),
+        Err(e) => (
+            Settings::default(),
+            Some(format!(
+                "Couldn't read the settings: {e}\nUsing the defaults; changes won't be saved this time"
+            )),
+        ),
     };
     let mut rows = build_keyboard_rows(settings.keyboard.layout);
     let mut grid_map = build_keycode_grid_map(&rows);
@@ -167,10 +179,8 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     } else if let Some(path) = cli.file {
         app.load_file(&path);
     }
-    if let Some(e) = &settings_error {
-        app.show_error(format!(
-            "Couldn't read the settings: {e}\nUsing the defaults; changes won't be saved this time"
-        ));
+    if let Some(message) = settings_message {
+        app.show_error(message);
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -218,10 +228,11 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
             settings.display.include_numbers = include_numbers;
             settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
             settings.display.error_stop = app.error_stop;
-            // Saving over settings that couldn't be read would replace them with the defaults
-            if settings_error.is_none() {
-                if let Err(e) = settings::save_settings(&settings) {
-                    app.show_error(format!("Couldn't save the settings: {e}"));
+            if can_save_settings {
+                match settings::save_settings(&settings) {
+                    Ok(Some(notice)) => app.show_error(notice),
+                    Ok(None) => {}
+                    Err(e) => app.show_error(format!("Couldn't save the settings: {e}")),
                 }
             }
             if layout_changed {

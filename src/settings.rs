@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use crate::storage::{Loaded, data_dir, load, load_for_rewrite, write_atomically};
+use crate::storage::{Loaded, data_dir, finish_rewrite, load, load_for_rewrite};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -121,20 +121,23 @@ fn parse_settings(text: &str) -> Option<Settings> {
     toml::from_str(text).ok()
 }
 
-/// Loads the saved settings, or the defaults if there are none or they can't be
-/// parsed. An error means the file is there but can't be read.
-pub fn load_settings() -> io::Result<Settings> {
+/// Loads the saved settings, or the defaults if there are none. `None` means the
+/// file can't be parsed, and an error that it is there but can't be read.
+pub fn load_settings() -> io::Result<Option<Settings>> {
     Ok(match load(&settings_path(), parse_settings)? {
-        Loaded::Parsed(settings) => settings,
-        Loaded::Missing | Loaded::Unparseable => Settings::default(),
+        Loaded::Parsed(settings) => Some(settings),
+        Loaded::Missing => Some(Settings::default()),
+        Loaded::Unparseable => None,
     })
 }
 
-pub fn save_settings(settings: &Settings) -> io::Result<()> {
+/// Saves `settings`, and returns a message saying where the old file was kept if
+/// it couldn't be parsed.
+pub fn save_settings(settings: &Settings) -> io::Result<Option<String>> {
     let path = settings_path();
-    load_for_rewrite(&path, parse_settings)?;
+    let (_, backup) = load_for_rewrite(&path, parse_settings)?;
     let content = toml::to_string_pretty(settings).map_err(io::Error::other)?;
-    write_atomically(&path, &content)
+    finish_rewrite(&path, &content, backup)
 }
 
 #[cfg(test)]
@@ -211,7 +214,7 @@ mod tests {
         let unreadable = load_settings();
         let _ = fs::remove_dir_all(&dir);
 
-        assert!(unparseable.is_ok());
+        assert!(matches!(unparseable, Ok(None)));
         assert!(unreadable.is_err());
     }
 }

@@ -256,7 +256,7 @@ pub struct App {
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
     ignore_keys_until: Option<Instant>,
-    save_error: Option<String>,
+    save_message: Option<String>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
     pub include_punctuation: bool,
@@ -307,7 +307,7 @@ impl App {
             last_sample_count: 0,
             last_sample_time: None,
             ignore_keys_until: None,
-            save_error: None,
+            save_message: None,
             zen_mode: false,
             zen_lines: Vec::new(),
             include_punctuation: false,
@@ -367,8 +367,15 @@ impl App {
             id: self.lesson_id.clone(),
         });
         let key_stats = crate::history::save_key_stats(&self.key_stats);
-        if let Err(e) = session.and(key_stats) {
-            self.save_error = Some(format!("Couldn't save this session: {e}"));
+        let mut messages: Vec<String> = self.save_message.take().into_iter().collect();
+        for saved in [session, key_stats] {
+            match saved {
+                Ok(notice) => messages.extend(notice),
+                Err(e) => messages.push(format!("Couldn't save this session: {e}")),
+            }
+        }
+        if !messages.is_empty() {
+            self.save_message = Some(messages.join("\n"));
         }
     }
 
@@ -448,13 +455,14 @@ impl App {
         lessons.get(next).map(|&lesson| (next, lesson))
     }
 
-    /// Saves a session that hasn't finished, and returns the message of a failed
-    /// save to show after quitting.
+    /// Saves a session that hasn't finished, and returns what to tell the user
+    /// after quitting: a failed save, or where a file that couldn't be parsed was
+    /// kept.
     pub fn save_on_exit(&mut self) -> Option<String> {
         if (self.document.is_some() && !self.is_finished()) || self.zen_mode {
             self.save_history(false);
         }
-        self.save_error.take()
+        self.save_message.take()
     }
 
     fn reset_session(&mut self) {
@@ -643,7 +651,7 @@ impl App {
             return true;
         }
         // Shown only now, so the action that saved, such as going to the menu, can't clear it
-        if let Some(message) = self.save_error.take() {
+        if let Some(message) = self.save_message.take() {
             self.show_error(message);
         }
         false
@@ -1763,6 +1771,22 @@ mod tests {
 
         assert!(app.document.is_none());
         assert!(app.error.is_some());
+    }
+
+    #[test]
+    fn broken_history_file_reported_after_session() {
+        let data_dir = crate::storage::data_dir();
+        let _ = fs::remove_dir_all(&data_dir);
+        fs::create_dir_all(&data_dir).unwrap();
+        fs::write(data_dir.join("history.json"), "not json").unwrap();
+        let mut app = App::new();
+        app.document = Some(Document::from_text("a").unwrap());
+        app.lesson_id = "test".into();
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        let _ = fs::remove_dir_all(&data_dir);
+
+        assert!(app.is_finished());
+        assert!(app.error.is_some_and(|e| e.contains(".bak")));
     }
 
     // --- vim-style keys ---
