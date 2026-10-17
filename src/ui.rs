@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crossterm::event::KeyCode;
@@ -31,6 +32,7 @@ const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const MAX_WIDTH: u16 = 120;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
+const ELLIPSIS: &str = "\u{2026}";
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
 /// Rows a panel takes around its text: its 2 border rows and its padding
 const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
@@ -963,65 +965,118 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) => {
+            let text_width = block.inner(inner).width as usize;
             let line_chars: Vec<char> = doc.current_line.chars().collect();
             let pos = doc.cursor_position().min(line_chars.len());
-            let mut spans = Vec::new();
-            if !app.error_chars.is_empty() {
-                for (i, &ch) in line_chars[..pos].iter().enumerate() {
+            let mut cells: Vec<Span> = line_chars[..pos]
+                .iter()
+                .enumerate()
+                .map(|(i, &ch)| {
                     if app.error_chars.iter().any(|&(p, _)| p == i) {
                         let display = if ch == ' ' {
                             SPACE_ERROR_SYMBOL.to_string()
                         } else {
                             ch.to_string()
                         };
-                        spans.push(Span::styled(display, Style::new().fg(tc.error_text)));
+                        Span::styled(display, Style::new().fg(tc.error_text))
                     } else {
-                        spans.push(Span::styled(ch.to_string(), Style::new().fg(tc.correct)));
+                        Span::styled(ch.to_string(), Style::new().fg(tc.correct))
                     }
-                }
-            } else if pos > 0 {
-                let done: String = line_chars[..pos].iter().collect();
-                spans.push(Span::styled(done, Style::new().fg(tc.correct)));
-            }
-            if let Some(err_ch) = app.last_error_char {
+                })
+                .collect();
+            let cursor_style = Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg);
+            let (cursor, rest_start) = if let Some(err_ch) = app.last_error_char {
                 if pos < line_chars.len() {
-                    spans.push(Span::styled(
+                    cells.push(Span::styled(
                         err_ch.to_string(),
                         Style::new().fg(tc.cursor_fg).bg(tc.incorrect),
                     ));
                 }
                 if let Some(&cursor_ch) = line_chars.get(pos + 1) {
-                    spans.push(Span::styled(
-                        cursor_ch.to_string(),
-                        Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
-                    ));
+                    cells.push(Span::styled(cursor_ch.to_string(), cursor_style));
                 }
-                if pos + 2 < line_chars.len() {
-                    let rest: String = line_chars[pos + 2..].iter().collect();
-                    spans.push(Span::styled(rest, Style::new().fg(tc.text)));
+                (pos + 1, pos + 2)
+            } else {
+                if let Some(&next_ch) = line_chars.get(pos) {
+                    cells.push(Span::styled(next_ch.to_string(), cursor_style));
                 }
-            } else if let Some(&next_ch) = line_chars.get(pos) {
-                spans.push(Span::styled(
-                    next_ch.to_string(),
-                    Style::new().fg(tc.cursor_fg).bg(tc.cursor_bg),
-                ));
-                if pos + 1 < line_chars.len() {
-                    let rest: String = line_chars[pos + 1..].iter().collect();
-                    spans.push(Span::styled(rest, Style::new().fg(tc.text)));
-                }
-            }
+                (pos, pos + 1)
+            };
+            cells.extend(
+                line_chars
+                    .iter()
+                    .skip(rest_start)
+                    .map(|ch| Span::styled(ch.to_string(), Style::new().fg(tc.text))),
+            );
 
-            let mut lines = vec![Line::from(spans)];
+            let mut lines = vec![fit_line(cells, cursor, text_width, tc)];
             for upcoming in doc.upcoming_lines(2) {
-                lines.push(Line::from(Span::styled(
-                    upcoming,
-                    Style::new().fg(tc.dim_text),
-                )));
+                let cells = upcoming
+                    .chars()
+                    .map(|ch| Span::styled(ch.to_string(), Style::new().fg(tc.dim_text)))
+                    .collect();
+                lines.push(fit_line(cells, 0, text_width, tc));
             }
 
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
     }
+}
+
+/// The part of a line, given as one span per character, that fits in `width`
+/// columns. A line too wide scrolls to keep `anchor` near the middle, with an
+/// ellipsis on each side that is cut off. Characters with the same style are
+/// joined back into one span, so accents render with the letter before them.
+fn fit_line<'a>(
+    mut cells: Vec<Span<'a>>,
+    anchor: usize,
+    width: usize,
+    tc: &ThemeColors,
+) -> Line<'a> {
+    let widths: Vec<usize> = cells.iter().map(Span::width).collect();
+    let range = visible_range(&widths, anchor, width);
+    let ellipsis = || Span::styled(ELLIPSIS, Style::new().fg(tc.dim_text));
+    if !range.is_empty() {
+        if range.start > 0 && range.start != anchor {
+            cells[range.start] = ellipsis();
+        }
+        if range.end < cells.len() && range.end - 1 != anchor {
+            cells[range.end - 1] = ellipsis();
+        }
+    }
+    let mut spans: Vec<Span> = Vec::new();
+    for cell in cells.drain(range) {
+        match spans.last_mut() {
+            Some(last) if last.style == cell.style => last.content.to_mut().push_str(&cell.content),
+            _ => spans.push(cell),
+        }
+    }
+    Line::from(spans)
+}
+
+/// The cells that fit in `max` columns, keeping `anchor` near the middle without
+/// leaving space empty after the end of the line.
+fn visible_range(widths: &[usize], anchor: usize, max: usize) -> Range<usize> {
+    if widths.iter().sum::<usize>() <= max {
+        return 0..widths.len();
+    }
+    let mut start = anchor.min(widths.len());
+    let mut used = 0;
+    while start > 0 && used + widths[start - 1] <= max / 2 {
+        start -= 1;
+        used += widths[start];
+    }
+    let mut end = start;
+    let mut used = 0;
+    while end < widths.len() && used + widths[end] <= max {
+        used += widths[end];
+        end += 1;
+    }
+    while start > 0 && used + widths[start - 1] <= max {
+        start -= 1;
+        used += widths[start];
+    }
+    start..end
 }
 
 fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
@@ -1231,6 +1286,32 @@ mod tests {
         assert_eq!(tall.keyboard_area.height, KEYBOARD_HEIGHT);
         assert_eq!(tall.body.height, MIN_BODY_ROWS);
         assert_eq!(tiny.header.height, HEADER_ROWS);
+    }
+
+    #[test]
+    fn long_line_scrolls_to_keep_cursor_in_view() {
+        let narrow = [1; 100];
+
+        assert_eq!(visible_range(&[1; 10], 9, 10), 0..10);
+        assert_eq!(visible_range(&narrow, 5, 20), 0..20);
+        assert_eq!(visible_range(&narrow, 50, 20), 40..60);
+        assert_eq!(visible_range(&narrow, 95, 20), 80..100);
+        assert_eq!(visible_range(&[2; 100], 50, 20), 45..55);
+    }
+
+    #[test]
+    fn fit_line_keeps_the_cursor_and_joins_characters() {
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let cells = |text: &str| text.chars().map(|ch| Span::raw(ch.to_string())).collect();
+
+        for width in 0..4 {
+            let line = fit_line(cells("abcdefghij"), 5, width, &tc);
+            assert!(
+                width == 0 || line.to_string().contains('f'),
+                "width {width}"
+            );
+        }
+        assert_eq!(fit_line(cells("e\u{301}"), 0, 10, &tc).spans.len(), 1);
     }
 
     #[test]
