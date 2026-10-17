@@ -9,7 +9,7 @@
 - Trailing whitespace in custom files having to be typed (lines are now trimmed, and whitespace-only lines count as blank)
 - Custom files with only blank lines opening a session that could never finish (now rejected as empty)
 - Custom files starting with a blank line making you type the first line twice
-- An unreadable history or key-stats file being overwritten by the next session, losing all earlier records (it is now kept next to it as a timestamped `.bak` file)
+- A history or key-stats file that couldn't be read or parsed being overwritten by the next session, losing all earlier records (one that can't be parsed is now kept next to it as a timestamped `.bak` file, and one that can't be read is left alone)
 - `Ctrl-F` while paused or in the history view starting a file search you couldn't see (it now does nothing there)
 - A weak space in the weak-key drill adding extra spaces after words
 - Weak capitals, such as `A` from the Shift lessons, never appearing in the weak-key drill (it now capitalises the words starting with that letter, or drills the capital on its own when no word does)
@@ -20,7 +20,7 @@
 - `Ctrl-R` while paused leaving the pause menu open after restarting
 - Quotes after the first starting with a space you had to type
 - Timed practice running out of text, and ending early, for typists above about 100 wpm (the text now lasts to about 200 wpm)
-- An unreadable `settings.toml` being overwritten at the next settings change, losing all saved settings (it is now kept next to it as a timestamped `.bak` file)
+- A `settings.toml` that couldn't be read or parsed being overwritten at the next settings change, losing all saved settings (one that can't be parsed is now kept next to it as a timestamped `.bak` file, and one that can't be read is left alone)
 - Saving settings, history or key stats deleting the old file before the new one was in place, so a crash at that moment could lose it (saves now replace the file in one step, after flushing the new one to disk)
 - `-p` and `-n` being saved to `settings.toml`, so punctuation or numbers stayed on in later runs without the flag (they now apply to that run only)
 - Timed sessions running past the time limit while you kept typing (they now end at the limit, and for a second afterwards only Ctrl shortcuts work, so leftover typing can't restart or leave the results screen)

@@ -14,17 +14,18 @@ pub(crate) fn data_dir() -> PathBuf {
     PathBuf::from(home).join(".clavirio")
 }
 
-/// Loads a file that is about to be rewritten. If it can't be read or parsed,
-/// it is first renamed to `<name>.<timestamp>.bak` so its contents aren't lost.
-/// Returns `None` if that rename fails, meaning the file must not be rewritten.
+/// Loads a file that is about to be rewritten. If its content can't be parsed
+/// or isn't valid UTF-8, it is first renamed to `<name>.<timestamp>.bak` so it
+/// isn't lost. Returns `None` if the file can't be read or that rename fails,
+/// meaning the file must not be rewritten.
 pub(crate) fn load_for_rewrite<T: Default>(
     path: &Path,
     parse: impl FnOnce(&str) -> Option<T>,
 ) -> Option<T> {
-    let loaded = match fs::read_to_string(path) {
-        Ok(text) => parse(&text),
+    let loaded = match fs::read(path) {
+        Ok(bytes) => std::str::from_utf8(&bytes).ok().and_then(parse),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Some(T::default()),
-        Err(_) => None,
+        Err(_) => return None,
     };
     if loaded.is_none() {
         let stamp = OffsetDateTime::now_utc().unix_timestamp();
@@ -87,21 +88,46 @@ mod tests {
     fn unparseable_file_kept_before_rewrite() {
         let dir = test_dir("backup");
         let path = dir.join("count.txt");
-        let parse = |text: &str| text.parse::<u32>().ok();
         let broken = "not a number";
 
-        let missing = load_for_rewrite(&path, parse);
+        let missing = load_for_rewrite(&path, parse_number);
         fs::write(&path, broken).unwrap();
-        let unparseable = load_for_rewrite(&path, parse);
-        let files_left: Vec<String> = fs::read_dir(&dir)
-            .unwrap()
-            .filter_map(|entry| fs::read_to_string(entry.ok()?.path()).ok())
-            .collect();
+        let unparseable = load_for_rewrite(&path, parse_number);
+        let files_left = file_contents(&dir);
         let _ = fs::remove_dir_all(&dir);
 
         assert!(missing.is_some());
         assert!(unparseable.is_some());
+        assert_eq!(files_left, [broken.as_bytes()]);
+    }
+
+    #[test]
+    fn non_utf8_file_kept_before_rewrite() {
+        let dir = test_dir("backup-non-utf8");
+        let path = dir.join("count.txt");
+        let broken = [0xff, 0xfe, b'1', 0]; // "1" saved as UTF-16
+        fs::write(&path, broken).unwrap();
+
+        let loaded = load_for_rewrite(&path, parse_number);
+        let files_left = file_contents(&dir);
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(loaded.is_some());
         assert_eq!(files_left, [broken]);
+    }
+
+    #[test]
+    fn unreadable_file_left_alone() {
+        let dir = test_dir("unreadable");
+        let path = dir.join("count.txt");
+        fs::create_dir(&path).unwrap(); // reading a folder fails, but not with "not found"
+
+        let loaded = load_for_rewrite(&path, parse_number);
+        let still_there = path.is_dir();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(loaded.is_none());
+        assert!(still_there);
     }
 
     #[test]
@@ -143,6 +169,17 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(files_left, 1);
+    }
+
+    fn parse_number(text: &str) -> Option<u32> {
+        text.parse().ok()
+    }
+
+    fn file_contents(dir: &Path) -> Vec<Vec<u8>> {
+        fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|entry| fs::read(entry.ok()?.path()).ok())
+            .collect()
     }
 
     fn test_dir(name: &str) -> PathBuf {

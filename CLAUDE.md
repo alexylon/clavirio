@@ -39,7 +39,7 @@ cargo test test_name           # Run a single test by name
 
 **History** (`history.rs`): JSON array of `SessionRecord` at `~/.clavirio/history.json`. Tracks WPM, accuracy, duration, completion status, lesson ID.
 
-**Storage** (`storage.rs`): The `~/.clavirio` data folder and the file helpers that settings and history share: `load_for_rewrite()` keeps a file that can't be read or parsed as a timestamped `.bak` before it is rewritten, and `write_atomically()` writes through a temp file and a rename, creating the folder if needed.
+**Storage** (`storage.rs`): The `~/.clavirio` data folder and the file helpers that settings and history share: `load_for_rewrite()` keeps a file that can't be parsed as a timestamped `.bak` before it is rewritten (a file that can't be read is left alone), and `write_atomically()` writes through a temp file and a rename, creating the folder if needed.
 
 ## Key Patterns
 
