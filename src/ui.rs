@@ -14,6 +14,21 @@ use crate::keyboard::*;
 use crate::settings::Theme;
 
 const KEYBOARD_ROWS: usize = 5;
+/// A key's 2 border rows and its 2 labels, shifted and unshifted
+const KEY_ROW_HEIGHT: u16 = 4;
+const KEYBOARD_FRAME_ROWS: u16 = 1;
+const KEYBOARD_HEIGHT: u16 = KEYBOARD_ROWS as u16 * KEY_ROW_HEIGHT + 2 * KEYBOARD_FRAME_ROWS;
+const HEADER_ROWS: u16 = 2;
+/// The menu's rows around its items: the panel frame, a blank row, the controls
+/// and the settings
+const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + 3;
+const MIN_MENU_ITEMS: u16 = 5;
+/// The typing panel's rows: its frame, the current line and the next 2
+const TYPING_PANEL_ROWS: u16 = PANEL_FRAME_ROWS + 3;
+/// Rows for 5 menu items, which also fit the typing view, the results and the
+/// pause menu, though only 2 sessions of the history. On a terminal too short
+/// for these and the keyboard, the keyboard is hidden.
+const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const MAX_WIDTH: u16 = 120;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
@@ -73,6 +88,15 @@ impl ThemeColors {
                 disabled: Color::Rgb(200, 200, 200),
                 bg: Color::Rgb(235, 233, 230),
             },
+        }
+    }
+
+    /// The colours of a toggle's key and label, greyed out when it has no effect
+    fn toggle_colors(&self, enabled: bool) -> (Color, Color) {
+        if enabled {
+            (self.accent, self.dim_text)
+        } else {
+            (self.disabled, self.disabled)
         }
     }
 }
@@ -147,18 +171,22 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+pub fn keyboard_fits(height: u16) -> bool {
+    height >= HEADER_ROWS + MIN_BODY_ROWS + KEYBOARD_HEIGHT
+}
+
 pub fn compute_regions(area: Rect, show_keyboard: bool) -> Regions {
     let clamped = clamp_width(area);
 
-    let kbd_height = if show_keyboard {
-        (KEYBOARD_ROWS as u16) * 4 + 2 // +2 for keyboard border
+    let kbd_height = if show_keyboard && keyboard_fits(clamped.height) {
+        KEYBOARD_HEIGHT
     } else {
         0
     };
 
     let [header, body, keyboard_area] = Layout::vertical([
-        Constraint::Length(2),
-        Constraint::Min(5),
+        Constraint::Length(HEADER_ROWS),
+        Constraint::Fill(1),
         Constraint::Length(kbd_height),
     ])
     .areas(clamped);
@@ -334,12 +362,15 @@ pub fn draw(
         draw_search_overlay(frame, app, regions.search_area, &tc);
     }
 
-    if app.show_keyboard {
+    if regions.keyboard_area.height > 0 {
         let keys_area = Rect::new(
             regions.keyboard_area.x,
-            regions.keyboard_area.y + 1,
+            regions.keyboard_area.y + KEYBOARD_FRAME_ROWS,
             regions.keyboard_area.width,
-            regions.keyboard_area.height.saturating_sub(2),
+            regions
+                .keyboard_area
+                .height
+                .saturating_sub(2 * KEYBOARD_FRAME_ROWS),
         );
         let kbd_rects = build_keyboard_rects(keys_area, rows);
         let highlight_coord: Option<GridCoord> = if app.show_hints {
@@ -605,9 +636,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 
     let ideal_height = if app.document.is_none() && !app.zen_mode {
-        (app.current_menu_count() as u16) + 7
+        (app.current_menu_count() as u16) + MENU_CHROME_ROWS
     } else {
-        7
+        TYPING_PANEL_ROWS
     };
     let ideal_height = if app.is_finished() {
         let has_spark = app.sparkline().is_some();
@@ -675,9 +706,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Lessons => app.selected_lesson,
                 MenuMode::Practice => app.selected_practice,
             };
-            // borders: 2 + padding: 2 + blank: 1 + controls: 1 + settings: 1 = 7
-            let chrome = 7_u16;
-            let visible_slots = inner.height.saturating_sub(chrome) as usize;
+            let visible_slots = inner.height.saturating_sub(MENU_CHROME_ROWS) as usize;
 
             let scroll = if visible_slots >= total_items || cursor < visible_slots / 2 {
                 0
@@ -832,16 +861,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled("Esc", Style::new().fg(tc.accent)),
                 Span::styled(" quit", Style::new().fg(tc.dim_text)),
             ]));
-            let fingers_fg = if app.show_hints {
-                tc.dim_text
-            } else {
-                tc.disabled
-            };
-            let fingers_key_fg = if app.show_hints {
-                tc.accent
-            } else {
-                tc.disabled
-            };
+            let (fingers_key_fg, fingers_fg) = tc.toggle_colors(app.show_hints);
+            let (keyboard_key_fg, keyboard_fg) =
+                tc.toggle_colors(keyboard_fits(frame.area().height));
             let mut toggle_spans = vec![
                 Span::styled("1", Style::new().fg(fingers_key_fg)),
                 Span::styled(
@@ -853,10 +875,10 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     format!(" hints {}  ", on_off(app.show_hints)),
                     Style::new().fg(tc.dim_text),
                 ),
-                Span::styled("3", Style::new().fg(tc.accent)),
+                Span::styled("3", Style::new().fg(keyboard_key_fg)),
                 Span::styled(
                     format!(" keyboard {}  ", on_off(app.show_keyboard)),
-                    Style::new().fg(tc.dim_text),
+                    Style::new().fg(keyboard_fg),
                 ),
                 Span::styled("4", Style::new().fg(tc.accent)),
                 Span::styled(
@@ -1197,6 +1219,20 @@ mod tests {
     fn friendly_timestamp_invalid_month_shows_fallback() {
         // month "00" → wrapping_sub(1) overflows → fallback "???"
         assert_eq!(friendly_timestamp("2025-00-01T12:00:00"), "??? 01  12:00");
+    }
+
+    #[test]
+    fn keyboard_hidden_when_terminal_too_short() {
+        let needed = HEADER_ROWS + MIN_BODY_ROWS + KEYBOARD_HEIGHT;
+        let short = compute_regions(Rect::new(0, 0, 80, needed - 1), true);
+        let tall = compute_regions(Rect::new(0, 0, 80, needed), true);
+        let tiny = compute_regions(Rect::new(0, 0, 80, HEADER_ROWS + 1), true);
+
+        assert_eq!(short.keyboard_area.height, 0);
+        assert!(!keyboard_fits(needed - 1));
+        assert_eq!(tall.keyboard_area.height, KEYBOARD_HEIGHT);
+        assert_eq!(tall.body.height, MIN_BODY_ROWS);
+        assert_eq!(tiny.header.height, HEADER_ROWS);
     }
 
     #[test]

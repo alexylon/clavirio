@@ -241,6 +241,9 @@ pub struct App {
     pub lesson_id: String,
     pub layout: KeyboardLayout,
     pub show_keyboard: bool,
+    /// Whether the keyboard fitted in the last frame drawn; `3` does nothing when
+    /// it didn't
+    pub keyboard_fits: bool,
     pub show_hints: bool,
     pub show_fingers: bool,
     pub theme: Theme,
@@ -292,6 +295,7 @@ impl App {
             lesson_id: String::new(),
             layout: KeyboardLayout::default(),
             show_keyboard: true,
+            keyboard_fits: true,
             show_hints: true,
             show_fingers: true,
             theme: Theme::default(),
@@ -864,7 +868,7 @@ impl App {
                     self.show_fingers = false;
                 }
             }
-            KeyCode::Char('3') => {
+            KeyCode::Char('3') if self.keyboard_fits => {
                 self.show_keyboard = !self.show_keyboard;
             }
             KeyCode::Char('4') => {
@@ -1737,6 +1741,18 @@ mod tests {
         assert_eq!(app.history_scroll, 1);
         app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
         assert_eq!(app.history_scroll, 1); // stays at last
+    }
+
+    #[test]
+    fn keyboard_toggle_works_only_when_keyboard_fits() {
+        let mut app = App::new();
+        app.keyboard_fits = false;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('3'))));
+        assert!(app.show_keyboard);
+
+        app.keyboard_fits = true;
+        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('3'))));
+        assert!(!app.show_keyboard);
     }
 
     // --- save_on_exit ---

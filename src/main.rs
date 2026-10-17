@@ -8,9 +8,11 @@ mod storage;
 mod ui;
 mod words;
 
-use std::io::{Result, stdout};
+use std::collections::HashMap;
+use std::io::{Result, Stdout, stdout};
 
 use clap::Parser;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -19,9 +21,9 @@ use ratatui::prelude::*;
 
 use app::App;
 use input::run_input_loop;
-use keyboard::{build_keyboard_rows, build_keycode_grid_map};
+use keyboard::{GridCoord, KeyDef, build_keyboard_rows, build_keycode_grid_map};
 use settings::{Settings, load_settings};
-use ui::{compute_regions, draw};
+use ui::{compute_regions, draw, keyboard_fits};
 
 /// A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking
 #[derive(Parser)]
@@ -196,10 +198,7 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(run_input_loop(tx));
 
-    terminal.draw(|frame| {
-        let regions = compute_regions(frame.area(), app.show_keyboard);
-        draw(frame, &app, &regions, &rows, &grid_map);
-    })?;
+    app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
 
     // Created once, so a signal that arrives while an event is handled isn't missed
     let shutdown = shutdown_signal();
@@ -255,13 +254,24 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
             }
         }
 
-        terminal.draw(|frame| {
-            let regions = compute_regions(frame.area(), app.show_keyboard);
-            draw(frame, &app, &regions, &rows, &grid_map);
-        })?;
+        app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
     }
 
     Ok(app.save_on_exit())
+}
+
+/// Draws the app, and returns whether the keyboard fitted in the frame
+fn draw_frame(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    app: &App,
+    rows: &[Vec<KeyDef>],
+    grid_map: &HashMap<KeyCode, GridCoord>,
+) -> Result<bool> {
+    let frame = terminal.draw(|frame| {
+        let regions = compute_regions(frame.area(), app.show_keyboard);
+        draw(frame, app, &regions, rows, grid_map);
+    })?;
+    Ok(keyboard_fits(frame.area.height))
 }
 
 #[cfg(test)]
