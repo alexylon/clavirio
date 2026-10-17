@@ -452,9 +452,6 @@ fn draw_header(
         0.0
     };
     let err = app.error_count();
-    let elapsed = app.elapsed_secs();
-    let mins = (elapsed as u64) / 60;
-    let secs = (elapsed as u64) % 60;
 
     let (wpm_str, wpm_fg) = if started {
         (
@@ -473,13 +470,9 @@ fn draw_header(
     let dim = Style::new().fg(tc.dim_text);
 
     let remaining = app.remaining_secs();
-    let time_str = if let Some(r) = remaining {
-        let r_mins = (r as u64) / 60;
-        let r_secs = (r as u64) % 60;
-        format!("{r_mins:02}:{r_secs:02} ")
-    } else {
-        format!("{mins:02}:{secs:02} ")
-    };
+    // A countdown rounds up, so it shows 00:00 only once the time is up
+    let shown_secs = remaining.map_or(app.elapsed_secs() as u64, |r| r.ceil() as u64);
+    let time_str = format!("{:02}:{:02} ", shown_secs / 60, shown_secs % 60);
     let time_fg = if remaining.is_some_and(|r| r <= 5.0) && started {
         tc.incorrect
     } else {

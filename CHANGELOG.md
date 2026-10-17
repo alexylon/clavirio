@@ -43,6 +43,7 @@
 - Restarting with `Ctrl-R` or Restart in the pause menu dropping the attempt's key stats (its mistakes now count towards the weak keys, though the attempt stays out of the history)
 - Zen sessions being saved as incomplete when quitting, though leaving with Esc saves them as complete (they are now complete however they are left)
 - `~` not being expanded in the `Ctrl-F` file prompt or a quoted `-f` path, so `~/notes.txt` was looked for in the current folder
+- The timed-mode countdown showing a second less than was left, and `00:00` for the whole last second (it now rounds up)
 
 ## [0.4.1] - 2026-03-28
 
