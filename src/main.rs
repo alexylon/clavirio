@@ -4,6 +4,7 @@ mod input;
 mod keyboard;
 mod lessons;
 mod settings;
+mod storage;
 mod ui;
 mod words;
 

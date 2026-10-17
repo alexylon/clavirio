@@ -33,16 +33,18 @@ cargo test test_name           # Run a single test by name
 
 **Lessons** (`lessons.rs`): 21 layout-specific + 6 shared lessons per layout, embedded via `include_str!()`. Universal finger-pair system: 2 keys per lesson, same physical positions across all 3 layouts. Each row follows index → middle → ring → pinky → reach → full row → row + Shift. Shared lessons cover numbers and symbols.
 
-**Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility. Atomic writes (temp file + rename).
+**Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility.
 
 **Words** (`words.rs`): English word lists (200 and 1k) embedded via `include_str!()`. Xorshift64 PRNG for random word selection, text generation with line wrapping. `WordList::all()` provides the menu entries.
 
 **History** (`history.rs`): JSON array of `SessionRecord` at `~/.clavirio/history.json`. Tracks WPM, accuracy, duration, completion status, lesson ID.
 
+**Storage** (`storage.rs`): The `~/.clavirio` data folder and the file helpers that settings and history share: `load_for_rewrite()` keeps a file that can't be read or parsed as a timestamped `.bak` before it is rewritten, and `write_atomically()` writes through a temp file and a rename, creating the folder if needed.
+
 ## Key Patterns
 
 - **No unsafe code** anywhere in the project
-- Settings, history and key stats use **atomic file writes** through `settings::write_atomically` (a temporary file in the same folder, flushed to disk, then renamed over the old one)
+- Settings, history and key stats use **atomic file writes** through `storage::write_atomically` (a temporary file in the same folder, flushed to disk, then renamed over the old one)
 - Document skips blank lines transparently when advancing
 - Keyboard events during typing are **blocked on error** until backspace is pressed
 - The `App` struct syncs display toggles back to `Settings` in the main loop (not inside `handle_event`)

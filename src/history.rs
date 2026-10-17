@@ -22,19 +22,15 @@ pub struct SessionRecord {
 }
 
 fn history_path() -> PathBuf {
-    crate::settings::data_dir().join("history.json")
+    crate::storage::data_dir().join("history.json")
 }
 
 fn load_json_for_rewrite<T: DeserializeOwned + Default>(path: &Path) -> Option<T> {
-    crate::settings::load_for_rewrite(path, |text| serde_json::from_str(text).ok())
+    crate::storage::load_for_rewrite(path, |text| serde_json::from_str(text).ok())
 }
 
 pub fn save_session(record: SessionRecord) {
     let path = history_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
     let Some(mut records) = load_json_for_rewrite::<Vec<SessionRecord>>(&path) else {
         return;
     };
@@ -45,7 +41,7 @@ pub fn save_session(record: SessionRecord) {
     }
 
     if let Ok(json) = serde_json::to_string_pretty(&records) {
-        let _ = crate::settings::write_atomically(&path, &json);
+        let _ = crate::storage::write_atomically(&path, &json);
     }
 }
 
@@ -72,7 +68,7 @@ fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Les
 }
 
 fn keystats_path() -> PathBuf {
-    crate::settings::data_dir().join("keystats.json")
+    crate::storage::data_dir().join("keystats.json")
 }
 
 pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
@@ -80,10 +76,6 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
         return;
     }
     let path = keystats_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
     let Some(saved) = load_json_for_rewrite(&path) else {
         return;
     };
@@ -99,7 +91,7 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) {
         .map(|(k, v)| (k.to_string(), v))
         .collect();
     if let Ok(json) = serde_json::to_string_pretty(&map) {
-        let _ = crate::settings::write_atomically(&path, &json);
+        let _ = crate::storage::write_atomically(&path, &json);
     }
 }
 
