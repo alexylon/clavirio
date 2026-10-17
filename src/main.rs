@@ -69,9 +69,11 @@ fn parse_word_list(s: &str) -> std::result::Result<words::WordList, String> {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;
@@ -83,10 +85,18 @@ async fn main() -> Result<()> {
         default_hook(info);
     }));
 
-    let result = run_app(cli).await;
+    // The input thread can be stuck reading a terminal that has closed, and
+    // dropping the runtime waits for it, so it is shut down without waiting even
+    // after a panic, such as ratatui failing to print to that terminal
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.block_on(run_app(cli))
+    }));
+    runtime.shutdown_background();
+    let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
 
-    execute!(stdout(), LeaveAlternateScreen)?;
-    disable_raw_mode()?;
+    // Best effort, as the terminal may have closed and the message still has to be printed
+    let _ = execute!(stdout(), LeaveAlternateScreen);
+    let _ = disable_raw_mode();
 
     if let Some(message) = result? {
         eprintln!("{message}");
@@ -191,10 +201,14 @@ async fn run_app(cli: Cli) -> Result<Option<String>> {
         draw(frame, &app, &regions, &rows, &grid_map);
     })?;
 
+    // Created once, so a signal that arrives while an event is handled isn't missed
+    let shutdown = shutdown_signal();
+    tokio::pin!(shutdown);
+
     loop {
         let event = tokio::select! {
             ev = rx.recv() => ev,
-            _ = shutdown_signal() => None,
+            _ = &mut shutdown => None,
         };
 
         let Some(event) = event else {
