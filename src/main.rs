@@ -87,7 +87,10 @@ fn main() -> Result<()> {
         .build()?;
 
     enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen)?;
+    if let Err(e) = execute!(stdout(), EnterAlternateScreen) {
+        let _ = disable_raw_mode();
+        return Err(e);
+    }
 
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

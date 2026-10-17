@@ -50,6 +50,7 @@
 - Zen mode's lines being cut off on terminals narrower than 84 columns, so you typed past the edge without seeing the cursor, and lines with accented letters breaking after about 30 characters (lines too wide now scroll like the typing view, and lines break at the same length whatever the letters)
 - A word count given with `-w` also applying to practice started later from the menu, so `clavirio -w 5` made the word lists, Common Bigrams, Quotes and Weak Keys picked from the menu 5 words long too (it now applies only to the session `-w` starts)
 - A timed session whose time ran out just before the app was closed, such as by closing the terminal, being saved as unfinished and running past its limit
+- The terminal being left without echo when the app couldn't start because its output couldn't be written, such as to a closed pipe
 
 ## [0.4.1] - 2026-03-28
 
