@@ -176,6 +176,8 @@ const PUNCTUATION_MARKS: &[Mark] = &[
     Mark::Around('('),
 ];
 const HYPHEN: char = '-';
+/// Marks that join two words, like `well-known` and `snake_case`
+const WORD_JOINERS: [char; 2] = [HYPHEN, '_'];
 const NUMBER_TOKENS: &[&str] = &[
     "0", "1", "2", "3", "4", "5", "10", "42", "99", "100", "123", "256", "1000", "2025",
 ];
@@ -269,8 +271,8 @@ impl WordDrill<'_> {
     }
 }
 
-/// How the weak-key drill practises one key: with words that hold it, on a word
-/// (punctuation), or on its own (digits, and keys no word has).
+/// How the weak-key drill practises one key: with words that hold it, on or
+/// between words (punctuation), or on its own (digits, and keys no word has).
 enum KeyDrill<'a> {
     Words(WordDrill<'a>),
     Punctuation(char),
@@ -345,8 +347,8 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
         return random_pick_and_wrap(&pool, word_count);
     }
 
-    // Punctuation goes on, and bare characters are spaced out with, words that
-    // drill a weak letter where there are any
+    // Punctuation goes on or between, and bare characters are spaced out with,
+    // words that drill a weak letter where there are any
     let word_drills: Vec<&WordDrill> = drills
         .iter()
         .filter_map(|drill| match drill {
@@ -369,6 +371,10 @@ pub fn generate_weak_key_text(weak_chars: &[char], word_count: usize) -> String 
         let alone = matches!(drill, KeyDrill::Alone(_)) && !last_alone;
         words.push(match drill {
             KeyDrill::Words(word_drill) => word_drill.pick(&mut rng),
+            KeyDrill::Punctuation(joiner) if WORD_JOINERS.contains(joiner) => {
+                let first = any_word(&mut rng);
+                format!("{first}{joiner}{}", any_word(&mut rng).to_lowercase())
+            }
             KeyDrill::Punctuation(punct) => with_punctuation(&any_word(&mut rng), *punct),
             KeyDrill::Alone(c) if alone => c.to_string(),
             KeyDrill::Alone(_) => any_word(&mut rng),
@@ -572,6 +578,16 @@ mod tests {
             text.split_whitespace()
                 .all(|w| w.starts_with('(') && w.ends_with(')'))
         );
+    }
+
+    #[test]
+    fn weak_key_text_joins_words_with_a_hyphen_or_underscore() {
+        for joiner in WORD_JOINERS {
+            let text = generate_weak_key_text(&[joiner], 50);
+            assert!(text.split_whitespace().all(|w| {
+                w.split(joiner).count() == 2 && w.split(joiner).all(|part| !part.is_empty())
+            }));
+        }
     }
 
     #[test]

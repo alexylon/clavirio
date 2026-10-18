@@ -67,6 +67,7 @@
 - Lesson and practice names being cut off in the menu below about 45 columns, and the menu showing no items at all on very small terminals such as 30×12 (names now leave out their keys or list type when there isn't room, and are shortened with an ellipsis after that, and at least one item is always shown)
 - Curly quotes, guillemets, dashes, ellipses, special spaces such as a non-breaking one, and invisible characters such as a soft hyphen in custom files counting as mistakes on keyboards that have no key for them (they now become `'`, `"`, `-`, `--`, `...` and a space, and invisible ones are removed)
 - The symbol lessons drilling `` ` `` and `~` with no key for them on the keyboard, so no key or finger was shown (the number row now starts with a `` ` `` key, as on a real keyboard, so the app is now up to 130 columns wide)
+- A weak `-` or `_` in the weak-key drill being added after a word, like `man-` (it now joins two words, like `well-known` or `snake_case`)
 
 ## [0.4.1] - 2026-03-28
 
