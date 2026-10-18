@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -77,12 +78,9 @@ pub(crate) fn finish_rewrite(
     backup: Option<PathBuf>,
 ) -> io::Result<Option<String>> {
     let notice = backup.map(|backup| {
-        let name = path
-            .file_name()
-            .unwrap_or(path.as_os_str())
-            .to_string_lossy();
         format!(
-            "Couldn't parse {name}, so it was kept as {}",
+            "Couldn't parse {}, so it was kept as {}",
+            file_name(path),
             backup.display()
         )
     });
@@ -91,6 +89,12 @@ pub(crate) fn finish_rewrite(
         (Err(e), Some(notice)) => Err(io::Error::new(e.kind(), format!("{e}\n{notice}"))),
         (Err(e), None) => Err(e),
     }
+}
+
+pub(crate) fn file_name(path: &Path) -> Cow<'_, str> {
+    path.file_name()
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy()
 }
 
 /// Replaces `path` with `content` so that a crash or power cut leaves either the

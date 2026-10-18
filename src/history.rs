@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -7,6 +6,8 @@ const MAX_HISTORY_RECORDS: usize = 10_000;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+use crate::storage::{Loaded, file_name};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRecord {
@@ -35,6 +36,17 @@ fn load_json_for_rewrite<T: DeserializeOwned + Default>(
     crate::storage::load_for_rewrite(path, |text| serde_json::from_str(text).ok())
 }
 
+/// Loads a JSON file, or the default if there is none. An error is a message
+/// saying that the file can't be read or parsed.
+fn load_json<T: DeserializeOwned + Default>(path: &Path) -> Result<T, String> {
+    match crate::storage::load(path, |text| serde_json::from_str(text).ok()) {
+        Ok(Loaded::Parsed(value)) => Ok(value),
+        Ok(Loaded::Missing) => Ok(T::default()),
+        Ok(Loaded::Unparseable) => Err(format!("Couldn't parse {}", file_name(path))),
+        Err(e) => Err(format!("Couldn't read {}: {e}", file_name(path))),
+    }
+}
+
 /// Adds `record` to the history, and returns a message saying where the old file
 /// was kept if it couldn't be parsed.
 pub fn save_session(record: SessionRecord) -> io::Result<Option<String>> {
@@ -50,9 +62,9 @@ pub fn save_session(record: SessionRecord) -> io::Result<Option<String>> {
     crate::storage::finish_rewrite(&path, &json, backup)
 }
 
-pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> usize {
+pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> Result<usize, String> {
     let lessons = crate::lessons::lessons_for_layout(layout);
-    resume_lesson_from(&load_history(), &lessons)
+    load_history().map(|history| resume_lesson_from(&history, &lessons))
 }
 
 fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Lesson]) -> usize {
@@ -99,13 +111,8 @@ pub fn save_key_stats(session_stats: &HashMap<char, (u32, u32)>) -> io::Result<O
     crate::storage::finish_rewrite(&path, &json, backup)
 }
 
-pub fn load_key_stats() -> HashMap<char, (u32, u32)> {
-    let path = keystats_path();
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .map(key_stats_by_char)
-        .unwrap_or_default()
+pub fn load_key_stats() -> Result<HashMap<char, (u32, u32)>, String> {
+    load_json(&keystats_path()).map(key_stats_by_char)
 }
 
 fn key_stats_by_char(stored: HashMap<String, (u32, u32)>) -> HashMap<char, (u32, u32)> {
@@ -115,12 +122,8 @@ fn key_stats_by_char(stored: HashMap<String, (u32, u32)>) -> HashMap<char, (u32,
         .collect()
 }
 
-pub fn load_history() -> Vec<SessionRecord> {
-    let path = history_path();
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+pub fn load_history() -> Result<Vec<SessionRecord>, String> {
+    load_json(&history_path())
 }
 
 #[cfg(test)]

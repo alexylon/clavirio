@@ -191,7 +191,13 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     if settings.display.practice_mode {
         app.menu_mode = crate::app::MenuMode::Practice;
     }
-    app.selected_lesson = crate::history::resume_lesson(app.layout);
+    let history_message = match crate::history::resume_lesson(app.layout) {
+        Ok(lesson) => {
+            app.selected_lesson = lesson;
+            None
+        }
+        Err(message) => Some(message),
+    };
 
     // CLI flags override the saved settings for this run only
     let mut punctuation_override = cli.punctuation && !app.include_punctuation;
@@ -208,7 +214,7 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     } else if let Some(path) = cli.file {
         app.load_file(&path);
     }
-    if let Some(message) = settings_message {
+    for message in [settings_message, history_message].into_iter().flatten() {
         app.show_error(message);
     }
 
