@@ -203,8 +203,20 @@ impl Document {
             ));
         }
 
-        let content =
-            fs::read_to_string(&resolved).map_err(|e| format!("Cannot read file: {e}"))?;
+        let not_text = || {
+            format!(
+                "Not a text file, or not saved as UTF-8: {}",
+                resolved.display()
+            )
+        };
+        let content = fs::read_to_string(&resolved).map_err(|e| match e.kind() {
+            std::io::ErrorKind::InvalidData => not_text(),
+            _ => format!("Cannot read file: {e}"),
+        })?;
+        // Text never holds a NUL, but binary files that are valid UTF-8 often do
+        if content.contains('\0') {
+            return Err(not_text());
+        }
 
         Self::from_text(&content)
     }
@@ -1493,6 +1505,21 @@ mod tests {
     fn load_nonexistent_file_returns_error() {
         let result = Document::load("/nonexistent/path/to/file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_binary_file_says_it_is_not_text() {
+        let path =
+            std::env::temp_dir().join(format!("clavirio-test-binary-{}", std::process::id()));
+        for bytes in [&[0xff, 0xfe, 0x80][..], b"text\0\0\0"] {
+            fs::write(&path, bytes).unwrap();
+            let error = Document::load(&path.to_string_lossy()).err();
+            let _ = fs::remove_file(&path);
+            assert!(
+                error.is_some_and(|e| e.starts_with("Not a text file")),
+                "{bytes:?}"
+            );
+        }
     }
 
     #[test]

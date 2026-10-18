@@ -63,6 +63,7 @@
 - The header showing empty session stats under a message shown on the menu, such as a failed file load (it now keeps the title)
 - The history view saying "(1 sessions)"
 - The pause menu's `▸` marker touching the panel's left border
+- Loading a file that isn't text, such as an image, giving "stream did not contain valid UTF-8" (it now says that the file isn't text, or isn't saved as UTF-8)
 
 ## [0.4.1] - 2026-03-28
 
