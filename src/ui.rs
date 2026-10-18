@@ -52,6 +52,7 @@ const MAX_KEY_WIDTH: u16 = 9;
 const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const ELLIPSIS: &str = "\u{2026}";
+const PROMPT_CURSOR: &str = "\u{258c}";
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
 /// Rows a panel takes around its text: its 2 border rows and its padding
 const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
@@ -1061,10 +1062,17 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     }
 }
 
+/// One span per character, with accents and other characters of no width kept
+/// with the character before them, so an ellipsis can't take their place
 fn char_cells(text: &str, style: Style) -> Vec<Span<'static>> {
-    text.chars()
-        .map(|ch| Span::styled(ch.to_string(), style))
-        .collect()
+    let mut cells: Vec<Span> = Vec::new();
+    for ch in text.chars() {
+        match cells.last_mut() {
+            Some(last) if ch.width() == Some(0) => last.content.to_mut().push(ch),
+            _ => cells.push(Span::styled(ch.to_string(), style)),
+        }
+    }
+    cells
 }
 
 /// The part of a line, given as one span per character, that fits in `width`
@@ -1221,12 +1229,15 @@ fn draw_search_overlay(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColor
         ))
         .padding(Padding::horizontal(1));
 
-    let cursor_line = Line::from(vec![
-        Span::raw(&app.file_path_buf),
-        Span::styled("▌", Style::new().fg(tc.accent)),
-    ]);
+    let mut cells = char_cells(&app.file_path_buf, Style::new());
+    let cursor = cells.len();
+    cells.push(Span::styled(PROMPT_CURSOR, Style::new().fg(tc.accent)));
+    let width = block.inner(inner).width as usize;
 
-    frame.render_widget(Paragraph::new(cursor_line).block(block), inner);
+    frame.render_widget(
+        Paragraph::new(fit_line(cells, cursor, width, tc)).block(block),
+        inner,
+    );
 }
 
 /// Turn "2026-03-06T22:01:05" into "Mar 06  22:01"
@@ -1474,6 +1485,29 @@ mod tests {
         (0..height)
             .map(|y| (0..width).map(|x| buffer[(x, y)].symbol()).collect())
             .collect()
+    }
+
+    #[test]
+    fn file_prompt_keeps_the_end_of_a_long_path_in_view() {
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let mut app = App::new();
+        app.searching = true;
+        app.file_path_buf = format!("{}end", "a".repeat(200));
+        let area = Rect::new(0, 0, 60, 3);
+        let screen = render(area.width, area.height, |frame| {
+            draw_search_overlay(frame, &app, area, &tc)
+        });
+        assert!(screen[1].contains(&format!("{ELLIPSIS}aaa")));
+        assert!(screen[1].contains(&format!("end{PROMPT_CURSOR}")));
+
+        app.file_path_buf = "e\u{301}".repeat(100);
+        for width in 20..30 {
+            let area = Rect::new(0, 0, width, 3);
+            let screen = render(width, 3, |frame| {
+                draw_search_overlay(frame, &app, area, &tc)
+            });
+            assert!(screen[1].contains(PROMPT_CURSOR), "width {width}");
+        }
     }
 
     #[test]
