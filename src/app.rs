@@ -137,20 +137,59 @@ pub struct Document {
 }
 
 impl Document {
-    const TAB_WIDTH: usize = 4;
+    const TAB: &str = "    ";
     const BYTE_ORDER_MARK: char = '\u{feff}';
+    const LINE_SEPARATOR: char = '\u{2028}';
+    const PARAGRAPH_SEPARATOR: char = '\u{2029}';
+
+    /// What is typed for a character that most keyboards have no key for:
+    /// typographic quotes, dashes and ellipses, and spaces other than the plain
+    /// one. Invisible characters, such as a soft hyphen, give nothing to type.
+    fn typed_form(ch: char) -> Option<&'static str> {
+        Some(match ch {
+            '\t' => Self::TAB,
+            '\u{2018}'..='\u{201b}' | '\u{2032}' | '\u{2039}' | '\u{203a}' | '\u{02bc}' => "'",
+            '\u{201c}'..='\u{201f}' | '\u{2033}' | '\u{ab}' | '\u{bb}' => "\"",
+            '\u{2010}'..='\u{2013}' | '\u{2212}' => "-",
+            '\u{2014}' | '\u{2015}' => "--",
+            '\u{2026}' => "...",
+            '\u{ad}'
+            | '\u{200b}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{fe00}'..='\u{fe0f}'
+            | Self::BYTE_ORDER_MARK => "",
+            ' ' => return None,
+            _ if ch.is_whitespace() && !ch.is_control() => " ",
+            _ => return None,
+        })
+    }
+
+    /// The character a key counts as: a layout with a key for a curly quote or
+    /// a non-breaking space types the plain form that loaded text now holds
+    fn as_typed(ch: char) -> char {
+        let mut typed = Self::typed_form(ch).unwrap_or_default().chars();
+        match (typed.next(), typed.next()) {
+            (Some(plain), None) => plain,
+            _ => ch,
+        }
+    }
 
     pub fn from_text(text: &str) -> Result<Self, String> {
-        let text = text.strip_prefix(Self::BYTE_ORDER_MARK).unwrap_or(text);
-        let tab = " ".repeat(Self::TAB_WIDTH);
         let lines: Vec<String> = text
-            .split(['\n', '\r'])
-            .map(|line| {
-                let line: String = line
-                    .replace('\t', &tab)
-                    .chars()
-                    .filter(|c| !c.is_control())
-                    .collect();
+            .split(['\n', '\r', Self::LINE_SEPARATOR, Self::PARAGRAPH_SEPARATOR])
+            .map(|raw| {
+                let mut line = String::new();
+                for ch in raw.chars() {
+                    match Self::typed_form(ch) {
+                        Some(typed) => line.push_str(typed),
+                        None if !ch.is_control() => line.push(ch),
+                        None => {}
+                    }
+                }
                 line.trim_end().to_string()
             })
             .collect();
@@ -326,7 +365,11 @@ fn weak_keys(
         weakest_chars(stats, usize::MAX)
             .into_iter()
             .map(|(ch, _, _)| ch)
-            .filter(|ch| !ch.is_whitespace() && !ch.is_control())
+            // Characters that loaded text no longer holds, such as a curly
+            // quote saved before files were converted, could never improve
+            .filter(|&ch| {
+                !ch.is_whitespace() && !ch.is_control() && Document::typed_form(ch).is_none()
+            })
             .take(DRILL_KEYS)
             .collect()
     };
@@ -1222,6 +1265,7 @@ impl App {
     }
 
     fn handle_typed_char(&mut self, typed: char) {
+        let typed = Document::as_typed(typed);
         let doc = match self.document.as_ref() {
             Some(d) => d,
             None => return,
@@ -1375,8 +1419,7 @@ mod tests {
     #[test]
     fn from_text_expands_tabs() {
         let doc = Document::from_text("\tx").unwrap();
-        let indent = " ".repeat(Document::TAB_WIDTH);
-        assert_eq!(doc.current_line, format!("{indent}x"));
+        assert_eq!(doc.current_line, format!("{}x", Document::TAB));
     }
 
     #[test]
@@ -1505,6 +1548,16 @@ mod tests {
     fn load_nonexistent_file_returns_error() {
         let result = Document::load("/nonexistent/path/to/file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn typographic_characters_become_what_a_keyboard_types() {
+        let text = "\u{201c}Hi\u{201d}\u{a0}\u{2014} it\u{2019}s\u{2026}\u{2028}soft\u{ad}ly";
+        let doc = Document::from_text(text).unwrap();
+        assert_eq!(doc.current_line, "\"Hi\" -- it's...");
+        assert_eq!(doc.upcoming_lines(1), ["softly"]);
+        assert_eq!(Document::as_typed('\u{2019}'), '\'');
+        assert_eq!(Document::as_typed('\u{2014}'), '\u{2014}');
     }
 
     #[test]
@@ -2780,6 +2833,13 @@ mod tests {
             weak_keys(&HashMap::from([('c', (1, 1))]), saved).unwrap(),
             ['c']
         );
+    }
+
+    #[test]
+    fn weak_keys_leave_out_characters_text_no_longer_holds() {
+        let session = HashMap::from([('\u{2019}', (0, 5)), ('a', (1, 1))]);
+        let saved = || Ok(HashMap::new());
+        assert_eq!(weak_keys(&session, saved).unwrap(), ['a']);
     }
 
     #[test]

@@ -65,6 +65,7 @@
 - The pause menu's `▸` marker touching the panel's left border
 - Loading a file that isn't text, such as an image, giving "stream did not contain valid UTF-8" (it now says that the file isn't text, or isn't saved as UTF-8)
 - Lesson and practice names being cut off in the menu below about 45 columns, and the menu showing no items at all on very small terminals such as 30×12 (names now leave out their keys or list type when there isn't room, and are shortened with an ellipsis after that, and at least one item is always shown)
+- Curly quotes, guillemets, dashes, ellipses, special spaces such as a non-breaking one, and invisible characters such as a soft hyphen in custom files counting as mistakes on keyboards that have no key for them (they now become `'`, `"`, `-`, `--`, `...` and a space, and invisible ones are removed)
 
 ## [0.4.1] - 2026-03-28
 
