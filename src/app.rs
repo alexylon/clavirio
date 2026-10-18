@@ -209,7 +209,6 @@ impl Document {
     }
 
     pub fn load(raw_path: &str) -> Result<Self, String> {
-        let raw_path = raw_path.trim();
         if raw_path.is_empty() {
             return Err("No file path given".into());
         }
@@ -1113,6 +1112,7 @@ impl App {
     }
 
     pub fn load_file(&mut self, path: &str) {
+        let path = path.trim();
         match Document::load(path) {
             Ok(doc) => {
                 self.save_before_leaving();
@@ -1576,9 +1576,24 @@ mod tests {
     }
 
     #[test]
+    fn load_file_names_the_session_without_spaces_around_the_path() {
+        let path = std::env::temp_dir().join(format!("clavirio-test-{}.txt", std::process::id()));
+        fs::write(&path, "abc").unwrap();
+        let mut app = App::new();
+        app.load_file(&format!(" {} ", path.display()));
+        let _ = fs::remove_file(&path);
+
+        assert!(app.document.is_some());
+        assert_eq!(app.lesson_id, path.file_name().unwrap().to_string_lossy());
+
+        app.load_file("  ");
+        assert_eq!(app.error.as_deref(), Some("No file path given"));
+    }
+
+    #[test]
     fn load_empty_or_folder_path_says_so() {
         assert_eq!(
-            Document::load(" ").err().as_deref(),
+            Document::load("").err().as_deref(),
             Some("No file path given")
         );
         let folder = std::env::temp_dir();

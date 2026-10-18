@@ -69,6 +69,7 @@
 - The symbol lessons drilling `` ` `` and `~` with no key for them on the keyboard, so no key or finger was shown (the number row now starts with a `` ` `` key, as on a real keyboard, so the app is now up to 130 columns wide)
 - A weak `-` or `_` in the weak-key drill being added after a word, like `man-` (it now joins two words, like `well-known` or `snake_case`)
 - A long line with accents written as separate characters, such as from some macOS files, sometimes being a column too wide once it scrolled, cutting off its last column
+- A file loaded with spaces around its path, such as one pasted into `Ctrl-F`, being saved in the history under a name with those spaces, apart from its other sessions
 
 ## [0.4.1] - 2026-03-28
 
