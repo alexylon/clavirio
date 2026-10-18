@@ -556,6 +556,11 @@ impl App {
         self.menu_mode == MenuMode::Practice
     }
 
+    /// A lesson, practice or zen session is open, finished or not
+    pub fn in_session(&self) -> bool {
+        self.document.is_some() || self.zen_mode
+    }
+
     pub fn is_finished(&self) -> bool {
         self.document
             .as_ref()

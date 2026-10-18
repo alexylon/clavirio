@@ -351,7 +351,7 @@ pub fn draw(
     let bg_block = Block::default().style(Style::default().bg(tc.bg));
     frame.render_widget(bg_block, frame.area());
 
-    let on_menu = app.document.is_none() && app.error.is_none() && !app.searching && !app.zen_mode;
+    let on_menu = !app.in_session() && app.error.is_none() && !app.searching;
 
     let hint_coords: Vec<GridCoord> = if app.show_hints {
         if on_menu {
@@ -461,8 +461,8 @@ fn draw_header(
         area,
     );
 
-    let on_menu = app.document.is_none() && app.error.is_none() && !app.zen_mode;
-    if on_menu {
+    // A message shown with no session, such as a failed file load, keeps the title
+    if !app.in_session() {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 "clavirio",
@@ -728,7 +728,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         return;
     }
 
-    let footer_lines = if app.document.is_none() && !app.zen_mode {
+    let footer_lines = if !app.in_session() {
         let width = block.inner(area).width as usize;
         menu_footer(app, keyboard_fits(frame.area()), width, tc)
     } else {
@@ -1443,6 +1443,29 @@ mod tests {
             let fifth_shown = rows.iter().any(|row| row.contains("Random Words"));
             assert!(fifth_shown, "width {width}: {}", rows.join("\n"));
         }
+    }
+
+    #[test]
+    fn header_shows_the_title_over_a_message_without_a_session() {
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let header = |app: &App| {
+            render(60, 2, |frame| {
+                draw_header(frame, app, frame.area(), None, &tc)
+            })[0]
+                .clone()
+        };
+        let mut app = App::new();
+        app.load_file("/nonexistent/file.txt");
+        assert!(app.error.is_some());
+        let title = header(&app);
+        assert!(
+            title.contains("clavirio") && !title.contains("wpm"),
+            "{title}"
+        );
+
+        app.start_zen_mode();
+        app.error = Some("Couldn't save".into());
+        assert!(header(&app).contains("wpm"));
     }
 
     #[test]
