@@ -362,10 +362,10 @@ pub fn draw(
                 .and_then(|d| d.expected_char())
                 .map(|ch| {
                     let mut coords = Vec::new();
-                    let key = KeyCode::Char(ch.to_ascii_uppercase());
-                    if let Some(&coord) = grid_map.get(&key) {
-                        coords.push(coord);
-                    }
+                    let key = grid_map
+                        .get(&KeyCode::Char(ch.to_ascii_uppercase()))
+                        .copied();
+                    coords.extend(key);
                     let needs_shift = ch.is_uppercase()
                         || matches!(
                             ch,
@@ -388,14 +388,9 @@ pub fn draw(
                                 | '<'
                                 | '>'
                                 | '?'
-                                | '~'
                         );
-                    if needs_shift {
-                        if let Some(&coord) = grid_map.get(&KeyCode::Modifier(
-                            crossterm::event::ModifierKeyCode::LeftShift,
-                        )) {
-                            coords.push(coord);
-                        }
+                    if let Some(key) = key.filter(|_| needs_shift) {
+                        coords.extend(grid_map.get(&shift_for(key)).copied());
                     }
                     coords
                 })

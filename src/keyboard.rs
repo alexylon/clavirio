@@ -336,6 +336,28 @@ pub fn finger_for_coord(coord: GridCoord) -> Option<Finger> {
     }
 }
 
+/// Keys per row typed by the left hand. The bottom row has one more, as it
+/// starts with the left Shift.
+const LEFT_HAND_KEYS: usize = 5;
+
+fn is_left_hand(coord: GridCoord) -> bool {
+    let (row, col) = coord;
+    match row {
+        0..=2 => col < LEFT_HAND_KEYS,
+        3 => col <= LEFT_HAND_KEYS,
+        _ => false,
+    }
+}
+
+/// The Shift to hold with a key: the one on the other hand.
+pub fn shift_for(coord: GridCoord) -> KeyCode {
+    KeyCode::Modifier(if is_left_hand(coord) {
+        ModifierKeyCode::RightShift
+    } else {
+        ModifierKeyCode::LeftShift
+    })
+}
+
 pub fn build_keycode_grid_map(rows: &[Vec<KeyDef>]) -> HashMap<KeyCode, GridCoord> {
     let mut map = HashMap::new();
 
@@ -384,6 +406,26 @@ mod tests {
         let colon = map.get(&KeyCode::Char(':'));
         assert!(semi.is_some());
         assert_eq!(semi, colon);
+    }
+
+    #[test]
+    fn shift_is_on_the_other_hand() {
+        let left = KeyCode::Modifier(ModifierKeyCode::LeftShift);
+        let right = KeyCode::Modifier(ModifierKeyCode::RightShift);
+        let map = build_keycode_grid_map(&build_keyboard_rows(KeyboardLayout::Qwerty));
+        for (ch, shift) in [
+            ('%', right),
+            ('^', left),
+            ('T', right),
+            ('Y', left),
+            ('G', right),
+            ('H', left),
+            ('B', right),
+            ('N', left),
+            ('"', left),
+        ] {
+            assert_eq!(shift_for(map[&KeyCode::Char(ch)]), shift, "{ch}");
+        }
     }
 
     #[test]
