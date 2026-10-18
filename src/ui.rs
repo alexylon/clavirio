@@ -1074,14 +1074,34 @@ fn fit_line<'a>(
     tc: &ThemeColors,
 ) -> Line<'a> {
     let widths: Vec<usize> = cells.iter().map(Span::width).collect();
-    let range = visible_range(&widths, anchor, width);
-    let ellipsis = || Span::styled(ELLIPSIS, Style::new().fg(tc.dim_text));
+    let mut range = visible_range(&widths, anchor, width);
+    let ellipsis_style = Style::new().fg(tc.dim_text);
+    // Accents written as their own characters are cells of no width, so the
+    // ellipses go on whole letters to keep the line within `width`
+    let is_accent = |i: usize| widths[i] == 0;
     if !range.is_empty() {
         if range.start > 0 && range.start != anchor {
-            cells[range.start] = ellipsis();
+            while range.start < anchor && is_accent(range.start) {
+                range.start += 1;
+            }
+            if range.start != anchor {
+                cells[range.start] = Span::styled(ELLIPSIS, ellipsis_style);
+                let accents =
+                    (range.start + 1..anchor.min(range.end)).take_while(|&i| is_accent(i));
+                for i in accents {
+                    cells[i] = Span::styled("", ellipsis_style);
+                }
+            }
         }
-        if range.end < cells.len() && range.end - 1 != anchor {
-            cells[range.end - 1] = ellipsis();
+        if range.end < cells.len() {
+            let mut last = range.end - 1;
+            while last > anchor && is_accent(last) {
+                last -= 1;
+            }
+            if last != anchor {
+                cells[last] = Span::styled(ELLIPSIS, ellipsis_style);
+                range.end = last + 1;
+            }
         }
     }
     let mut spans: Vec<Span> = Vec::new();
@@ -1686,6 +1706,31 @@ mod tests {
         assert_eq!(visible_range(&narrow, 50, 20), 40..60);
         assert_eq!(visible_range(&narrow, 95, 20), 80..100);
         assert_eq!(visible_range(&[2; 100], 50, 20), 45..55);
+    }
+
+    #[test]
+    fn fit_line_puts_ellipses_in_place_of_whole_letters() {
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let cells: Vec<Span> = "e\u{301}"
+            .repeat(40)
+            .chars()
+            .map(|ch| Span::raw(ch.to_string()))
+            .collect();
+        for width in 5..20 {
+            for anchor in [20, 21] {
+                let line = fit_line(cells.clone(), anchor, width, &tc);
+                let text = line.to_string();
+                assert!(
+                    line.width() <= width,
+                    "width {width}, anchor {anchor}: {text}"
+                );
+                assert!(
+                    text.starts_with(ELLIPSIS) && text.ends_with(ELLIPSIS),
+                    "{text}"
+                );
+                assert!(!text.contains(&format!("{ELLIPSIS}\u{301}")), "{text}");
+            }
+        }
     }
 
     #[test]
