@@ -170,7 +170,11 @@ impl Document {
     }
 
     pub fn load(raw_path: &str) -> Result<Self, String> {
-        let expanded = expand_home(raw_path.trim());
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            return Err("No file path given".into());
+        }
+        let expanded = expand_home(raw_path);
         let resolved = if expanded.is_absolute() {
             expanded
         } else {
@@ -179,12 +183,19 @@ impl Document {
                 .join(expanded)
         };
 
-        if !resolved.exists() {
-            return Err(format!("File not found: {}", resolved.display()));
+        let meta = fs::metadata(&resolved).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => format!("File not found: {}", resolved.display()),
+            _ => format!("Cannot read file: {e}"),
+        })?;
+        if meta.is_dir() {
+            return Err(format!("Not a file but a folder: {}", resolved.display()));
+        }
+        // A device or pipe, such as /dev/zero, could be read forever
+        if !meta.is_file() {
+            return Err(format!("Not an ordinary file: {}", resolved.display()));
         }
 
         const MAX_FILE_SIZE: u64 = 1_000_000;
-        let meta = fs::metadata(&resolved).map_err(|e| format!("Cannot read file: {e}"))?;
         if meta.len() > MAX_FILE_SIZE {
             return Err(format!(
                 "File too large ({:.1} MB, max 1 MB)",
@@ -1477,6 +1488,23 @@ mod tests {
     fn load_nonexistent_file_returns_error() {
         let result = Document::load("/nonexistent/path/to/file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_empty_or_folder_path_says_so() {
+        assert_eq!(
+            Document::load(" ").err().as_deref(),
+            Some("No file path given")
+        );
+        let folder = std::env::temp_dir();
+        let error = Document::load(&folder.to_string_lossy()).err();
+        assert!(error.is_some_and(|e| e.starts_with("Not a file")));
+        #[cfg(unix)]
+        assert!(
+            Document::load("/dev/zero")
+                .err()
+                .is_some_and(|e| e.starts_with("Not an ordinary file"))
+        );
     }
 
     // --- App / WPM tests ---

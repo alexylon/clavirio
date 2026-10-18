@@ -58,6 +58,8 @@
 - A history or key-stats file that couldn't be read or parsed showing as "No sessions yet" in the history view, or "No weak keys yet" for the weak-key drill (the app now says so when the view or the drill is opened, and for the history at startup too)
 - Practice punctuation being added after words, like `man'`, `many"` and `my--`, and to code symbols, like `+='` (quotes and brackets now go around a word, a hyphen joins two English words in place of the trailing `-` and `--`, and code symbols such as `+=` are left as they are)
 - A long path in the `Ctrl-F` prompt being cut off at the right, hiding its end and the cursor (the path now scrolls to keep the cursor in view)
+- An empty path or a folder in the `Ctrl-F` prompt or `-f` giving "Cannot read file: Is a directory" (it now says that no path was given, or that the path is a folder)
+- Loading a device such as `/dev/zero` with `-f` or `Ctrl-F` reading it forever, and a file you can't access being reported as not found (both now get their own message)
 
 ## [0.4.1] - 2026-03-28
 
