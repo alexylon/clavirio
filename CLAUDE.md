@@ -13,7 +13,7 @@ cargo build                    # Debug build
 cargo build --release          # Release build (LTO enabled)
 cargo run                      # Run in debug mode
 cargo run -- -f path/to/file   # Run with custom text file
-cargo run -- -w                # Random words (50, english 200)
+cargo run -- -w                # Random words (100, english 200)
 cargo run -- -t 60             # Timed 60s mode
 cargo run -- -t 30 -l 1k      # Timed 30s, english 1k word list
 cargo test                     # Run all tests
