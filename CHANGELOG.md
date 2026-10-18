@@ -56,6 +56,7 @@
 - A message that hadn't been drawn yet, such as a failed save, being lost when drawing then failed (it is now printed after quitting)
 - The keyboard always marking the left Shift for a capital or symbol, even for keys typed with the left hand (it now marks the Shift on the other hand, as touch typing teaches)
 - A history or key-stats file that couldn't be read or parsed showing as "No sessions yet" in the history view, or "No weak keys yet" for the weak-key drill (the app now says so when the view or the drill is opened, and for the history at startup too)
+- Practice punctuation being added after words, like `man'`, `many"` and `my--`, and to code symbols, like `+='` (quotes and brackets now go around a word, a hyphen joins two English words in place of the trailing `-` and `--`, and code symbols such as `+=` are left as they are)
 
 ## [0.4.1] - 2026-03-28
 

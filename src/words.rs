@@ -52,10 +52,15 @@ impl WordList {
         }
     }
 
+    pub fn is_code(self) -> bool {
+        !matches!(self, Self::English200 | Self::English1k)
+    }
+
     pub fn category(self) -> &'static str {
-        match self {
-            Self::English200 | Self::English1k => "Random Words",
-            _ => "Code",
+        if self.is_code() {
+            "Code"
+        } else {
+            "Random Words"
         }
     }
 
@@ -152,13 +157,28 @@ pub fn generate_text(list: WordList, word_count: usize) -> String {
     random_pick_and_wrap(&pool, word_count)
 }
 
-const PUNCTUATION_MARKS: &[&str] = &[
-    ".", ",", ";", ":", "!", "?", "'", "\"", "-", "()", "...", "--",
+enum Mark {
+    After(&'static str),
+    /// A quote or bracket from `PAIRED_PUNCTUATION`
+    Around(char),
+}
+
+const PUNCTUATION_MARKS: &[Mark] = &[
+    Mark::After("."),
+    Mark::After(","),
+    Mark::After(";"),
+    Mark::After(":"),
+    Mark::After("!"),
+    Mark::After("?"),
+    Mark::After("..."),
+    Mark::Around('\''),
+    Mark::Around('"'),
+    Mark::Around('('),
 ];
+const HYPHEN: char = '-';
 const NUMBER_TOKENS: &[&str] = &[
     "0", "1", "2", "3", "4", "5", "10", "42", "99", "100", "123", "256", "1000", "2025",
 ];
-const PARENS: &str = "()";
 const PCT_BASE: usize = 100;
 const NUMBER_CHANCE_PCT: usize = 15;
 const PUNCTUATION_CHANCE_PCT: usize = 20;
@@ -183,12 +203,16 @@ pub fn generate_text_mixed(
                 return NUMBER_TOKENS[rng.usize(NUMBER_TOKENS.len())].to_string();
             }
 
-            if punctuation && rng.usize(PCT_BASE) < PUNCTUATION_CHANCE_PCT {
-                let punct = PUNCTUATION_MARKS[rng.usize(PUNCTUATION_MARKS.len())];
-                return if punct == PARENS {
-                    format!("({word})")
-                } else {
-                    format!("{word}{punct}")
+            if punctuation && is_plain(word) && rng.usize(PCT_BASE) < PUNCTUATION_CHANCE_PCT {
+                // A hyphen joins two English words, as often as each mark is
+                // added, but would give nonsense like `fn-impl` in code
+                if !list.is_code() && rng.usize(PUNCTUATION_MARKS.len() + 1) == 0 {
+                    let other = base_pool[rng.usize(base_pool.len())];
+                    return format!("{word}{HYPHEN}{other}");
+                }
+                return match PUNCTUATION_MARKS[rng.usize(PUNCTUATION_MARKS.len())] {
+                    Mark::After(mark) => format!("{word}{mark}"),
+                    Mark::Around(punct) => with_punctuation(word, punct),
                 };
             }
 
@@ -197,6 +221,11 @@ pub fn generate_text_mixed(
         .collect();
 
     wrap_words(words)
+}
+
+/// A word or identifier, not a code symbol such as `+=`, which is left as it is
+fn is_plain(word: &str) -> bool {
+    word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 const BIGRAMS: &[&str] = &[
@@ -607,6 +636,26 @@ mod tests {
         let text = generate_text_mixed(WordList::English200, 50, true, true);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 50);
+    }
+
+    #[test]
+    fn mixed_text_punctuates_only_plain_words() {
+        for list in [WordList::English200, WordList::Rust] {
+            let pool = list.words();
+            let text = generate_text_mixed(list, 500, true, false);
+            assert!(text.split_whitespace().any(|token| !pool.contains(&token)));
+            for token in text.split_whitespace() {
+                if pool.contains(&token) {
+                    continue;
+                }
+                let word = token.trim_matches(|c| "().,;:!?'\"".contains(c));
+                let joined = !list.is_code() && word.split(HYPHEN).all(|w| pool.contains(&w));
+                assert!(pool.contains(&word) || joined, "{token}");
+                for quote in ['"', '\''] {
+                    assert_eq!(token.starts_with(quote), token.ends_with(quote), "{token}");
+                }
+            }
+        }
     }
 
     #[test]
