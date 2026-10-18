@@ -11,6 +11,7 @@ repository = "https://github.com/alexylon/clavirio"
 documentation = "https://docs.rs/clavirio"
 keywords = ["typing", "tutor", "keyboard", "tui", "ratatui"]
 categories = ["command-line-utilities"]
+exclude = ["assets/images/"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
