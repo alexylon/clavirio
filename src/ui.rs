@@ -53,6 +53,8 @@ const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const ELLIPSIS: &str = "\u{2026}";
 const PROMPT_CURSOR: &str = "\u{258c}";
+/// The columns before a menu item's label: its `▸` marker and a space each side
+const MENU_MARKER_COLS: usize = 3;
 const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
 /// Rows a panel takes around its text: its 2 border rows and its padding
 const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
@@ -813,7 +815,9 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 MenuMode::Lessons => app.selected_lesson,
                 MenuMode::Practice => app.selected_practice,
             };
-            let visible_slots = inner.height.saturating_sub(menu_chrome_rows) as usize;
+            // One item at least, even if the last of the controls is cut off
+            let visible_slots = inner.height.saturating_sub(menu_chrome_rows).max(1) as usize;
+            let label_width = (block.inner(inner).width as usize).saturating_sub(MENU_MARKER_COLS);
 
             let scroll = if visible_slots >= total_items || cursor < visible_slots / 2 {
                 0
@@ -854,26 +858,25 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                         .take(visible_slots.min(total_items - scroll))
                     {
                         let selected = i == cursor;
-                        let marker = if selected { "▸" } else { " " };
                         let title_fg = if selected { tc.text } else { tc.dim_text };
-                        let marker_fg = if selected { tc.accent } else { tc.dim_text };
-                        let num = i + 1;
-                        let mut spans = vec![
-                            Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
-                            Span::styled(format!("{num:02}. "), Style::new().fg(tc.dim_text)),
-                            Span::styled(lesson.title.to_string(), Style::new().fg(title_fg)),
+                        let short = vec![
+                            Span::styled(format!("{:02}. ", i + 1), Style::new().fg(tc.dim_text)),
+                            Span::styled(lesson.title, Style::new().fg(title_fg)),
                         ];
+                        let mut full = short.clone();
                         if !lesson.keys.is_empty() {
-                            spans.push(Span::styled(
+                            full.push(Span::styled(
                                 format!(" ({})", lesson.keys),
                                 Style::new().fg(tc.dim_text),
                             ));
                         }
-                        let current_len = label_len(&lesson);
-                        if current_len < max_label {
-                            spans.push(Span::raw(" ".repeat(max_label - current_len)));
-                        }
-                        lines.push(Line::from(spans));
+                        lines.push(menu_item(
+                            selected,
+                            [full, short],
+                            label_width,
+                            max_label,
+                            tc,
+                        ));
                     }
                 }
                 MenuMode::Practice => {
@@ -901,24 +904,18 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
                     for i in scroll..(scroll + visible_slots).min(total_items) {
                         let selected = i == cursor;
-                        let marker = if selected { "▸" } else { " " };
                         let title_fg = if selected { tc.text } else { tc.dim_text };
-                        let marker_fg = if selected { tc.accent } else { tc.dim_text };
 
                         if i < special_items.len() {
-                            let title = special_items[i].0.title;
-                            let current_len = title.len();
-                            let mut spans = vec![
-                                Span::styled(
-                                    format!(" {marker} "),
-                                    Style::new().fg(marker_fg).bold(),
-                                ),
-                                Span::styled(title, Style::new().fg(title_fg)),
-                            ];
-                            if current_len < max_label {
-                                spans.push(Span::raw(" ".repeat(max_label - current_len)));
-                            }
-                            lines.push(Line::from(spans));
+                            let title =
+                                Span::styled(special_items[i].0.title, Style::new().fg(title_fg));
+                            lines.push(menu_item(
+                                selected,
+                                [vec![title]],
+                                label_width,
+                                max_label,
+                                tc,
+                            ));
                             continue;
                         }
 
@@ -931,16 +928,19 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                             (wl.category(), format!("{secs}s · {}", wl.label()))
                         };
                         keys.push_str(&mix_suffix);
-                        let current_len = title.len() + 2 + keys.chars().count() + 1;
-                        let mut spans = vec![
-                            Span::styled(format!(" {marker} "), Style::new().fg(marker_fg).bold()),
+                        // Without room for both, the list's name tells the items apart
+                        let full = vec![
                             Span::styled(title, Style::new().fg(title_fg)),
                             Span::styled(format!(" ({keys})"), Style::new().fg(tc.dim_text)),
                         ];
-                        if current_len < max_label {
-                            spans.push(Span::raw(" ".repeat(max_label - current_len)));
-                        }
-                        lines.push(Line::from(spans));
+                        let short = vec![Span::styled(keys, Style::new().fg(title_fg))];
+                        lines.push(menu_item(
+                            selected,
+                            [full, short],
+                            label_width,
+                            max_label,
+                            tc,
+                        ));
                     }
                 }
             }
@@ -1134,6 +1134,44 @@ fn visible_range(widths: &[usize], anchor: usize, max: usize) -> Range<usize> {
         used += widths[start];
     }
     start..end
+}
+
+/// A menu item's line: its marker, then the first of `labels`, from the
+/// fullest to the shortest, that fits in `width`, or else the last one
+/// shortened. Labels are padded to `pad_to` so the items line up.
+fn menu_item<'a, const N: usize>(
+    selected: bool,
+    labels: [Vec<Span<'a>>; N],
+    width: usize,
+    pad_to: usize,
+    tc: &ThemeColors,
+) -> Line<'a> {
+    let label_width = |label: &[Span]| label.iter().map(Span::width).sum::<usize>();
+    let mut labels = labels.into_iter();
+    let mut label = labels.next().unwrap_or_default();
+    for shorter in labels {
+        if label_width(&label) <= width {
+            break;
+        }
+        label = shorter;
+    }
+    if let Some(last) = label.pop() {
+        let room = width.saturating_sub(label_width(&label));
+        label.push(Span::styled(shorten(&last.content, room), last.style));
+    }
+    let (marker, marker_fg) = if selected {
+        ("▸", tc.accent)
+    } else {
+        (" ", tc.dim_text)
+    };
+    let mut spans = vec![Span::styled(
+        format!(" {marker} "),
+        Style::new().fg(marker_fg).bold(),
+    )];
+    let padding = pad_to.min(width).saturating_sub(label_width(&label));
+    spans.extend(label);
+    spans.push(Span::raw(" ".repeat(padding)));
+    Line::from(spans)
 }
 
 /// The menu's controls and settings lines, wrapped to `width` between their
@@ -1431,6 +1469,41 @@ mod tests {
         assert_eq!(tall.keyboard_area.height, KEYBOARD_HEIGHT);
         assert_eq!(tall.body.height, MIN_BODY_ROWS);
         assert_eq!(tiny.header.height, HEADER_ROWS);
+    }
+
+    #[test]
+    fn menu_items_drop_their_details_then_shorten_to_fit() {
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let item = |width| {
+            let short = vec![Span::raw("01. "), Span::raw("Home Row")];
+            let mut full = short.clone();
+            full.push(Span::raw(" (a s)"));
+            menu_item(false, [full, short], width, 0, &tc).to_string()
+        };
+
+        assert_eq!(item(20).trim_end(), "   01. Home Row (a s)");
+        assert_eq!(item(13).trim_end(), "   01. Home Row");
+        assert_eq!(item(9).trim_end(), format!("   01. Home{ELLIPSIS}"));
+    }
+
+    #[test]
+    fn menu_shows_an_item_and_whole_names_on_small_terminals() {
+        let mut app = App::new();
+        app.selected_lesson = 5;
+        let tc = ThemeColors::from_theme(Theme::Dark);
+
+        for (width, height) in [(30, 12), (40, 20)] {
+            let rows = render(width, height, |frame| {
+                let regions = compute_regions(frame.area(), app.show_keyboard);
+                draw_text_panel(frame, &app, regions.text_area, &tc)
+            });
+            let item = rows.iter().find(|row| row.contains('▸'));
+            assert!(
+                item.is_some_and(|row| row.contains("06. Home Row") && !row.contains('(')),
+                "{width}x{height}: {}",
+                rows.join("\n")
+            );
+        }
     }
 
     #[test]
