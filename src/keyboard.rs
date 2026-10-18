@@ -52,7 +52,11 @@ macro_rules! wide {
 
 // --- QWERTY layout ---
 
-const QWERTY_NUMBER_ROW: [KeyDef; 13] = [
+/// The keys in the number row, the widest
+pub const NUMBER_ROW_KEYS: usize = 14;
+
+const QWERTY_NUMBER_ROW: [KeyDef; NUMBER_ROW_KEYS] = [
+    key!(KeyCode::Char('`'), KeyCode::Char('~'), "`"),
     key!(KeyCode::Char('1'), KeyCode::Char('!'), "1"),
     key!(KeyCode::Char('2'), KeyCode::Char('@'), "2"),
     key!(KeyCode::Char('3'), KeyCode::Char('#'), "3"),
@@ -147,7 +151,8 @@ const MODIFIER_ROW: [KeyDef; 7] = [
 
 // --- Dvorak layout ---
 
-const DVORAK_NUMBER_ROW: [KeyDef; 13] = [
+const DVORAK_NUMBER_ROW: [KeyDef; NUMBER_ROW_KEYS] = [
+    key!(KeyCode::Char('`'), KeyCode::Char('~'), "`"),
     key!(KeyCode::Char('1'), KeyCode::Char('!'), "1"),
     key!(KeyCode::Char('2'), KeyCode::Char('@'), "2"),
     key!(KeyCode::Char('3'), KeyCode::Char('#'), "3"),
@@ -302,7 +307,16 @@ impl Finger {
     }
 }
 
-/// Standard finger assignment for columns without a leading wide key.
+/// A key's column counted as in the top and home rows: the number row starts
+/// with ` and the bottom row with the left Shift, both typed by the pinky
+/// before the 1 and Z keys, so their other keys sit one column right.
+fn aligned_col((row, col): GridCoord) -> usize {
+    match row {
+        0 | 3 => col.saturating_sub(1),
+        _ => col,
+    }
+}
+
 fn finger_for_col(col: usize) -> Finger {
     match col {
         0 => Finger::Pinky,
@@ -316,37 +330,18 @@ fn finger_for_col(col: usize) -> Finger {
 }
 
 pub fn finger_for_coord(coord: GridCoord) -> Option<Finger> {
-    let (row, col) = coord;
-    match row {
-        // Number, top, and home rows share the same column → finger mapping
-        0..=2 => Some(finger_for_col(col)),
-        // Bottom row: LShift occupies col 0, shifting letters one position right
-        3 => match col {
-            0 | 1 => Some(Finger::Pinky),
-            2 => Some(Finger::Ring),
-            3 => Some(Finger::Middle),
-            4 | 5 => Some(Finger::Index),
-            6 | 7 => Some(Finger::Index),
-            8 => Some(Finger::Middle),
-            9 => Some(Finger::Ring),
-            _ => Some(Finger::Pinky),
-        },
+    match coord.0 {
+        0..=3 => Some(finger_for_col(aligned_col(coord))),
         4 => Some(Finger::Thumb),
         _ => None,
     }
 }
 
-/// Keys per row typed by the left hand. The bottom row has one more, as it
-/// starts with the left Shift.
+/// Keys per row typed by the left hand, counted as in the top row
 const LEFT_HAND_KEYS: usize = 5;
 
 fn is_left_hand(coord: GridCoord) -> bool {
-    let (row, col) = coord;
-    match row {
-        0..=2 => col < LEFT_HAND_KEYS,
-        3 => col <= LEFT_HAND_KEYS,
-        _ => false,
-    }
+    coord.0 <= 3 && aligned_col(coord) < LEFT_HAND_KEYS
 }
 
 /// The Shift to hold with a key: the one on the other hand.
@@ -391,10 +386,10 @@ mod tests {
     fn grid_map_contains_secondary_keys() {
         let rows = build_keyboard_rows(KeyboardLayout::Qwerty);
         let map = build_keycode_grid_map(&rows);
-        // '!' is secondary of '1', which is number row (row 0), col 0
-        assert_eq!(map.get(&KeyCode::Char('!')), Some(&(0, 0)));
-        // '@' is secondary of '2', row 0, col 1
-        assert_eq!(map.get(&KeyCode::Char('@')), Some(&(0, 1)));
+        // '!' is secondary of '1', which is number row (row 0), col 1 after '`'
+        assert_eq!(map.get(&KeyCode::Char('!')), Some(&(0, 1)));
+        // '@' is secondary of '2', row 0, col 2
+        assert_eq!(map.get(&KeyCode::Char('@')), Some(&(0, 2)));
     }
 
     #[test]
@@ -414,6 +409,7 @@ mod tests {
         let right = KeyCode::Modifier(ModifierKeyCode::RightShift);
         let map = build_keycode_grid_map(&build_keyboard_rows(KeyboardLayout::Qwerty));
         for (ch, shift) in [
+            ('~', right),
             ('%', right),
             ('^', left),
             ('T', right),
@@ -425,6 +421,27 @@ mod tests {
             ('"', left),
         ] {
             assert_eq!(shift_for(map[&KeyCode::Char(ch)]), shift, "{ch}");
+        }
+    }
+
+    #[test]
+    fn number_row_fingers_follow_the_backtick() {
+        let map = build_keycode_grid_map(&build_keyboard_rows(KeyboardLayout::Qwerty));
+        for (ch, finger) in [
+            ('`', Finger::Pinky),
+            ('1', Finger::Pinky),
+            ('2', Finger::Ring),
+            ('3', Finger::Middle),
+            ('4', Finger::Index),
+            ('7', Finger::Index),
+            ('8', Finger::Middle),
+            ('0', Finger::Pinky),
+        ] {
+            assert_eq!(
+                finger_for_coord(map[&KeyCode::Char(ch)]),
+                Some(finger),
+                "{ch}"
+            );
         }
     }
 

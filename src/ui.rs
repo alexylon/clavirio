@@ -46,7 +46,7 @@ const ZEN_FOOTER_ROWS: u16 = 2;
 /// on one row. The keyboard is hidden on terminals too short for this, any rows
 /// those wrap onto, and the keyboard.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
-const WIDEST_ROW_KEYS: u16 = 13;
+const WIDEST_ROW_KEYS: u16 = NUMBER_ROW_KEYS as u16;
 const MAX_KEY_WIDTH: u16 = 9;
 /// Wide enough for the widest keys inside the keyboard frame
 const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
@@ -375,29 +375,12 @@ pub fn draw(
                         .get(&KeyCode::Char(ch.to_ascii_uppercase()))
                         .copied();
                     coords.extend(key);
-                    let needs_shift = ch.is_uppercase()
-                        || matches!(
-                            ch,
-                            '!' | '@'
-                                | '#'
-                                | '$'
-                                | '%'
-                                | '^'
-                                | '&'
-                                | '*'
-                                | '('
-                                | ')'
-                                | '_'
-                                | '+'
-                                | '{'
-                                | '}'
-                                | '|'
-                                | ':'
-                                | '"'
-                                | '<'
-                                | '>'
-                                | '?'
-                        );
+                    let shifted = |&(row, col): &GridCoord| {
+                        rows.get(row)
+                            .and_then(|keys| keys.get(col))
+                            .is_some_and(|key| key.secondary == Some(KeyCode::Char(ch)))
+                    };
+                    let needs_shift = ch.is_uppercase() || key.as_ref().is_some_and(shifted);
                     if let Some(key) = key.filter(|_| needs_shift) {
                         coords.extend(grid_map.get(&shift_for(key)).copied());
                     }
