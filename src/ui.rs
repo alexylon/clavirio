@@ -57,6 +57,12 @@ const PANEL_PADDING: Padding = Padding::symmetric(2, 1);
 /// Rows a panel takes around its text: its 2 border rows and its padding
 const PANEL_FRAME_ROWS: u16 = 2 + PANEL_PADDING.top + PANEL_PADDING.bottom;
 const PANEL_FRAME_COLS: u16 = 2 + PANEL_PADDING.left + PANEL_PADDING.right;
+/// The pause menu is narrow, so it has a column of padding instead of two
+const PAUSE_MENU_PADDING: Padding = Padding {
+    left: 1,
+    right: 1,
+    ..PANEL_PADDING
+};
 /// The text panel's share of the screen's width
 const TEXT_AREA_WIDTH: Constraint = Constraint::Percentage(80);
 
@@ -635,7 +641,7 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
 
     let menu_width = 36_u16;
     let items = app.pause_menu_items();
-    let menu_height = items.len() as u16 + 4; // items + border + padding
+    let menu_height = items.len() as u16 + PANEL_FRAME_ROWS;
 
     let [v_area] = Layout::vertical([Constraint::Length(menu_height)])
         .flex(Flex::Center)
@@ -651,7 +657,7 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::new().fg(tc.dim_border))
-        .padding(Padding::vertical(1))
+        .padding(PAUSE_MENU_PADDING)
         .title(Span::styled(" Paused ", Style::new().fg(tc.accent).bold()));
 
     let inner = block.inner(menu_area);
@@ -673,7 +679,7 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             s => s,
         };
         let pad_len =
-            (inner.width as usize).saturating_sub(2 + label.len() + display_shortcut.len() + 1);
+            (inner.width as usize).saturating_sub(2 + label.len() + display_shortcut.len());
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -681,7 +687,6 @@ fn draw_pause_menu(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                 Span::styled(*label, Style::new().fg(label_fg)),
                 Span::raw(" ".repeat(pad_len)),
                 Span::styled(display_shortcut, Style::new().fg(shortcut_fg)),
-                Span::raw(" "),
             ])),
             row,
         );
