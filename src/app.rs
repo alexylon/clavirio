@@ -1192,11 +1192,22 @@ impl App {
                 self.correct_count += 1;
                 self.total_count += 1;
                 if let Some(line) = self.zen_lines.last_mut() {
-                    if line.width() + c.width().unwrap_or(0) >= ZEN_LINE_WIDTH {
-                        self.zen_lines.push(c.to_string());
-                        self.zen_wrapped.push(true);
-                    } else {
+                    // A space or accent may end a full line, and the word being
+                    // typed moves to the next line unless it fills a line by itself
+                    let width = c.width().unwrap_or(0);
+                    let room = ZEN_LINE_WIDTH.saturating_sub(line.width());
+                    let fits = width < room || width == 0 || (width == room && c.is_whitespace());
+                    if fits {
                         line.push(c);
+                    } else {
+                        let word_start = line
+                            .char_indices()
+                            .rfind(|&(_, ch)| ch.is_whitespace())
+                            .map_or(line.len(), |(i, ch)| i + ch.len_utf8());
+                        let mut next = line.split_off(word_start);
+                        next.push(c);
+                        self.zen_lines.push(next);
+                        self.zen_wrapped.push(true);
                     }
                 }
                 let display_char = if c.is_whitespace() {
@@ -2695,6 +2706,21 @@ mod tests {
             app.handle_event(InputEvent::Press(key_event(KeyCode::Char('é'))));
         }
         assert_eq!(app.zen_lines.len(), 1);
+    }
+
+    #[test]
+    fn zen_lines_break_between_words() {
+        let mut app = App::new();
+        app.start_zen_mode();
+        let text = "the quick brown fox jumps over the lazy dog ".repeat(3);
+        for c in text.chars() {
+            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+        }
+        assert!(app.zen_lines.len() > 1);
+        for line in &app.zen_lines[..app.zen_lines.len() - 1] {
+            assert!(line.ends_with(' '), "{line:?}");
+        }
+        assert_eq!(app.zen_lines.concat(), text);
     }
 
     #[test]
