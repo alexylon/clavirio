@@ -57,7 +57,7 @@ Each lesson introduces only 2 new keys and uses only characters from earlier les
 - **Weak key tracking** — per-key accuracy saved across sessions; press `w` after a drill to practice that session's weakest keys (or your saved ones if it had none), or select Weak Keys from the menu for cumulative stats
 - **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
 - **Progress tracking** — remembers your lesson and menu mode across sessions
-- **Custom text** — load any file via `Ctrl-F` or `--file`; curly quotes, dashes and ellipses become what your keyboard types (`'`, `"`, `-`, `--`, `...`)
+- **Custom text** — load any file via `Ctrl-F` or `--file`; curly quotes, dashes and ellipses become what your keyboard types (`'`, `"`, `-`, `--`, `...`), and accents saved apart from their letter are joined to it
 - **Dark & light themes**
 
 ## Lessons

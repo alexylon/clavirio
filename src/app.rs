@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
+use unicode_normalization::UnicodeNormalization;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::input::InputEvent;
@@ -190,7 +191,9 @@ impl Document {
                         None => {}
                     }
                 }
-                line.trim_end().to_string()
+                // A letter and an accent written apart, as some macOS files
+                // do, become the one character a keyboard types
+                line.trim_end().nfc().collect()
             })
             .collect();
         if lines.iter().all(String::is_empty) {
@@ -1548,6 +1551,12 @@ mod tests {
     fn load_nonexistent_file_returns_error() {
         let result = Document::load("/nonexistent/path/to/file.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn letters_and_accents_written_apart_are_joined() {
+        let doc = Document::from_text("cafe\u{301} e\u{ad}\u{301}").unwrap();
+        assert_eq!(doc.current_line, "caf\u{e9} \u{e9}");
     }
 
     #[test]

@@ -70,6 +70,7 @@
 - A weak `-` or `_` in the weak-key drill being added after a word, like `man-` (it now joins two words, like `well-known` or `snake_case`)
 - A long line with accents written as separate characters, such as from some macOS files, sometimes being a column too wide once it scrolled, cutting off its last column
 - A file loaded with spaces around its path, such as one pasted into `Ctrl-F`, being saved in the history under a name with those spaces, apart from its other sessions
+- Custom files with accents written apart from their letter, such as `e` followed by a combining accent as some macOS tools save them, being impossible to type, as a keyboard types `é` as one character (a letter and accent that have a single-character form are now joined when the file is loaded)
 
 ## [0.4.1] - 2026-03-28
 
