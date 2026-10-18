@@ -6,11 +6,12 @@
 
 [www.clavir.io](https://www.clavir.io)
 
-### Learn touch typing without leaving the terminal.
+### Learn touch typing in your terminal
 
-Progressive lessons for QWERTY, Dvorak & Colemak.
-Real-time stats, a virtual keyboard with finger hints, and session history — in a fast,
-lightweight binary built with Rust and [ratatui](https://ratatui.rs).
+Clavirio is a typing tutor with step-by-step lessons for QWERTY, Dvorak, and Colemak.
+It shows your speed and accuracy as you type, highlights keys and finger positions on a
+virtual keyboard, and saves your session history. It is built with Rust and
+[Ratatui](https://ratatui.rs).
 
 *clavirio* — from Latin *clavis* (key).
 
@@ -34,35 +35,40 @@ lightweight binary built with Rust and [ratatui](https://ratatui.rs).
 
 ## Methodology
 
-[Research on typing skill](https://www.crumplab.com/publications/Crump/files/3900/Liu%20et%20al.%20-%202010%20-%20Do%20you%20know%20where%20your%20fingers%20have%20been%20Explicit.pdf) suggests that skilled typing relies more on **implicit procedural control** than on **explicit knowledge** of key locations. The paper also suggests that the keyboard is represented in terms of its **row-and-column structure**, not as a memorized list of individual letters.
+[Research on typing skill](https://www.crumplab.com/publications/Crump/files/3900/Liu%20et%20al.%20-%202010%20-%20Do%20you%20know%20where%20your%20fingers%20have%20been%20Explicit.pdf)
+found that skilled typists could type quickly while having difficulty recalling where
+individual keys were. The authors suggest that typing relies on knowledge used during
+typing that is less accessible to conscious recall. They also discuss keyboard rows
+and columns as a possible frame of reference for remembering key positions.
 
-Clavirio follows that idea by teaching the keyboard **row by row** with the same 7-lesson progression for each row:
+Clavirio teaches the keyboard **row by row**. Each row follows the same seven-lesson sequence:
 
-*index pair → middle pair → ring pair → pinky pair → reach pair → full row → row + Shift*
+*index pair → middle pair → ring pair → pinky pair → reach pair → full row → row with Shift*
 
-This is meant to reduce reliance on **explicit recall** of key locations and build more **automatic control** within the keyboard’s **row-and-column structure**.
-
-Each lesson introduces only 2 new keys and uses only characters from earlier lessons. The same progression is used for **QWERTY, Dvorak, and Colemak**, so the lesson structure stays consistent across layouts.
+Each finger-pair lesson adds two keys, with practice text built from those keys and
+keys introduced earlier. The same sequence applies to **QWERTY, Dvorak, and
+Colemak**, so you can follow it on any of the three layouts. The sequence is
+Clavirio's approach to practicing key movements; the study did not test these lessons.
 
 ## Features
 
-- **Lessons mode** — 27 progressive drills: home row → top row → bottom row (2 keys per lesson, by finger pair), numbers, and symbols; lessons 1-21 are layout-specific, 22-27 are shared
-- **Practice mode** — random words (english 200/1k), code keywords (Rust, Python, JavaScript, Go, C/C++, Java, HTML/CSS), timed sessions (30s/60s), weak keys, common bigrams, quotes, and zen free-typing
-- **Punctuation & numbers** — optional injection into word and code drills, toggle with `5`/`6` in practice mode
-- **Live stats** — WPM, accuracy, errors, time, and line progress in a one-row status bar
-- **WPM sparkline** — speed over time on the results screen
-- **3 keyboard layouts** — QWERTY, Dvorak, and Colemak
-- **Virtual keyboard** — highlights the next key with finger hints (**P**inky, **R**ing, **M**iddle, **I**ndex, **T**humb)
-- **Error feedback** — two modes: error stop off (default) lets you type past mistakes with backspace correction within the current word; error stop on blocks until corrected
-- **Weak key tracking** — per-key accuracy saved across sessions; press `w` after a drill to practice that session's weakest keys (or your saved ones if it had none), or select Weak Keys from the menu for cumulative stats
-- **Session history** — saved to `~/.clavirio/history.json` with per-lesson tracking and averages
-- **Progress tracking** — remembers your lesson and menu mode across sessions
-- **Custom text** — load any file via `Ctrl-F` or `--file`; curly quotes, dashes and ellipses become what your keyboard types (`'`, `"`, `-`, `--`, `...`), and accents saved apart from their letter are joined to it
-- **Dark & light themes**
+- **Lessons:** 27 drills covering the home, top, and bottom rows, followed by numbers and symbols. Lessons 1–21 adapt to your layout; lessons 22–27 are shared.
+- **Practice:** Random words from the English 200 or 1k lists; code terms for Rust, Python, JavaScript, Go, C/C++, Java, and HTML/CSS; 30- or 60-second sessions; weak keys; common bigrams; quotes; and Zen mode for free typing.
+- **Punctuation and numbers:** Optionally add them to random word or code practice. Use `5` and `6` in the practice menu to toggle them.
+- **Live feedback:** WPM, accuracy, errors, time (elapsed, or remaining in timed sessions), and line progress appear in a single status row. The results screen shows a graph of WPM over time.
+- **Keyboard and layouts:** Switch between QWERTY, Dvorak, and Colemak. The virtual keyboard highlights the next key and shows finger hints: **P**inky, **R**ing, **M**iddle, **I**ndex, and **T**humb.
+- **Error handling:** By default, typing continues after a mistake, and Backspace lets you correct it within the current word. Turn on error stop to require a correction before continuing.
+- **Weak key practice:** Accuracy for each key is saved across sessions. After a drill, press `w` to practice that session's weakest keys, or your saved weak keys if the session has none. Choose Weak Keys from the practice menu to use your cumulative stats.
+- **History and progress:** Sessions are saved to `~/.clavirio/history.json`, with per-lesson tracking and averages. Clavirio also remembers your lesson and whether you last used the lessons or practice menu.
+- **Custom text:** Load a file with `Ctrl-F` or `--file`. Curly quotes, dashes, and ellipses are converted to characters you can type (`'`, `"`, `-`, `--`, `...`). Separately stored accents are joined to their letters, tabs become four spaces, and invisible characters such as soft hyphens are removed.
+- **Themes:** Choose a dark or light theme.
 
 ## Lessons
 
-Lessons 1-21 are **layout-specific** — 7 lessons per row (home, top, bottom), 2 new keys each. Lessons 22-27 are **shared** (numbers and symbols).
+Lessons 1–21 follow your chosen layout: seven lessons each for the home, top, and
+bottom rows. The first five lessons in each row add two keys at a time; the last
+two practice the full row and Shift. Lessons 22–27 cover numbers and symbols and
+are the same for every layout.
 
 | # | Lesson | QWERTY | Dvorak | Colemak |
 |---|--------|--------|--------|---------|
@@ -101,14 +107,14 @@ Lessons 1-21 are **layout-specific** — 7 lessons per row (home, top, bottom), 
 
 ### Prebuilt binary
 
-Download from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest) — standalone binaries for macOS (Intel + Apple Silicon), Linux (x86_64), and Windows (x86_64):
+Download a standalone binary from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest). Builds are available for macOS (Intel and Apple Silicon), Linux (x86_64), and Windows (x86_64).
 
 ```bash
 # macOS / Linux
 tar xzf clavirio-*.tar.gz
 sudo mv clavirio /usr/local/bin/
 
-# Windows — extract the .zip, then add the folder to your PATH
+# Windows: extract the .zip, then add the folder containing clavirio.exe to PATH
 ```
 
 > **macOS:** On first run, macOS may block the binary. Go to System Settings → Privacy & Security and click *Allow Anyway*.
@@ -129,6 +135,8 @@ cargo build --release
 
 ## CLI
 
+Run `clavirio` to open the menu, or start a practice session directly:
+
 ```
 clavirio                        # interactive menu
 clavirio -w                     # 100 random words (english 200)
@@ -142,26 +150,26 @@ clavirio -f path/to/file.txt    # custom file
 
 | Flag | Description |
 |------|-------------|
-| `-w, --words [N]` | Practice with N random words, up to 10000 (default: 100) |
-| `-t, --time N` | Timed practice for N seconds, up to 3600 |
-| `-l, --list LIST` | Word list (default: `200`) |
-| `-p, --punctuation` | Inject punctuation into word practice (this run only) |
-| `-n, --numbers` | Inject numbers into word practice (this run only) |
+| `-w, --words [N]` | Practice with 1–10,000 random words (default: 100) |
+| `-t, --time N` | Practice for 1–3,600 seconds |
+| `-l, --list LIST` | Choose a word or code list (default: `200`) |
+| `-p, --punctuation` | Add punctuation to word or code practice for this run |
+| `-n, --numbers` | Add numbers to word or code practice for this run |
 | `-f, --file FILE` | Load a custom text file |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
-Available word lists: `200`, `1k`, `rust`, `python`, `javascript` (`js`), `go`, `c` (`cpp`), `java`, `html` (`css`)
+Lists: `200`, `1k`, `rust`, `python`, `javascript` (`js`), `go`, `c` (`cpp`, `c++`), `java`, and `html` (`css`). Names in parentheses are aliases.
 
 ## Controls
 
-Best with a maximized terminal window so text, keyboard, and stats fit comfortably. On a terminal shorter than 36 rows, or a few more on narrow ones where the menu takes more rows, the keyboard is hidden to leave room for the text.
+A maximized terminal gives the text, keyboard, and stats more room. The virtual keyboard hides automatically when the terminal is shorter than 36 rows, or when a narrow window needs extra rows for the menu.
 
 ### Main Menu
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` `k`/`j` | Navigate |
+| `↑`/`↓` or `k`/`j` | Navigate |
 | `Enter` | Start |
 | `m` | Toggle lessons / practice |
 | `h` | Session history |
@@ -178,8 +186,9 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 | Key | Action |
 |-----|--------|
 | `Backspace` | Correct mistake |
-| `Esc` | Pause menu |
+| `Esc` | Pause menu (in zen mode, stop) |
 | `Ctrl-R` | Restart |
+| `Ctrl-F` | Load file |
 
 ### Finished Screen
 
@@ -194,15 +203,23 @@ Best with a maximized terminal window so text, keyboard, and stats fit comfortab
 
 | Key | Action |
 |-----|--------|
-| `Space` / `Enter` | Resume |
+| `↑`/`↓` or `k`/`j` | Navigate |
+| `Space` / `Enter` | Choose the selected item (Resume is selected first) |
 | `r` | Restart |
 | `n` | Next lesson (lessons mode) |
 | `Esc` | Back to menu |
 | `q` | Quit |
 
+### History
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` or `k`/`j` | Scroll |
+| `Esc` | Back to menu |
+
 ## Settings
 
-Preferences are stored in `~/.clavirio/settings.toml` and saved automatically.
+Preferences are saved automatically in `~/.clavirio/settings.toml`. These are the default values:
 
 ```toml
 [keyboard]
@@ -216,17 +233,17 @@ theme = "dark"              # dark, light
 include_punctuation = false
 include_numbers = false
 practice_mode = false
-error_stop = false              # true = block on error, false = advance past errors
+error_stop = false          # true = stop until corrected; false = continue past mistakes
 ```
 
 ## License
 
-This project is licensed under the Apache License 2.0.
+Clavirio is licensed under the Apache License 2.0.
 
 ## Attribution
 
-If you use or redistribute this project, please preserve the copyright,
-license, and NOTICE information.
+If you use or redistribute Clavirio, please preserve its copyright, license, and
+NOTICE information.
 
 If your distribution includes a credits page, acknowledgements, about page,
 documentation, or similar project metadata, please mention the original author:
