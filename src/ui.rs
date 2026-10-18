@@ -1354,7 +1354,10 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
                     Style::new().fg(tc.correct).bold(),
                 ),
                 Span::styled(
-                    format!("  ({} sessions)", completed.len()),
+                    match completed.len() {
+                        1 => "  (1 session)".to_string(),
+                        count => format!("  ({count} sessions)"),
+                    },
                     Style::new().fg(tc.dim_text),
                 ),
             ]));
@@ -1443,6 +1446,26 @@ mod tests {
             let fifth_shown = rows.iter().any(|row| row.contains("Random Words"));
             assert!(fifth_shown, "width {width}: {}", rows.join("\n"));
         }
+    }
+
+    #[test]
+    fn history_counts_one_session_in_the_singular() {
+        let mut app = App::new();
+        app.history = vec![crate::history::SessionRecord {
+            timestamp: "2026-10-18T12:00:00".into(),
+            wpm: 40.0,
+            accuracy: 95.0,
+            correct: 95,
+            total: 100,
+            duration_secs: 60.0,
+            completed: true,
+            id: "home_row".into(),
+            title: "Home Row".into(),
+        }];
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let screen = render(80, 20, |frame| draw_history(frame, &app, frame.area(), &tc));
+
+        assert!(screen.iter().any(|row| row.contains("(1 session)")));
     }
 
     #[test]
