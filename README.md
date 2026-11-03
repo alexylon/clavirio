@@ -4,7 +4,7 @@
 
 ![](https://github.com/alexylon/clavirio/actions/workflows/rust.yml/badge.svg) &nbsp; [![Crates.io](https://img.shields.io/crates/v/clavirio.svg?color=blue)](https://crates.io/crates/clavirio)
 
-[www.clavir.io](https://www.clavir.io)
+[clavir.io](https://clavir.io)
 
 ### Learn touch typing in your terminal
 
@@ -250,7 +250,7 @@ documentation, or similar project metadata, please mention the original author:
 
 - Author: Alexander Alexandrov
 - Project: Clavirio
-- Homepage: https://www.clavir.io
+- Homepage: https://clavir.io
 - Repository: https://github.com/alexylon/clavirio
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
