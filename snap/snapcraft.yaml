@@ -11,6 +11,8 @@ description: |
   for Rust, Python, JavaScript, Go, C/C++, Java, and HTML/CSS, quotes, common
   bigrams, timed sessions, a drill of your weakest keys, Zen mode for free
   typing, or your own text files.
+
+  After installing, open a terminal and run `clavirio`.
 adopt-info: clavirio
 license: Apache-2.0
 website: https://clavir.io
