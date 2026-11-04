@@ -21,3 +21,6 @@ target
 .idea/
 .claude/
 .DS_Store
+
+# Built snap packages
+*.snap
