@@ -105,6 +105,16 @@ are the same for every layout.
 
 ## Install
 
+### Snap (Ubuntu and other Linux)
+
+Install from the [Snap Store](https://snapcraft.io/clavirio) or the Ubuntu App Center:
+
+```bash
+sudo snap install clavirio
+```
+
+The snap keeps its settings and history in `~/snap/clavirio/current/.clavirio` instead of `~/.clavirio`.
+
 ### Prebuilt binary
 
 Download a standalone binary from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest). Builds are available for macOS (Intel and Apple Silicon), Linux (x86_64), and Windows (x86_64).
