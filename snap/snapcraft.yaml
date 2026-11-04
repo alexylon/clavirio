@@ -1,0 +1,36 @@
+name: clavirio
+title: Clavirio
+summary: Learn touch typing in your terminal
+description: |
+  Clavirio is a typing tutor with step-by-step lessons for QWERTY, Dvorak,
+  and Colemak. It shows your speed and accuracy as you type, highlights keys
+  and finger positions on a virtual keyboard, and saves your session history.
+
+  Besides the lessons, you can practise with random English words, timed
+  sessions, a drill of your weakest keys, or your own text files.
+adopt-info: clavirio
+license: Apache-2.0
+website: https://clavir.io
+source-code: https://github.com/alexylon/clavirio
+issues: https://github.com/alexylon/clavirio/issues
+icon: assets/images/icon_gunmetal_scanlines_512.png
+
+base: core24
+grade: stable
+confinement: strict
+
+apps:
+  clavirio:
+    command: bin/clavirio
+    plugs:
+      - home
+
+parts:
+  clavirio:
+    plugin: rust
+    # Builds the committed code only, so the local target/ folder isn't copied
+    source: .
+    source-type: git
+    override-pull: |
+      craftctl default
+      craftctl set version="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)"

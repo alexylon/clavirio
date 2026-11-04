@@ -48,7 +48,7 @@ fn expand_home(path: &str) -> PathBuf {
     let home_relative = path
         .strip_prefix('~')
         .filter(|rest| rest.is_empty() || rest.starts_with(std::path::is_separator));
-    match (home_relative, crate::storage::home_dir()) {
+    match (home_relative, crate::storage::user_home_dir()) {
         (Some(rest), Some(home)) => home.join(rest.trim_start_matches(std::path::is_separator)),
         _ => PathBuf::from(path),
     }
@@ -1517,7 +1517,7 @@ mod tests {
         );
         assert_eq!(expand_home("notes/~/a.txt"), PathBuf::from("notes/~/a.txt"));
 
-        let Some(home) = crate::storage::home_dir() else {
+        let Some(home) = crate::storage::user_home_dir() else {
             return;
         };
         assert_eq!(expand_home("~"), home);

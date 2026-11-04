@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Snap package for the Snap Store and Ubuntu App Center (`snap/snapcraft.yaml`)
+
 ## [0.4.2] - 2026-10-18
 
 ### Fixed

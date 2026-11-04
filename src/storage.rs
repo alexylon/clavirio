@@ -20,11 +20,24 @@ pub(crate) fn data_dir() -> PathBuf {
         .join(".clavirio")
 }
 
+/// Set by snapd to the user's home folder, while `HOME` points to the snap's own folder
+const SNAP_REAL_HOME: &str = "SNAP_REAL_HOME";
+
 pub(crate) fn home_dir() -> Option<PathBuf> {
-    [std::env::var_os("HOME"), std::env::var_os("USERPROFILE")]
+    first_set_dir([std::env::var_os("HOME"), std::env::var_os("USERPROFILE")])
+}
+
+/// The home folder of the user, for paths they type. Unlike `home_dir()`, this
+/// isn't the snap's own folder when running as a snap.
+pub(crate) fn user_home_dir() -> Option<PathBuf> {
+    first_set_dir([std::env::var_os(SNAP_REAL_HOME)]).or_else(home_dir)
+}
+
+fn first_set_dir<const N: usize>(candidates: [Option<std::ffi::OsString>; N]) -> Option<PathBuf> {
+    candidates
         .into_iter()
         .flatten()
-        .find(|home| !home.is_empty())
+        .find(|dir| !dir.is_empty())
         .map(PathBuf::from)
 }
 
