@@ -38,6 +38,12 @@ This automatically:
 7. ✅ Creates Git tag: `v0.1.18`
 8. ✅ Pushes commits and tags to remote
 
+Pushing the tag starts `.github/workflows/release.yml`, which builds the GitHub Release binaries and publishes the snap (amd64 and arm64) to the Snap Store's `stable` channel. Publishing the snap needs the `SNAPCRAFT_STORE_CREDENTIALS` repository secret, created once with:
+
+```bash
+snapcraft export-login --snaps=clavirio --acls package_access,package_push,package_update,package_release -
+```
+
 ### 3. Release with Specific Version
 Bump to a specific version (major, minor, patch):
 

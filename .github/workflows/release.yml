@@ -53,6 +53,29 @@ jobs:
           name: clavirio-${{ matrix.target }}
           path: clavirio-${{ matrix.target }}.*
 
+  snap:
+    strategy:
+      matrix:
+        # The snap is built for the runner's architecture
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build snap
+        id: build
+        uses: canonical/action-build@v1
+
+      - name: Publish to the Snap Store
+        uses: canonical/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: stable
+
   release:
     needs: build
     runs-on: ubuntu-latest
