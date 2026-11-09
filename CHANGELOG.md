@@ -4,6 +4,7 @@
 
 ### Added
 - Snap package for the Snap Store and Ubuntu App Center (`snap/snapcraft.yaml`)
+- Option to count pressing the wrong Shift key as an error (works only with terminals which support the Kitty protocol)
 
 ## [0.4.2] - 2026-10-18
 
