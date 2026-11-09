@@ -88,6 +88,8 @@ pub struct DisplaySettings {
     pub practice_mode: bool,
     #[serde(default)]
     pub error_stop: bool,
+    #[serde(default)]
+    pub shift_error: bool,
 }
 
 impl Default for DisplaySettings {
@@ -101,6 +103,7 @@ impl Default for DisplaySettings {
             include_numbers: false,
             practice_mode: false,
             error_stop: false,
+            shift_error: false,
         }
     }
 }

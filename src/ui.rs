@@ -382,7 +382,8 @@ pub fn draw(
                     };
                     let needs_shift = ch.is_uppercase() || key.as_ref().is_some_and(shifted);
                     if let Some(key) = key.filter(|_| needs_shift) {
-                        coords.extend(grid_map.get(&shift_for(key)).copied());
+                        let key_code = shift_for(key).key_code();
+                        coords.extend(grid_map.get(&key_code).copied());
                     }
                     coords
                 })
@@ -1222,10 +1223,11 @@ fn menu_footer(
         toggle("2", "hints", app.show_hints, true),
         toggle("3", "keyboard", app.show_keyboard, keyboard_fits),
         toggle("4", "error stop", app.error_stop, true),
+        toggle("5", "shift error", app.shift_error, app.is_kitty_supported),
     ];
     if app.menu_mode == MenuMode::Practice {
-        settings.push(toggle("5", "punct", app.include_punctuation, true));
-        settings.push(toggle("6", "num", app.include_numbers, true));
+        settings.push(toggle("6", "punct", app.include_punctuation, true));
+        settings.push(toggle("7", "num", app.include_numbers, true));
     }
 
     let mut lines = wrap_groups(controls, width);
@@ -1680,7 +1682,7 @@ mod tests {
         let text = rows.join("\n");
 
         assert!(
-            text.contains("q/Esc quit") && text.contains("6 num off"),
+            text.contains("q/Esc quit") && text.contains("7 num off"),
             "{text}"
         );
     }

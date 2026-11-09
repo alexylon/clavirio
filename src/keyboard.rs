@@ -10,6 +10,7 @@ pub enum KeyWidth {
     Spacebar,
 }
 
+/// Grid coordinate in the `(row, col)` format.
 pub type GridCoord = (usize, usize);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -18,6 +19,21 @@ pub struct KeyDef {
     pub secondary: Option<KeyCode>,
     pub width: KeyWidth,
     pub label: &'static str,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShiftKind {
+    Left,
+    Right,
+}
+
+impl ShiftKind {
+    pub fn key_code(&self) -> KeyCode {
+        match self {
+            Self::Left => KeyCode::Modifier(ModifierKeyCode::LeftShift),
+            Self::Right => KeyCode::Modifier(ModifierKeyCode::RightShift),
+        }
+    }
 }
 
 macro_rules! key {
@@ -345,12 +361,12 @@ fn is_left_hand(coord: GridCoord) -> bool {
 }
 
 /// The Shift to hold with a key: the one on the other hand.
-pub fn shift_for(coord: GridCoord) -> KeyCode {
-    KeyCode::Modifier(if is_left_hand(coord) {
-        ModifierKeyCode::RightShift
+pub fn shift_for(coord: GridCoord) -> ShiftKind {
+    if is_left_hand(coord) {
+        ShiftKind::Right
     } else {
-        ModifierKeyCode::LeftShift
-    })
+        ShiftKind::Left
+    }
 }
 
 pub fn build_keycode_grid_map(rows: &[Vec<KeyDef>]) -> HashMap<KeyCode, GridCoord> {
@@ -405,8 +421,8 @@ mod tests {
 
     #[test]
     fn shift_is_on_the_other_hand() {
-        let left = KeyCode::Modifier(ModifierKeyCode::LeftShift);
-        let right = KeyCode::Modifier(ModifierKeyCode::RightShift);
+        let left = ShiftKind::Left;
+        let right = ShiftKind::Right;
         let map = build_keycode_grid_map(&build_keyboard_rows(KeyboardLayout::Qwerty));
         for (ch, shift) in [
             ('~', right),
