@@ -1791,6 +1791,14 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    fn shift_event(side: ShiftKind, kind: KeyEventKind) -> KeyEvent {
+        let modifier = match side {
+            ShiftKind::Left => ModifierKeyCode::LeftShift,
+            ShiftKind::Right => ModifierKeyCode::RightShift,
+        };
+        KeyEvent::new_with_kind(KeyCode::Modifier(modifier), KeyModifiers::SHIFT, kind)
+    }
+
     fn ctrl_key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
@@ -1875,6 +1883,42 @@ mod tests {
         assert_eq!(app.total_count, 1);
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
+    }
+
+    #[test]
+    fn using_correct_shift_advances() {
+        let mut app = App::new();
+        app.shift_error = true;
+        app.is_kitty_supported = true;
+        app.rows = keyboard::build_keyboard_rows(app.layout);
+        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
+        app.document = Some(Document::from_text("Hello").unwrap());
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Press)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Release)));
+        assert_eq!(app.correct_count, 1);
+        assert_eq!(app.total_count, 1);
+        assert!(app.last_correct);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('e'));
+    }
+
+    #[test]
+    fn using_opposite_shift_sets_error() {
+        let mut app = App::new();
+        app.error_stop = true;
+        app.shift_error = true;
+        app.is_kitty_supported = true;
+        app.rows = keyboard::build_keyboard_rows(app.layout);
+        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
+        app.document = Some(Document::from_text("Hello").unwrap());
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Press)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Release)));
+        assert_eq!(app.last_error_char, Some('H'));
+        assert!(!app.last_correct);
+        assert_eq!(app.total_count, 1);
+        assert_eq!(app.correct_count, 0);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('H'));
     }
 
     #[test]
