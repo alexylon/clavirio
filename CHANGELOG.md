@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-11
+
 ### Added
 - Snap package for the Snap Store and Ubuntu App Center (`snap/snapcraft.yaml`)
 - Shift error (`7` on the menu): a capital or symbol typed with the Shift on its own hand counts as a mistake. It needs a terminal with the kitty keyboard protocol, such as kitty, Ghostty or foot, and is dimmed in others (thanks @dinikai)
