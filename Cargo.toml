@@ -16,6 +16,7 @@ include = [
     "assets/lessons/",
     "assets/quotes/",
     "assets/words/",
+    "man/",
     "sample.txt",
     "CHANGELOG.md",
     "LICENSE",

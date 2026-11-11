@@ -60,4 +60,5 @@ cargo test test_name           # Run a single test by name
 - Handle unwraps — prefer returning errors or using safe alternatives
 - Tests should be self-contained and only cover important behavior
 - After each new feature, update README.md and CHANGELOG.md (under `[Unreleased]`)
+- When CLI options, keys or data files change, update the man page (`man/clavirio.1`) too
 - After each session, double-check all changes against these guidelines before finishing

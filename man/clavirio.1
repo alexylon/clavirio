@@ -1,0 +1,221 @@
+.TH CLAVIRIO 1 2026-11-11 clavirio "User Commands"
+.SH NAME
+clavirio \- terminal typing tutor with a virtual keyboard, lessons and session history
+.SH SYNOPSIS
+.B clavirio
+.RB [ \-f
+.IR file ]
+.RB [ \-w
+.RI [ n ]]
+.RB [ \-t
+.IR seconds ]
+.RB [ \-l
+.IR list ]
+.RB [ \-p ]
+.RB [ \-n ]
+.br
+.B clavirio
+.BR \-h | \-V
+.SH DESCRIPTION
+.B clavirio
+teaches touch typing in the terminal.
+It shows your speed and accuracy as you type, highlights the next key and the
+finger to use on a virtual keyboard, and saves your session history.
+.PP
+Lessons teach the keyboard row by row, for the QWERTY, Dvorak and Colemak
+layouts.
+Each row follows the same seven steps: index pair, middle pair, ring pair,
+pinky pair, reach pair, full row, and the row with Shift.
+Lessons 1 to 21 follow the chosen layout; lessons 22 to 27 cover numbers and
+symbols and are the same for every layout.
+.PP
+Practice modes offer random words from the English 200 or 1k lists, code terms
+for several programming languages, timed sessions, your weak keys, common
+bigrams, quotes, and Zen mode for free typing.
+.PP
+Without options,
+.B clavirio
+opens the interactive menu.
+.SH OPTIONS
+.TP
+.BI \-f " file" "\fR, \fP\-\-file " file
+Load
+.I file
+as the typing text.
+Curly quotes, dashes and ellipses become characters you can type
+.RB ( \(aq ,
+.BR \(dq ,
+.BR \- ,
+.BR \-\- ,
+.BR ... ),
+separately stored accents are joined to their letters, tabs become four spaces,
+and invisible characters such as soft hyphens are removed.
+.TP
+.BR \-w ", " \-\-words " [\fIn\fP]"
+Practice with
+.I n
+random words, from 1 to 10000 (default: 100).
+.TP
+.BI \-t " seconds" "\fR, \fP\-\-time " seconds
+Practice for the given number of seconds, from 1 to 3600.
+.TP
+.BI \-l " list" "\fR, \fP\-\-list " list
+The word or code list for
+.B \-w
+and
+.BR \-t :
+.BR 200 " (default), " 1k ,
+.BR rust ,
+.BR python ,
+.BR javascript " (or " js ),
+.BR go ,
+.BR c " (or " cpp ", " c++ ),
+.BR java ,
+or
+.BR html " (or " css ).
+.TP
+.BR \-p ", " \-\-punctuation
+Add punctuation to word or code practice, for this run only.
+.TP
+.BR \-n ", " \-\-numbers
+Add numbers to word or code practice, for this run only.
+.TP
+.BR \-h ", " \-\-help
+Print help and exit.
+.TP
+.BR \-V ", " \-\-version
+Print the version and exit.
+.SH KEYS
+.SS Main menu
+.TP
+.BR Up / Down " or " k / j
+Move through the menu.
+.TP
+.B Enter
+Start the selected lesson or practice.
+.TP
+.B m
+Switch between lessons and practice.
+.TP
+.B h
+Show the session history.
+.TP
+.B t
+Switch the theme (dark or light).
+.TP
+.B l
+Switch the layout (QWERTY, Dvorak or Colemak).
+.TP
+.B Ctrl\-F
+Load a file.
+.TP
+.BR 1 ", " 2 ", " 3
+Show or hide the finger colors, the key hints and the keyboard.
+.TP
+.B 4
+Turn error stop on or off.
+With error stop on, a mistake must be corrected with Backspace before typing
+continues.
+.TP
+.BR 5 ", " 6
+Turn punctuation or numbers on or off (practice only).
+.TP
+.B 7
+Turn shift error on or off: a capital or symbol typed with the Shift key on its
+own hand counts as a mistake.
+This needs a terminal with the kitty keyboard protocol, such as kitty, Ghostty
+or foot.
+.TP
+.BR q ", " Esc
+Quit.
+.SS Typing
+.TP
+.B Backspace
+Correct a mistake.
+.TP
+.B Esc
+Open the pause menu (in Zen mode, stop).
+.TP
+.B Ctrl\-R
+Restart.
+.TP
+.B Ctrl\-F
+Load a file.
+.SS Finished screen
+.TP
+.B r
+Restart.
+.TP
+.B w
+Practice the weak keys of the session, or your saved weak keys if the session
+had none.
+.TP
+.B n
+Next lesson (lessons only).
+.TP
+.B Esc
+Back to the menu.
+.SS Pause menu
+.TP
+.BR Up / Down " or " k / j
+Move through the menu.
+.TP
+.BR Space ", " Enter
+Choose the selected item.
+.TP
+.B r
+Restart.
+.TP
+.B n
+Next lesson (lessons only).
+.TP
+.B Esc
+Back to the menu.
+.TP
+.B q
+Quit.
+.SS History
+.TP
+.BR Up / Down " or " k / j
+Scroll.
+.TP
+.B Esc
+Back to the menu.
+.SH FILES
+.TP
+.I ~/.clavirio/settings.toml
+Layout, theme and display settings, saved as they change.
+.TP
+.I ~/.clavirio/history.json
+Past sessions with their speed, accuracy and duration.
+.TP
+.I ~/.clavirio/keystats.json
+Hits and misses for each key, used for weak key practice.
+.PP
+A file that can't be parsed is kept next to it as a timestamped
+.I .bak
+file before it is rewritten.
+.SH ENVIRONMENT
+.TP
+.B HOME
+The folder that holds
+.IR .clavirio .
+.SH EXAMPLES
+.TP
+.B clavirio \-w 50 \-l 1k
+50 random words from the English 1k list.
+.TP
+.B clavirio \-t 30 \-l python
+A 30-second session with Python terms.
+.TP
+.B clavirio \-w \-p \-n
+100 random words with punctuation and numbers.
+.TP
+.B clavirio \-f notes.txt
+Type the text of
+.IR notes.txt .
+.SH AUTHOR
+Alexander Alexandrov and contributors.
+.SH SEE ALSO
+.UR https://clavir.io
+.UE

@@ -143,6 +143,8 @@ cd clavirio
 cargo build --release
 ```
 
+The man page is in `man/clavirio.1`. Read it with `man ./man/clavirio.1`, or copy it to `/usr/local/share/man/man1/` to use `man clavirio`.
+
 ## CLI
 
 Run `clavirio` to open the menu, or start a practice session directly:
