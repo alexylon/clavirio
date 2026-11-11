@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: "17 3 * * *" # daily at 03:17 UTC
 
+# A release pushes a branch and a tag at once; mirroring them at the same time
+# makes the second push fail
+concurrency:
+  group: mirror
+
 jobs:
   mirror:
     runs-on: ubuntu-latest
@@ -34,6 +39,8 @@ jobs:
           git clone --mirror "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" repo.git
           cd repo.git
 
-          # Push everything (all refs + deletions)
-          git push --mirror "${GITLAB_REPO_URL}"
-          git push --mirror "${CODEBERG_REPO_URL}"
+          # Branches and tags only, with deletions. GitHub's pull request refs
+          # are left out, as Codeberg rejects them.
+          REFS=('+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*')
+          git push --prune "${GITLAB_REPO_URL}" "${REFS[@]}"
+          git push --prune "${CODEBERG_REPO_URL}" "${REFS[@]}"
