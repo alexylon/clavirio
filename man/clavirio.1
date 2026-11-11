@@ -85,6 +85,20 @@ Print help and exit.
 .TP
 .BR \-V ", " \-\-version
 Print the version and exit.
+.PP
+Only one of
+.BR \-t ,
+.B \-w
+and
+.B \-f
+is used:
+.B \-t
+wins over
+.BR \-w ,
+and
+.B \-w
+over
+.BR \-f .
 .SH KEYS
 .SS Main menu
 .TP
@@ -137,7 +151,7 @@ Correct a mistake.
 Open the pause menu (in Zen mode, stop).
 .TP
 .B Ctrl\-R
-Restart.
+Restart (not in Zen mode).
 .TP
 .B Ctrl\-F
 Load a file.
@@ -160,6 +174,9 @@ Back to the menu.
 .BR Up / Down " or " k / j
 Move through the menu.
 .TP
+.BR Home ", " End
+Go to the first or last item.
+.TP
 .BR Space ", " Enter
 Choose the selected item.
 .TP
@@ -181,6 +198,13 @@ Scroll.
 .TP
 .B Esc
 Back to the menu.
+.SS Anywhere
+.TP
+.B Ctrl\-C
+Quit.
+.TP
+.B Esc
+Close an error message.
 .SH FILES
 .TP
 .I ~/.clavirio/settings.toml

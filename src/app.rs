@@ -2029,6 +2029,7 @@ mod tests {
 
     #[test]
     fn restart_resets_all_state() {
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
@@ -2389,6 +2390,7 @@ mod tests {
 
     #[test]
     fn ctrl_r_while_paused_restarts_and_resumes() {
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
@@ -2857,6 +2859,7 @@ mod tests {
 
     #[test]
     fn zen_mode_esc_exits() {
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         let mut app = App::new();
         app.start_zen_mode();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));

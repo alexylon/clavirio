@@ -173,6 +173,8 @@ clavirio -f path/to/file.txt    # custom file
 
 Lists: `200`, `1k`, `rust`, `python`, `javascript` (`js`), `go`, `c` (`cpp`, `c++`), `java`, and `html` (`css`). Names in parentheses are aliases.
 
+Only one of `-t`, `-w` and `-f` is used: `-t` wins over `-w`, and `-w` over `-f`.
+
 ## Controls
 
 A maximized terminal gives the text, keyboard, and stats more room. The virtual keyboard hides automatically when the terminal is shorter than 36 rows, or when a narrow window needs extra rows for the menu.
@@ -200,7 +202,7 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 |-----|--------|
 | `Backspace` | Correct mistake |
 | `Esc` | Pause menu (in zen mode, stop) |
-| `Ctrl-R` | Restart |
+| `Ctrl-R` | Restart (not in zen mode) |
 | `Ctrl-F` | Load file |
 
 ### Finished Screen
@@ -217,6 +219,7 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | Navigate |
+| `Home` / `End` | First / last item |
 | `Space` / `Enter` | Choose the selected item (Resume is selected first) |
 | `r` | Restart |
 | `n` | Next lesson (lessons mode) |
@@ -229,6 +232,13 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | Scroll |
 | `Esc` | Back to menu |
+
+### Anywhere
+
+| Key | Action |
+|-----|--------|
+| `Ctrl-C` | Quit |
+| `Esc` | Close an error message |
 
 ## Settings
 
@@ -252,7 +262,9 @@ shift_error = false         # true = a capital or symbol typed with the Shift on
 
 ## License
 
-Clavirio is licensed under the Apache License 2.0.
+Clavirio is licensed under the Apache License 2.0. The English word lists come from
+[Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists/PG/2006/04/1-10000)
+and are available under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 ## Attribution
 

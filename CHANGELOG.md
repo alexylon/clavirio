@@ -7,7 +7,8 @@
 
 ### Changed
 - The published crate now ships only the source, lessons, word lists, quotes and docs (no PDF, CI, snap or release files)
-- Four quotes from works still under copyright replaced with public-domain ones by Jerome K. Jerome, Benjamin Franklin, Ambrose Bierce, Seneca, Lewis Carroll, Blaise Pascal and Voltaire
+- Quotes that were misattributed, recent or still under copyright replaced with public-domain ones, by authors such as Shakespeare, Franklin, Twain, Wilde, Carroll and Conan Doyle
+- The crate's license now also names CC-BY-SA-4.0, the license of the English word lists
 
 ## [0.4.3] - 2026-11-11
 
