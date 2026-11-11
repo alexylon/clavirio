@@ -11,3 +11,16 @@ This distribution includes software originally developed by Alexander Alexandrov
 
 Redistributions and derivative works must preserve applicable copyright,
 license, and NOTICE information in accordance with the Apache License 2.0.
+
+Third-party data
+----------------
+
+assets/words/english_200.txt and assets/words/english_1k.txt are selections
+from the Wiktionary frequency list of Project Gutenberg texts
+(https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists/PG/2006/04/1-10000),
+kept in its order with single letters, names, archaic words, contractions and
+numbers left out. Wiktionary content is available under the Creative Commons
+Attribution-ShareAlike 4.0 License (https://creativecommons.org/licenses/by-sa/4.0/).
+
+assets/quotes/english.txt contains short, widely circulated quotations
+attributed to well-known people, collected for this project.

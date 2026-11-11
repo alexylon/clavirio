@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- The published crate now ships only the source, lessons, word lists, quotes and docs (no PDF, CI, snap or release files)
+- Four quotes from works still under copyright replaced with public-domain ones by Jerome K. Jerome, Benjamin Franklin, Ambrose Bierce, Seneca, Lewis Carroll, Blaise Pascal and Voltaire
+
 ## [0.4.3] - 2026-11-11
 
 ### Added
