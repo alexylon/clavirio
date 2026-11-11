@@ -2037,6 +2037,7 @@ mod tests {
         assert!(app.start_time.is_some());
 
         app.handle_event(InputEvent::Key(ctrl_key('r')));
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.total_count, 0);
         assert!(app.start_time.is_none());
@@ -2395,6 +2396,7 @@ mod tests {
         assert!(app.paused);
 
         app.handle_event(InputEvent::Key(ctrl_key('r')));
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert!(!app.paused);
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
@@ -2859,6 +2861,7 @@ mod tests {
         app.start_zen_mode();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
+        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert!(!quit);
         assert!(!app.zen_mode);
     }
