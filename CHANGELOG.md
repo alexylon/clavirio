@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-11
+
 ### Added
 - Man page (`man/clavirio.1`), with the options, keys and files
 
