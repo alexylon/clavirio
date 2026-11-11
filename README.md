@@ -189,7 +189,8 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 | `q` / `Esc` | Quit |
 | `1`-`3` | Toggle fingers / hints / keyboard |
 | `4` | Toggle error stop |
-| `5`/`6` | Toggle punctuation / numbers (practice only) |
+| `5` | Toggle strict Shift tracking (e.g., left Shift for a right-hand letter) |
+| `6`/`7` | Toggle punctuation / numbers (practice only) |
 
 ### Typing
 
@@ -244,6 +245,8 @@ include_punctuation = false
 include_numbers = false
 practice_mode = false
 error_stop = false          # true = stop until corrected; false = continue past mistakes
+shift_error = false         # true = opposite shift press will be counted as an error; works only with terminals which support the Kitty protocol.
+                            # https://sw.kovidgoyal.net/kitty/keyboard-protocol
 ```
 
 ## License

@@ -3,12 +3,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode};
 use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 use unicode_normalization::UnicodeNormalization;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::input::InputEvent;
+use crate::keyboard::{self, GridCoord, KeyDef, ShiftKind};
 use crate::settings::{KeyboardLayout, Theme};
 use crate::words::WordList;
 
@@ -383,6 +384,12 @@ fn weak_keys(
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct ShiftKeysState {
+    pub left: bool,
+    pub right: bool,
+}
+
 pub struct App {
     pub document: Option<Document>,
     pub file_path_buf: String,
@@ -403,6 +410,8 @@ pub struct App {
     pub selected_lesson: usize,
     pub lesson_id: String,
     pub layout: KeyboardLayout,
+    pub rows: Vec<Vec<KeyDef>>,
+    pub grid_map: HashMap<KeyCode, GridCoord>,
     pub show_keyboard: bool,
     /// Whether the keyboard fitted in the last frame drawn; `3` does nothing when
     /// it didn't
@@ -431,6 +440,9 @@ pub struct App {
     pub include_numbers: bool,
     pub error_stop: bool,
     pub error_chars: Vec<(usize, char)>,
+    pub shift_error: bool,
+    pub is_kitty_supported: bool,
+    pub shift_keys_state: ShiftKeysState,
 }
 
 type StartFn = fn(&mut App);
@@ -459,6 +471,8 @@ impl App {
             selected_lesson: 0,
             lesson_id: String::new(),
             layout: KeyboardLayout::default(),
+            rows: Vec::new(),
+            grid_map: HashMap::new(),
             show_keyboard: true,
             keyboard_fits: true,
             show_hints: true,
@@ -483,6 +497,9 @@ impl App {
             include_numbers: false,
             error_stop: false,
             error_chars: Vec::new(),
+            shift_error: false,
+            is_kitty_supported: false,
+            shift_keys_state: ShiftKeysState::default(),
         }
     }
 
@@ -831,7 +848,7 @@ impl App {
                 self.check_time_limit();
                 false
             }
-            InputEvent::Press(key) => {
+            InputEvent::Key(key) => {
                 self.check_time_limit();
                 self.handle_key(key)
             }
@@ -847,6 +864,29 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
+        match key.kind {
+            KeyEventKind::Press => match key.code {
+                KeyCode::Modifier(m) => match m {
+                    ModifierKeyCode::LeftShift => self.shift_keys_state.left = true,
+                    ModifierKeyCode::RightShift => self.shift_keys_state.right = true,
+                    _ => (),
+                },
+                _ => (),
+            },
+            KeyEventKind::Release => {
+                match key.code {
+                    KeyCode::Modifier(m) => match m {
+                        ModifierKeyCode::LeftShift => self.shift_keys_state.left = false,
+                        ModifierKeyCode::RightShift => self.shift_keys_state.right = false,
+                        _ => (),
+                    },
+                    _ => (),
+                }
+                return false;
+            }
+            _ => (),
+        }
+
         if self.searching {
             match key.code {
                 KeyCode::Enter => {
@@ -963,8 +1003,8 @@ impl App {
                 self.next_lesson();
             }
             _ if self.is_finished() => {}
-            (KeyCode::Char(typed), _) if self.last_error_char.is_none() || !self.error_stop => {
-                self.handle_typed_char(typed);
+            (KeyCode::Char(_), _) if self.last_error_char.is_none() || !self.error_stop => {
+                self.handle_typed_char(key.code);
             }
             (KeyCode::Backspace, _) => {
                 if self.error_stop {
@@ -1061,10 +1101,13 @@ impl App {
             KeyCode::Char('4') => {
                 self.error_stop = !self.error_stop;
             }
-            KeyCode::Char('5') if self.menu_mode == MenuMode::Practice => {
-                self.include_punctuation = !self.include_punctuation;
+            KeyCode::Char('5') if self.is_kitty_supported => {
+                self.shift_error = !self.shift_error;
             }
             KeyCode::Char('6') if self.menu_mode == MenuMode::Practice => {
+                self.include_punctuation = !self.include_punctuation;
+            }
+            KeyCode::Char('7') if self.menu_mode == MenuMode::Practice => {
                 self.include_numbers = !self.include_numbers;
             }
             KeyCode::Char('t') => {
@@ -1278,7 +1321,11 @@ impl App {
         self.start_practice_from_text(&text, WEAK_KEYS.id, WEAK_KEYS.title);
     }
 
-    fn handle_typed_char(&mut self, typed: char) {
+    fn handle_typed_char(&mut self, key_code: KeyCode) {
+        let KeyCode::Char(typed) = key_code else {
+            return;
+        };
+
         let typed = Document::as_typed(typed);
         let doc = match self.document.as_ref() {
             Some(d) => d,
@@ -1301,7 +1348,47 @@ impl App {
         self.total_count += 1;
         let entry = self.key_stats.entry(expected).or_insert((0, 0));
 
-        let is_correct = typed == expected;
+        // This is Some() if a secondary character was typed.
+        let secondary_def = self
+            .rows
+            .iter()
+            .flatten()
+            .find(|k| k.secondary.is_some_and(|s| s == key_code));
+
+        // This is Some() if either a secondary or a capital character was typed (aka if Shift was used).
+        let secondary_coords = if let Some(def) = secondary_def {
+            self.grid_map.get(&def.primary).copied()
+        } else if typed.is_uppercase() {
+            self.grid_map.get(&key_code).copied()
+        } else {
+            None
+        };
+
+        let is_shift_correct = match secondary_coords {
+            Some(coords) => {
+                // A Shift key was used.
+                let state = self.shift_keys_state;
+                let expected = keyboard::shift_for(coords);
+
+                if state.left && !state.right {
+                    expected == ShiftKind::Left
+                } else if !state.left && state.right {
+                    expected == ShiftKind::Right
+                } else {
+                    true
+                }
+            }
+            None => {
+                // None of the Shift keys were used;
+                // reset the state in case a release event was missed.
+                self.shift_keys_state = ShiftKeysState::default();
+
+                true
+            }
+        };
+
+        let is_correct = typed == expected
+            && (is_shift_correct || !self.shift_error || !self.is_kitty_supported);
 
         if is_correct {
             entry.0 += 1;
@@ -1704,6 +1791,14 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    fn shift_event(side: ShiftKind, kind: KeyEventKind) -> KeyEvent {
+        let modifier = match side {
+            ShiftKind::Left => ModifierKeyCode::LeftShift,
+            ShiftKind::Right => ModifierKeyCode::RightShift,
+        };
+        KeyEvent::new_with_kind(KeyCode::Modifier(modifier), KeyModifiers::SHIFT, kind)
+    }
+
     fn ctrl_key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
@@ -1711,14 +1806,14 @@ mod tests {
     #[test]
     fn esc_on_main_menu_returns_quit() {
         let mut app = App::new();
-        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(quit);
     }
 
     #[test]
     fn ctrl_f_opens_search() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         assert!(app.searching);
     }
 
@@ -1726,42 +1821,42 @@ mod tests {
     fn ctrl_f_ignored_while_paused_or_in_history() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.paused);
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         assert!(!app.searching);
 
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert!(app.viewing_history);
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         assert!(!app.searching);
     }
 
     #[test]
     fn search_typing_builds_path() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
         assert_eq!(app.file_path_buf, "ab");
     }
 
     #[test]
     fn search_backspace_removes_char() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
         assert_eq!(app.file_path_buf, "");
     }
 
     #[test]
     fn search_esc_cancels() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(!app.searching);
         assert!(app.file_path_buf.is_empty());
     }
@@ -1770,7 +1865,7 @@ mod tests {
     fn typing_correct_char_advances() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert_eq!(app.correct_count, 1);
         assert_eq!(app.total_count, 1);
         assert!(app.last_correct);
@@ -1782,7 +1877,7 @@ mod tests {
         let mut app = App::new();
         app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
         assert_eq!(app.last_error_char, Some('x'));
         assert!(!app.last_correct);
         assert_eq!(app.total_count, 1);
@@ -1791,12 +1886,48 @@ mod tests {
     }
 
     #[test]
+    fn using_correct_shift_advances() {
+        let mut app = App::new();
+        app.shift_error = true;
+        app.is_kitty_supported = true;
+        app.rows = keyboard::build_keyboard_rows(app.layout);
+        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
+        app.document = Some(Document::from_text("Hello").unwrap());
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Press)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Release)));
+        assert_eq!(app.correct_count, 1);
+        assert_eq!(app.total_count, 1);
+        assert!(app.last_correct);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('e'));
+    }
+
+    #[test]
+    fn using_opposite_shift_sets_error() {
+        let mut app = App::new();
+        app.error_stop = true;
+        app.shift_error = true;
+        app.is_kitty_supported = true;
+        app.rows = keyboard::build_keyboard_rows(app.layout);
+        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
+        app.document = Some(Document::from_text("Hello").unwrap());
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Press)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
+        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Release)));
+        assert_eq!(app.last_error_char, Some('H'));
+        assert!(!app.last_correct);
+        assert_eq!(app.total_count, 1);
+        assert_eq!(app.correct_count, 0);
+        assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('H'));
+    }
+
+    #[test]
     fn typing_blocked_during_error() {
         let mut app = App::new();
         app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // error
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h')))); // blocked
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // error
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h')))); // blocked
         assert_eq!(app.total_count, 1); // no new keystroke counted
         assert_eq!(app.last_error_char, Some('x'));
     }
@@ -1806,9 +1937,9 @@ mod tests {
         let mut app = App::new();
         app.error_stop = true;
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
         assert!(app.last_error_char.is_some());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
         assert!(app.last_error_char.is_none());
     }
 
@@ -1816,10 +1947,10 @@ mod tests {
     fn no_error_stop_advances_past_errors() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // wrong
         assert_eq!(app.error_chars.len(), 1);
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('i')))); // correct
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('i')))); // correct
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 2);
     }
 
@@ -1827,9 +1958,9 @@ mod tests {
     fn no_error_stop_backspace_removes_error() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hi").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong at pos 0
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // wrong at pos 0
         assert_eq!(app.error_chars.len(), 1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 0);
         assert!(app.error_chars.is_empty());
     }
@@ -1839,15 +1970,15 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("ab cd").unwrap());
         // Type "ab " correctly
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char(' '))));
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
         // Type wrong char then try to backspace past the space
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // wrong at pos 3
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace))); // back to pos 3
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // wrong at pos 3
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace))); // back to pos 3
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace))); // blocked by correct space
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace))); // blocked by correct space
         assert_eq!(app.document.as_ref().unwrap().cursor_position(), 3);
     }
 
@@ -1855,11 +1986,11 @@ mod tests {
     fn menu_navigation() {
         let mut app = App::new();
         app.selected_lesson = 0;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, 1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, 2);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Up)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Up)));
         assert_eq!(app.selected_lesson, 1);
     }
 
@@ -1867,14 +1998,14 @@ mod tests {
     fn menu_up_at_zero_stays_zero() {
         let mut app = App::new();
         app.selected_lesson = 0;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Up)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Up)));
         assert_eq!(app.selected_lesson, 0);
     }
 
     #[test]
     fn enter_selects_lesson() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(!app.lesson_id.is_empty());
     }
@@ -1893,7 +2024,7 @@ mod tests {
     fn complete_document_sets_finished() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
         assert!(app.end_time.is_some());
     }
@@ -1929,12 +2060,12 @@ mod tests {
     fn restart_resets_all_state() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
         assert_eq!(app.correct_count, 2);
         assert!(app.start_time.is_some());
 
-        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        app.handle_event(InputEvent::Key(ctrl_key('r')));
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.total_count, 0);
         assert!(app.start_time.is_none());
@@ -1953,10 +2084,10 @@ mod tests {
         let mut app = App::new();
         app.error_stop = true;
         app.document = Some(Document::from_text("aa").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a')))); // hit
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace))); // clear error
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a')))); // hit
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a')))); // hit
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // miss
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace))); // clear error
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a')))); // hit
 
         let stats = app.key_stats.get(&'a').unwrap();
         assert_eq!(stats.0, 2); // 2 hits
@@ -1969,8 +2100,8 @@ mod tests {
     fn space_highlight_uses_space_char() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a b").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char(' '))));
         assert_eq!(app.highlighted_key, Some(KeyCode::Char(' ')));
     }
 
@@ -1981,7 +2112,7 @@ mod tests {
         let mut app = App::new();
         let last = app.current_menu_count() - 1;
         app.selected_lesson = last;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Down)));
         assert_eq!(app.selected_lesson, last);
     }
 
@@ -1990,16 +2121,16 @@ mod tests {
     #[test]
     fn h_key_opens_history() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert!(app.viewing_history);
     }
 
     #[test]
     fn esc_closes_history() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert!(app.viewing_history);
-        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(!quit);
         assert!(!app.viewing_history);
     }
@@ -2034,13 +2165,13 @@ mod tests {
         app.history_scroll = 1;
         app.viewing_history = true;
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Up)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Up)));
         assert_eq!(app.history_scroll, 0);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Up)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Up)));
         assert_eq!(app.history_scroll, 0); // stays at 0
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Down)));
         assert_eq!(app.history_scroll, 1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Down)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Down)));
         assert_eq!(app.history_scroll, 1); // stays at last
     }
 
@@ -2048,11 +2179,11 @@ mod tests {
     fn keyboard_toggle_works_only_when_keyboard_fits() {
         let mut app = App::new();
         app.keyboard_fits = false;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('3'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('3'))));
         assert!(app.show_keyboard);
 
         app.keyboard_fits = true;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('3'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('3'))));
         assert!(!app.show_keyboard);
     }
 
@@ -2068,7 +2199,7 @@ mod tests {
     fn save_on_exit_does_nothing_when_finished() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
         app.save_on_exit();
     }
@@ -2081,9 +2212,9 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.lesson_id = "test".into();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc))); // pause menu to main menu
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc))); // pause menu to main menu
         let _ = fs::remove_file(&data_dir);
 
         assert!(app.document.is_none());
@@ -2101,10 +2232,10 @@ mod tests {
         app.document = Some(Document::from_text("abc").unwrap());
         app.lesson_id = "test".into();
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(ctrl_key('r')));
         let history_after_restart = crate::history::load_history().unwrap().len();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.load_file(&file.to_string_lossy());
         let history = crate::history::load_history().unwrap();
         let key_stats = crate::history::load_key_stats().unwrap();
@@ -2123,7 +2254,7 @@ mod tests {
         let _ = fs::remove_dir_all(&data_dir);
         let mut app = App::new();
         app.start_timed_practice(1, WordList::English200);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
 
         app.save_on_exit();
@@ -2141,7 +2272,7 @@ mod tests {
         let _ = fs::remove_dir_all(&data_dir);
         let mut app = App::new();
         app.start_zen_mode();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
 
         app.save_on_exit();
         let history = crate::history::load_history().unwrap();
@@ -2160,7 +2291,7 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
         app.lesson_id = "test".into();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         let _ = fs::remove_dir_all(&data_dir);
 
         assert!(app.is_finished());
@@ -2175,7 +2306,7 @@ mod tests {
         fs::write(data_dir.join("history.json"), "not json").unwrap();
         fs::write(data_dir.join("keystats.json"), "not json").unwrap();
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         let history_error = app.error.take();
         app.start_weak_key_practice();
         let _ = fs::remove_dir_all(&data_dir);
@@ -2192,9 +2323,9 @@ mod tests {
     fn j_k_navigate_menu() {
         let mut app = App::new();
         app.selected_lesson = 0;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('j'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('j'))));
         assert_eq!(app.selected_lesson, 1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('k'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('k'))));
         assert_eq!(app.selected_lesson, 0);
     }
 
@@ -2202,10 +2333,10 @@ mod tests {
     fn r_restarts_on_finished_screen() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
         assert!(!app.is_finished());
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('a'));
@@ -2215,11 +2346,11 @@ mod tests {
     fn backspace_ignored_on_finished_screen() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         assert!(app.is_finished());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         assert_eq!(app.total_count, 1);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), None);
     }
@@ -2229,8 +2360,8 @@ mod tests {
     #[test]
     fn search_ignores_ctrl_chars() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f'))); // open search
-        app.handle_event(InputEvent::Press(ctrl_key('a'))); // ctrl-a ignored
+        app.handle_event(InputEvent::Key(ctrl_key('f'))); // open search
+        app.handle_event(InputEvent::Key(ctrl_key('a'))); // ctrl-a ignored
         assert_eq!(app.file_path_buf, "");
     }
 
@@ -2240,11 +2371,11 @@ mod tests {
     fn esc_from_active_typing_opens_pause_menu() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert!(app.document.is_some());
         assert!(app.start_time.is_some());
 
-        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(!quit);
         assert!(app.paused);
         assert!(app.document.is_some());
@@ -2254,11 +2385,11 @@ mod tests {
     fn esc_from_pause_menu_goes_to_menu() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.paused);
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(!app.paused);
         assert!(app.document.is_none());
     }
@@ -2267,10 +2398,10 @@ mod tests {
     fn pause_menu_quit() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.paused);
 
-        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Char('q'))));
+        let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Char('q'))));
         assert!(quit);
     }
 
@@ -2279,7 +2410,7 @@ mod tests {
     #[test]
     fn ctrl_r_without_document_is_noop() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        app.handle_event(InputEvent::Key(ctrl_key('r')));
         assert!(app.document.is_none());
         assert_eq!(app.correct_count, 0);
     }
@@ -2288,11 +2419,11 @@ mod tests {
     fn ctrl_r_while_paused_restarts_and_resumes() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.paused);
 
-        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        app.handle_event(InputEvent::Key(ctrl_key('r')));
         assert!(!app.paused);
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
@@ -2312,11 +2443,11 @@ mod tests {
     #[test]
     fn search_enter_valid_file_loads_document() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         for c in "sample.txt".chars() {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char(c))));
         }
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(!app.searching);
         assert!(app.error.is_none());
         assert!(app.document.is_some());
@@ -2326,11 +2457,11 @@ mod tests {
     // --- errors shown over a session ---
 
     fn load_missing_file(app: &mut App) {
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         for c in "/no/such/file.txt".chars() {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char(c))));
         }
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
     }
 
     /// Moves the session clock back, as if `secs` seconds had passed.
@@ -2345,13 +2476,13 @@ mod tests {
     fn esc_on_error_keeps_session() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         load_missing_file(&mut app);
         assert!(app.error.is_some());
 
         // The error hides the text, so this isn't typed
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.error.is_none());
         assert!(!app.paused);
         assert_eq!(app.correct_count, 1);
@@ -2364,13 +2495,13 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.time_limit = Some(5);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         advance_time(&mut app, 10);
         app.handle_event(InputEvent::Tick);
         assert!(!app.is_finished());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.elapsed_secs() < 1.0);
     }
 
@@ -2378,10 +2509,10 @@ mod tests {
     fn error_message_pauses_session_clock() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         load_missing_file(&mut app);
         advance_time(&mut app, 10);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.elapsed_secs() < 1.0);
 
         // Running again once the message is closed
@@ -2393,7 +2524,7 @@ mod tests {
     fn frozen_time_left_out_of_sparkline() {
         fn type_a(app: &mut App, times: usize) {
             for _ in 0..times {
-                app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+                app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
             }
         }
         let mut app = App::new();
@@ -2401,9 +2532,9 @@ mod tests {
         type_a(&mut app, 1);
         advance_time(&mut app, 4);
         type_a(&mut app, 5);
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         advance_time(&mut app, 30);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
 
         // 5 chars in the 2 s since the last sample is 30 wpm; counting the
         // frozen 30 s too would make it about 2
@@ -2417,12 +2548,12 @@ mod tests {
     fn restart_clears_error() {
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.error = Some("No weak keys yet".into()); // as after `w` with none
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
         assert!(app.is_finished());
-        app.handle_event(InputEvent::Press(ctrl_key('r')));
+        app.handle_event(InputEvent::Key(ctrl_key('r')));
         assert!(app.error.is_none());
         assert!(!app.is_finished());
     }
@@ -2442,7 +2573,7 @@ mod tests {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
         app.selected_practice = App::SPECIAL_PRACTICE.len(); // first word list
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert!(app.lesson_title.starts_with("Random Words"));
         let doc = app.document.as_ref().unwrap();
@@ -2488,12 +2619,12 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.time_limit = Some(1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
         app.handle_event(InputEvent::Tick);
         assert!(app.is_finished());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
         assert_eq!(app.total_count, 1);
         assert!(app.is_finished());
     }
@@ -2503,11 +2634,11 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.time_limit = Some(1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
 
         // No tick in between, as while typing; `r` must not restart either
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
         assert!(app.is_finished());
         assert_eq!(app.total_count, 1);
         assert_eq!(app.elapsed_secs(), 1.0);
@@ -2518,18 +2649,18 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.time_limit = Some(1);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(2));
         app.handle_event(InputEvent::Tick);
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.is_finished());
         assert!(app.document.is_some());
-        assert!(app.handle_event(InputEvent::Press(ctrl_key('c'))));
+        assert!(app.handle_event(InputEvent::Key(ctrl_key('c'))));
 
         app.ignore_keys_until = Some(Instant::now());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('r'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
         assert!(!app.is_finished());
     }
 
@@ -2575,7 +2706,7 @@ mod tests {
         // Started 10 seconds ago, past the first 3 seconds the graph skips
         app.start_time = Some(Instant::now() - std::time::Duration::from_secs(10));
         for c in "abcdefghijklmnopqrstuvwxy".chars() {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char(c))));
         }
         assert!(app.wpm_samples.len() >= 2);
     }
@@ -2629,15 +2760,15 @@ mod tests {
         let mut app = App::new();
         app.document = Some(Document::from_text("ab").unwrap());
         // Type with an error to build key_stats
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss 'a'
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss 'b'
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // miss 'a'
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // miss 'b'
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
         assert!(app.is_finished());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('w'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('w'))));
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "weak_keys");
     }
@@ -2648,7 +2779,7 @@ mod tests {
         app.key_stats.insert('e', (5, 5));
         app.menu_mode = MenuMode::Practice;
         app.selected_practice = 0;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "weak_keys");
     }
@@ -2658,7 +2789,7 @@ mod tests {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
         app.selected_practice = 1;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "bigrams");
         assert_eq!(app.lesson_title, "Common Bigrams (english 1k)");
@@ -2669,7 +2800,7 @@ mod tests {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
         app.selected_practice = 2;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.document.is_some());
         assert_eq!(app.lesson_id, "quotes");
         assert_eq!(app.lesson_title, "Quotes");
@@ -2680,7 +2811,7 @@ mod tests {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
         app.selected_practice = 3;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         assert!(app.zen_mode);
         assert!(app.document.is_none());
         assert_eq!(app.lesson_id, "zen");
@@ -2691,8 +2822,8 @@ mod tests {
         let mut app = App::new();
         app.start_zen_mode();
         assert!(app.zen_mode);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('i'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('i'))));
         assert_eq!(app.correct_count, 2);
         assert_eq!(app.zen_lines.last().unwrap(), "hi");
         assert!(app.start_time.is_some());
@@ -2703,7 +2834,7 @@ mod tests {
         let mut app = App::new();
         app.start_zen_mode();
         for _ in 0..40 {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char('é'))));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char('é'))));
         }
         assert_eq!(app.zen_lines.len(), 1);
     }
@@ -2714,7 +2845,7 @@ mod tests {
         app.start_zen_mode();
         let text = "the quick brown fox jumps over the lazy dog ".repeat(3);
         for c in text.chars() {
-            app.handle_event(InputEvent::Press(key_event(KeyCode::Char(c))));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char(c))));
         }
         assert!(app.zen_lines.len() > 1);
         for line in &app.zen_lines[..app.zen_lines.len() - 1] {
@@ -2727,8 +2858,8 @@ mod tests {
     fn zen_mode_backspace() {
         let mut app = App::new();
         app.start_zen_mode();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
         assert_eq!(app.zen_lines.last().unwrap(), "");
     }
 
@@ -2736,7 +2867,7 @@ mod tests {
     fn zen_backspace_deletes_across_a_line_break() {
         let mut app = App::new();
         app.start_zen_mode();
-        let press = |app: &mut App, code| app.handle_event(InputEvent::Press(key_event(code)));
+        let press = |app: &mut App, code| app.handle_event(InputEvent::Key(key_event(code)));
         while app.zen_lines.len() == 1 {
             press(&mut app, KeyCode::Char('a'));
         }
@@ -2755,8 +2886,8 @@ mod tests {
     fn zen_mode_esc_exits() {
         let mut app = App::new();
         app.start_zen_mode();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        let quit = app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(!quit);
         assert!(!app.zen_mode);
     }
@@ -2765,9 +2896,9 @@ mod tests {
     fn m_key_toggles_mode() {
         let mut app = App::new();
         assert_eq!(app.menu_mode, MenuMode::Lessons);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('m'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('m'))));
         assert_eq!(app.menu_mode, MenuMode::Practice);
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('m'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('m'))));
         assert_eq!(app.menu_mode, MenuMode::Lessons);
     }
 
@@ -2775,10 +2906,10 @@ mod tests {
     fn space_at_line_start_is_ignored() {
         let mut app = App::new();
         app.document = Some(Document::from_text("ab\ncd").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a'))));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('b'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
         // Now on line "cd", cursor at 0; space should be ignored
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char(' '))));
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('c'));
         assert_eq!(app.total_count, 2); // space not counted
     }
@@ -2802,9 +2933,9 @@ mod tests {
     fn error_count_tracks_errors() {
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('x')))); // miss
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Backspace)));
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('a')))); // hit
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x')))); // miss
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Backspace)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a')))); // hit
         assert_eq!(app.error_count(), 1);
         assert_eq!(app.correct_count, 1);
         assert_eq!(app.total_count, 2);
@@ -2814,14 +2945,14 @@ mod tests {
     fn pause_resume_with_space() {
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('h'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         assert!(app.start_time.is_some());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Esc)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         assert!(app.paused);
         assert!(app.paused_at.is_some());
 
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char(' '))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char(' '))));
         assert!(!app.paused);
         assert!(app.paused_at.is_none());
         assert!(app.document.is_some());
@@ -2831,11 +2962,11 @@ mod tests {
     #[test]
     fn next_lesson_follows_finished_lesson() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         app.document.as_mut().unwrap().progress = Progress::Finished;
         // Finishing a lesson moves the menu cursor on to the next one
         app.selected_lesson = 1;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('n'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('n'))));
         let lessons = crate::lessons::lessons_for_layout(app.layout);
         assert_eq!(app.lesson_id, lessons[1].id);
         assert_eq!(app.selected_lesson, 1);
@@ -2846,11 +2977,11 @@ mod tests {
         let mut app = App::new();
         let last = app.lesson_count_for_layout() - 1;
         app.selected_lesson = last - 1;
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Enter)));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
         app.document.as_mut().unwrap().progress = Progress::Finished;
         app.selected_lesson = last;
         assert!(app.has_next_lesson());
-        app.handle_event(InputEvent::Press(key_event(KeyCode::Char('n'))));
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('n'))));
         assert_eq!(app.selected_lesson, last);
         assert!(!app.has_next_lesson());
     }
@@ -2911,9 +3042,9 @@ mod tests {
     #[test]
     fn ctrl_c_during_search_quits() {
         let mut app = App::new();
-        app.handle_event(InputEvent::Press(ctrl_key('f')));
+        app.handle_event(InputEvent::Key(ctrl_key('f')));
         assert!(app.searching);
-        let quit = app.handle_event(InputEvent::Press(ctrl_key('c')));
+        let quit = app.handle_event(InputEvent::Key(ctrl_key('c')));
         assert!(quit);
         assert!(!app.searching);
     }

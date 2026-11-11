@@ -12,6 +12,10 @@ use std::collections::HashMap;
 use std::io::{Result, Stdout, Write, stdout};
 
 use clap::Parser;
+use crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
+use crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -98,6 +102,17 @@ fn main() -> Result<()> {
         default_hook(info);
     }));
 
+    // Try to push the Kitty protocol flags to capture independent Shift key presses.
+    // A terminal will ignore the flags in case it doesn't support Kitty protocol.
+    let flags = KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+        | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+        | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
+    if let Err(e) = execute!(stdout(), PushKeyboardEnhancementFlags(flags)) {
+        let _ = execute!(stdout(), LeaveAlternateScreen);
+        let _ = disable_raw_mode();
+        return Err(e);
+    }
+
     // The input thread can hang reading a closed terminal, and dropping the
     // runtime would wait for it forever. So the runtime is shut down without
     // waiting, even after a panic, such as ratatui failing to write to that
@@ -117,10 +132,10 @@ fn main() -> Result<()> {
     session
 }
 
-/// Leaves the alternate screen and raw mode. Errors are ignored, as the terminal
-/// may have closed, and what comes after must still run.
+/// Leaves the alternate screen, pops the keyboard enhanchement flags and exits raw mode.
+/// Errors are ignored, as the terminal may have closed, and what comes after must still run.
 fn restore_terminal() {
-    let _ = execute!(stdout(), LeaveAlternateScreen);
+    let _ = execute!(stdout(), PopKeyboardEnhancementFlags, LeaveAlternateScreen);
     let _ = disable_raw_mode();
 }
 
@@ -180,7 +195,12 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     let mut rows = build_keyboard_rows(settings.keyboard.layout);
     let mut grid_map = build_keycode_grid_map(&rows);
     let mut app = App::new();
+
+    app.is_kitty_supported = supports_keyboard_enhancement().unwrap_or(false);
+
     app.layout = settings.keyboard.layout;
+    app.rows = rows.clone();
+    app.grid_map = grid_map.clone();
     app.show_keyboard = settings.display.show_keyboard;
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
@@ -188,6 +208,7 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     app.include_punctuation = settings.display.include_punctuation;
     app.include_numbers = settings.display.include_numbers;
     app.error_stop = settings.display.error_stop;
+    app.shift_error = settings.display.shift_error && app.is_kitty_supported;
     if settings.display.practice_mode {
         app.menu_mode = crate::app::MenuMode::Practice;
     }
@@ -259,7 +280,8 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                 || include_numbers != settings.display.include_numbers
                 || (app.menu_mode == crate::app::MenuMode::Practice)
                     != settings.display.practice_mode
-                || app.error_stop != settings.display.error_stop;
+                || app.error_stop != settings.display.error_stop
+                || app.shift_error != settings.display.shift_error;
             let layout_changed = app.layout != settings.keyboard.layout;
 
             if layout_changed || display_changed {
@@ -272,6 +294,9 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                 settings.display.include_numbers = include_numbers;
                 settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
                 settings.display.error_stop = app.error_stop;
+                if app.is_kitty_supported {
+                    settings.display.shift_error = app.shift_error;
+                }
                 if can_save_settings {
                     match settings::save_settings(&settings) {
                         Ok(Some(notice)) => app.show_error(notice),
@@ -282,6 +307,9 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                 if layout_changed {
                     rows = build_keyboard_rows(settings.keyboard.layout);
                     grid_map = build_keycode_grid_map(&rows);
+
+                    app.rows = rows.clone();
+                    app.grid_map = grid_map.clone();
                 }
             }
 
