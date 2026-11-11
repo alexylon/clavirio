@@ -146,6 +146,7 @@ pub fn save_settings(settings: &Settings) -> io::Result<Option<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::TestDataDir;
     use std::fs;
 
     #[test]
@@ -207,15 +208,13 @@ mod tests {
 
     #[test]
     fn only_unreadable_settings_fail_to_load() {
-        let dir = data_dir();
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let dir = TestDataDir::new();
+        fs::create_dir_all(&*dir).unwrap();
         fs::write(settings_path(), "[display").unwrap();
         let unparseable = load_settings();
         fs::remove_file(settings_path()).unwrap();
         fs::create_dir(settings_path()).unwrap(); // reading a folder fails, but not with "not found"
         let unreadable = load_settings();
-        let _ = fs::remove_dir_all(&dir);
 
         assert!(matches!(unparseable, Ok(None)));
         assert!(unreadable.is_err());

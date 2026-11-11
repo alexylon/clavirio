@@ -18,9 +18,10 @@ Third-party data
 assets/words/english_200.txt and assets/words/english_1k.txt are selections
 from the Wiktionary frequency list of Project Gutenberg texts
 (https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists/PG/2006/04/1-10000),
-kept in its order with single letters, names, archaic words, contractions and
-numbers left out. Wiktionary content is available under the Creative Commons
-Attribution-ShareAlike 4.0 License (https://creativecommons.org/licenses/by-sa/4.0/).
+kept in its order with names, archaic words, contractions, numbers and single
+letters other than "i" left out. Wiktionary content is available under the Creative Commons
+Attribution-ShareAlike 3.0 License (https://creativecommons.org/licenses/by-sa/3.0/).
 
 assets/quotes/english.txt contains short quotations from works in the public
-domain, by authors who died before 1950, collected for this project.
+domain, by authors (and, for translations, translators) who died before 1950,
+collected for this project.

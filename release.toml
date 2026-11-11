@@ -32,6 +32,11 @@ replace = """## [Unreleased]
 
 """
 
+[[pre-release-replacements]]
+file = "man/clavirio.1"
+search = "(?m)^\\.TH CLAVIRIO 1 .*$"
+replace = '.TH CLAVIRIO 1 {{date}} "clavirio {{version}}" "User Commands"'
+
 # Example: Update version in README
 # [[pre-release-replacements]]
 # file = "README.md"

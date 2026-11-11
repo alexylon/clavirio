@@ -1,4 +1,4 @@
-.TH CLAVIRIO 1 2026-11-11 clavirio "User Commands"
+.TH CLAVIRIO 1 2026-11-11 "clavirio 0.4.3" "User Commands"
 .SH NAME
 clavirio \- terminal typing tutor with a virtual keyboard, lessons and session history
 .SH SYNOPSIS
@@ -123,8 +123,16 @@ Switch the layout (QWERTY, Dvorak or Colemak).
 .B Ctrl\-F
 Load a file.
 .TP
-.BR 1 ", " 2 ", " 3
-Show or hide the finger colors, the key hints and the keyboard.
+.B 1
+Show or hide which finger to use.
+This works only while the key hints are shown.
+.TP
+.B 2
+Show or hide the key hints.
+.TP
+.B 3
+Show or hide the keyboard.
+This works only when the terminal is large enough to fit it.
 .TP
 .B 4
 Turn error stop on or off.
@@ -205,6 +213,7 @@ Quit.
 .TP
 .B Esc
 Close an error message.
+In the pause menu and the history, Esc goes back to the menu instead.
 .SH FILES
 .TP
 .I ~/.clavirio/settings.toml

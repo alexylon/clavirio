@@ -14,7 +14,7 @@ description: |
 
   After installing, open a terminal and run `clavirio`.
 adopt-info: clavirio
-license: Apache-2.0
+license: Apache-2.0 AND CC-BY-SA-3.0
 website: https://clavir.io
 source-code: https://github.com/alexylon/clavirio
 issues: https://github.com/alexylon/clavirio/issues

@@ -191,7 +191,7 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 | `l` | Cycle layout |
 | `Ctrl-F` | Load file |
 | `q` / `Esc` | Quit |
-| `1`-`3` | Toggle fingers / hints / keyboard |
+| `1`-`3` | Toggle fingers / hints / keyboard (fingers need hints on, and the keyboard needs room to fit) |
 | `4` | Toggle error stop |
 | `5`/`6` | Toggle punctuation / numbers (practice only) |
 | `7` | Toggle shift error: a capital or symbol typed with the Shift on its own hand counts as a mistake (needs a terminal with the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/), such as kitty, Ghostty or foot) |
@@ -238,7 +238,7 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 | Key | Action |
 |-----|--------|
 | `Ctrl-C` | Quit |
-| `Esc` | Close an error message |
+| `Esc` | Close an error message (in the pause menu and history, back to menu instead) |
 
 ## Settings
 
@@ -264,7 +264,7 @@ shift_error = false         # true = a capital or symbol typed with the Shift on
 
 Clavirio is licensed under the Apache License 2.0. The English word lists come from
 [Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists/PG/2006/04/1-10000)
-and are available under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+and are available under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
 
 ## Attribution
 

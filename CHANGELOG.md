@@ -8,7 +8,7 @@
 ### Changed
 - The published crate now ships only the source, lessons, word lists, quotes and docs (no PDF, CI, snap or release files)
 - Quotes that were misattributed, recent or still under copyright replaced with public-domain ones, by authors such as Shakespeare, Franklin, Twain, Wilde, Carroll and Conan Doyle
-- The crate's license now also names CC-BY-SA-4.0, the license of the English word lists
+- The crate and snap license now also name CC-BY-SA-3.0, the license of the English word lists
 
 ## [0.4.3] - 2026-11-11
 

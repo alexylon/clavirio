@@ -1460,6 +1460,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::TestDataDir;
 
     // --- Document tests ---
 
@@ -2029,7 +2030,7 @@ mod tests {
 
     #[test]
     fn restart_resets_all_state() {
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
+        let _data_dir = TestDataDir::new();
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
@@ -2038,7 +2039,6 @@ mod tests {
         assert!(app.start_time.is_some());
 
         app.handle_event(InputEvent::Key(ctrl_key('r')));
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.total_count, 0);
         assert!(app.start_time.is_none());
@@ -2179,16 +2179,14 @@ mod tests {
 
     #[test]
     fn failed_save_shown_after_leaving_session() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
-        fs::write(&data_dir, "").unwrap(); // a file where the data folder goes, so saves fail
+        let data_dir = TestDataDir::new();
+        fs::write(&*data_dir, "").unwrap(); // a file where the data folder goes, so saves fail
         let mut app = App::new();
         app.document = Some(Document::from_text("abc").unwrap());
         app.lesson_id = "test".into();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
         app.handle_event(InputEvent::Key(key_event(KeyCode::Esc))); // pause menu to main menu
-        let _ = fs::remove_file(&data_dir);
 
         assert!(app.document.is_none());
         assert!(app.error.is_some());
@@ -2196,9 +2194,8 @@ mod tests {
 
     #[test]
     fn restart_keeps_key_stats_and_file_load_saves_the_session() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
-        fs::create_dir_all(&data_dir).unwrap();
+        let data_dir = TestDataDir::new();
+        fs::create_dir_all(&*data_dir).unwrap();
         let file = data_dir.join("text.txt");
         fs::write(&file, "xyz").unwrap();
         let mut app = App::new();
@@ -2212,7 +2209,6 @@ mod tests {
         app.load_file(&file.to_string_lossy());
         let history = crate::history::load_history().unwrap();
         let key_stats = crate::history::load_key_stats().unwrap();
-        let _ = fs::remove_dir_all(&data_dir);
 
         assert_eq!(history_after_restart, 0);
         assert_eq!(history.len(), 1);
@@ -2223,8 +2219,7 @@ mod tests {
 
     #[test]
     fn timed_session_that_ran_out_saved_as_complete_on_exit() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
+        let _data_dir = TestDataDir::new();
         let mut app = App::new();
         app.start_timed_practice(1, WordList::English200);
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('x'))));
@@ -2232,7 +2227,6 @@ mod tests {
 
         app.save_on_exit();
         let history = crate::history::load_history().unwrap();
-        let _ = fs::remove_dir_all(&data_dir);
 
         assert_eq!(history.len(), 1);
         assert!(history[0].completed);
@@ -2241,15 +2235,13 @@ mod tests {
 
     #[test]
     fn zen_session_saved_as_complete_when_quitting() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
+        let _data_dir = TestDataDir::new();
         let mut app = App::new();
         app.start_zen_mode();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
 
         app.save_on_exit();
         let history = crate::history::load_history().unwrap();
-        let _ = fs::remove_dir_all(&data_dir);
 
         assert_eq!(history.len(), 1);
         assert!(history[0].completed);
@@ -2257,15 +2249,13 @@ mod tests {
 
     #[test]
     fn broken_history_file_reported_after_session() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
-        fs::create_dir_all(&data_dir).unwrap();
+        let data_dir = TestDataDir::new();
+        fs::create_dir_all(&*data_dir).unwrap();
         fs::write(data_dir.join("history.json"), "not json").unwrap();
         let mut app = App::new();
         app.document = Some(Document::from_text("a").unwrap());
         app.lesson_id = "test".into();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
-        let _ = fs::remove_dir_all(&data_dir);
 
         assert!(app.is_finished());
         assert!(app.error.is_some_and(|e| e.contains(".bak")));
@@ -2273,16 +2263,14 @@ mod tests {
 
     #[test]
     fn broken_history_and_key_stats_reported_when_opened() {
-        let data_dir = crate::storage::data_dir();
-        let _ = fs::remove_dir_all(&data_dir);
-        fs::create_dir_all(&data_dir).unwrap();
+        let data_dir = TestDataDir::new();
+        fs::create_dir_all(&*data_dir).unwrap();
         fs::write(data_dir.join("history.json"), "not json").unwrap();
         fs::write(data_dir.join("keystats.json"), "not json").unwrap();
         let mut app = App::new();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
         let history_error = app.error.take();
         app.start_weak_key_practice();
-        let _ = fs::remove_dir_all(&data_dir);
 
         assert!(!app.viewing_history);
         assert!(history_error.is_some_and(|e| e.contains("history.json")));
@@ -2390,7 +2378,7 @@ mod tests {
 
     #[test]
     fn ctrl_r_while_paused_restarts_and_resumes() {
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
+        let _data_dir = TestDataDir::new();
         let mut app = App::new();
         app.document = Some(Document::from_text("hello").unwrap());
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('h'))));
@@ -2398,7 +2386,6 @@ mod tests {
         assert!(app.paused);
 
         app.handle_event(InputEvent::Key(ctrl_key('r')));
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert!(!app.paused);
         assert_eq!(app.correct_count, 0);
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('h'));
@@ -2859,12 +2846,11 @@ mod tests {
 
     #[test]
     fn zen_mode_esc_exits() {
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
+        let _data_dir = TestDataDir::new();
         let mut app = App::new();
         app.start_zen_mode();
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
         let quit = app.handle_event(InputEvent::Key(key_event(KeyCode::Esc)));
-        let _ = fs::remove_dir_all(crate::storage::data_dir());
         assert!(!quit);
         assert!(!app.zen_mode);
     }

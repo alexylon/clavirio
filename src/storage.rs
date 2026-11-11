@@ -20,6 +20,41 @@ pub(crate) fn data_dir() -> PathBuf {
         .join(".clavirio")
 }
 
+/// The running test's data folder, removed when made and again when dropped, so
+/// a test starts clean and leaves nothing behind, even when it fails
+#[cfg(test)]
+pub(crate) struct TestDataDir(PathBuf);
+
+#[cfg(test)]
+impl TestDataDir {
+    pub(crate) fn new() -> Self {
+        let dir = Self(data_dir());
+        dir.remove();
+        dir
+    }
+
+    fn remove(&self) {
+        // Some tests put a file where the folder goes
+        let _ = fs::remove_dir_all(&self.0).or_else(|_| fs::remove_file(&self.0));
+    }
+}
+
+#[cfg(test)]
+impl std::ops::Deref for TestDataDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestDataDir {
+    fn drop(&mut self) {
+        self.remove();
+    }
+}
+
 /// Set by snapd to the user's home folder, while `HOME` points to the snap's own folder
 const SNAP_REAL_HOME: &str = "SNAP_REAL_HOME";
 
