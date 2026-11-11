@@ -9,7 +9,7 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::input::InputEvent;
-use crate::keyboard::{self, GridCoord, KeyDef, ShiftKind};
+use crate::keyboard::{Keyboard, ShiftKind};
 use crate::settings::{KeyboardLayout, Theme};
 use crate::words::WordList;
 
@@ -384,10 +384,22 @@ fn weak_keys(
     }
 }
 
+/// The Shift keys held down, known only while the terminal reports them
 #[derive(Clone, Copy, Default)]
-pub struct ShiftKeysState {
-    pub left: bool,
-    pub right: bool,
+struct ShiftKeys {
+    left: bool,
+    right: bool,
+}
+
+impl ShiftKeys {
+    /// The one Shift held, if just one is
+    fn held(self) -> Option<ShiftKind> {
+        match (self.left, self.right) {
+            (true, false) => Some(ShiftKind::Left),
+            (false, true) => Some(ShiftKind::Right),
+            _ => None,
+        }
+    }
 }
 
 pub struct App {
@@ -410,8 +422,7 @@ pub struct App {
     pub selected_lesson: usize,
     pub lesson_id: String,
     pub layout: KeyboardLayout,
-    pub rows: Vec<Vec<KeyDef>>,
-    pub grid_map: HashMap<KeyCode, GridCoord>,
+    pub keyboard: Keyboard,
     pub show_keyboard: bool,
     /// Whether the keyboard fitted in the last frame drawn; `3` does nothing when
     /// it didn't
@@ -440,9 +451,12 @@ pub struct App {
     pub include_numbers: bool,
     pub error_stop: bool,
     pub error_chars: Vec<(usize, char)>,
+    /// Whether a letter or symbol typed with the Shift on its own hand counts as
+    /// a mistake
     pub shift_error: bool,
-    pub is_kitty_supported: bool,
-    pub shift_keys_state: ShiftKeysState,
+    /// Whether the terminal can report which Shift is held, which the shift error setting needs
+    pub shift_error_supported: bool,
+    shift_keys: ShiftKeys,
 }
 
 type StartFn = fn(&mut App);
@@ -471,8 +485,7 @@ impl App {
             selected_lesson: 0,
             lesson_id: String::new(),
             layout: KeyboardLayout::default(),
-            rows: Vec::new(),
-            grid_map: HashMap::new(),
+            keyboard: Keyboard::new(KeyboardLayout::default()),
             show_keyboard: true,
             keyboard_fits: true,
             show_hints: true,
@@ -498,9 +511,14 @@ impl App {
             error_stop: false,
             error_chars: Vec::new(),
             shift_error: false,
-            is_kitty_supported: false,
-            shift_keys_state: ShiftKeysState::default(),
+            shift_error_supported: false,
+            shift_keys: ShiftKeys::default(),
         }
+    }
+
+    pub fn set_layout(&mut self, layout: KeyboardLayout) {
+        self.layout = layout;
+        self.keyboard = Keyboard::new(layout);
     }
 
     pub fn wpm(&self) -> f64 {
@@ -864,27 +882,17 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
-        match key.kind {
-            KeyEventKind::Press => match key.code {
-                KeyCode::Modifier(m) => match m {
-                    ModifierKeyCode::LeftShift => self.shift_keys_state.left = true,
-                    ModifierKeyCode::RightShift => self.shift_keys_state.right = true,
-                    _ => (),
-                },
-                _ => (),
-            },
-            KeyEventKind::Release => {
-                match key.code {
-                    KeyCode::Modifier(m) => match m {
-                        ModifierKeyCode::LeftShift => self.shift_keys_state.left = false,
-                        ModifierKeyCode::RightShift => self.shift_keys_state.right = false,
-                        _ => (),
-                    },
-                    _ => (),
-                }
-                return false;
-            }
-            _ => (),
+        let held = key.kind != KeyEventKind::Release;
+
+        match key.code {
+            KeyCode::Modifier(ModifierKeyCode::LeftShift) => self.shift_keys.left = held,
+            KeyCode::Modifier(ModifierKeyCode::RightShift) => self.shift_keys.right = held,
+            _ => {}
+        }
+
+        // Modifiers and releases only arrive with the shift error setting on, and act on nothing
+        if !held || matches!(key.code, KeyCode::Modifier(_)) {
+            return false;
         }
 
         if self.searching {
@@ -1003,8 +1011,8 @@ impl App {
                 self.next_lesson();
             }
             _ if self.is_finished() => {}
-            (KeyCode::Char(_), _) if self.last_error_char.is_none() || !self.error_stop => {
-                self.handle_typed_char(key.code);
+            (KeyCode::Char(typed), _) if self.last_error_char.is_none() || !self.error_stop => {
+                self.handle_typed_char(typed);
             }
             (KeyCode::Backspace, _) => {
                 if self.error_stop {
@@ -1084,7 +1092,7 @@ impl App {
                 Err(message) => self.show_error(message),
             },
             KeyCode::Char('l') => {
-                self.layout = self.layout.cycle();
+                self.set_layout(self.layout.cycle());
             }
             KeyCode::Char('1') if self.show_hints => {
                 self.show_fingers = !self.show_fingers;
@@ -1101,14 +1109,14 @@ impl App {
             KeyCode::Char('4') => {
                 self.error_stop = !self.error_stop;
             }
-            KeyCode::Char('5') if self.is_kitty_supported => {
-                self.shift_error = !self.shift_error;
-            }
-            KeyCode::Char('6') if self.menu_mode == MenuMode::Practice => {
+            KeyCode::Char('5') if self.menu_mode == MenuMode::Practice => {
                 self.include_punctuation = !self.include_punctuation;
             }
-            KeyCode::Char('7') if self.menu_mode == MenuMode::Practice => {
+            KeyCode::Char('6') if self.menu_mode == MenuMode::Practice => {
                 self.include_numbers = !self.include_numbers;
+            }
+            KeyCode::Char('7') if self.shift_error_supported => {
+                self.shift_error = !self.shift_error;
             }
             KeyCode::Char('t') => {
                 self.theme = self.theme.cycle();
@@ -1321,11 +1329,23 @@ impl App {
         self.start_practice_from_text(&text, WEAK_KEYS.id, WEAK_KEYS.title);
     }
 
-    fn handle_typed_char(&mut self, key_code: KeyCode) {
-        let KeyCode::Char(typed) = key_code else {
-            return;
+    /// Whether `typed` needed a Shift and the one on its own hand was held. With
+    /// neither held, as with Caps Lock, or both, any Shift counts.
+    fn is_wrong_shift(&mut self, typed: char) -> bool {
+        let needed = self
+            .keyboard
+            .key_for_char(typed)
+            .and_then(|(_, shift)| shift);
+        let Some(needed) = needed else {
+            // In case the release of a Shift was missed
+            self.shift_keys = ShiftKeys::default();
+            return false;
         };
 
+        self.shift_keys.held().is_some_and(|held| held != needed)
+    }
+
+    fn handle_typed_char(&mut self, typed: char) {
         let typed = Document::as_typed(typed);
         let doc = match self.document.as_ref() {
             Some(d) => d,
@@ -1345,50 +1365,10 @@ impl App {
             self.start_time = Some(Instant::now());
         }
 
+        let wrong_shift = self.shift_error && self.is_wrong_shift(typed);
         self.total_count += 1;
         let entry = self.key_stats.entry(expected).or_insert((0, 0));
-
-        // This is Some() if a secondary character was typed.
-        let secondary_def = self
-            .rows
-            .iter()
-            .flatten()
-            .find(|k| k.secondary.is_some_and(|s| s == key_code));
-
-        // This is Some() if either a secondary or a capital character was typed (aka if Shift was used).
-        let secondary_coords = if let Some(def) = secondary_def {
-            self.grid_map.get(&def.primary).copied()
-        } else if typed.is_uppercase() {
-            self.grid_map.get(&key_code).copied()
-        } else {
-            None
-        };
-
-        let is_shift_correct = match secondary_coords {
-            Some(coords) => {
-                // A Shift key was used.
-                let state = self.shift_keys_state;
-                let expected = keyboard::shift_for(coords);
-
-                if state.left && !state.right {
-                    expected == ShiftKind::Left
-                } else if !state.left && state.right {
-                    expected == ShiftKind::Right
-                } else {
-                    true
-                }
-            }
-            None => {
-                // None of the Shift keys were used;
-                // reset the state in case a release event was missed.
-                self.shift_keys_state = ShiftKeysState::default();
-
-                true
-            }
-        };
-
-        let is_correct = typed == expected
-            && (is_shift_correct || !self.shift_error || !self.is_kitty_supported);
+        let is_correct = typed == expected && !wrong_shift;
 
         if is_correct {
             entry.0 += 1;
@@ -1791,12 +1771,9 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
-    fn shift_event(side: ShiftKind, kind: KeyEventKind) -> KeyEvent {
-        let modifier = match side {
-            ShiftKind::Left => ModifierKeyCode::LeftShift,
-            ShiftKind::Right => ModifierKeyCode::RightShift,
-        };
-        KeyEvent::new_with_kind(KeyCode::Modifier(modifier), KeyModifiers::SHIFT, kind)
+    fn shift(side: ShiftKind, kind: KeyEventKind) -> InputEvent {
+        let key = KeyEvent::new_with_kind(side.key_code(), KeyModifiers::SHIFT, kind);
+        InputEvent::Key(key)
     }
 
     fn ctrl_key(c: char) -> KeyEvent {
@@ -1889,13 +1866,10 @@ mod tests {
     fn using_correct_shift_advances() {
         let mut app = App::new();
         app.shift_error = true;
-        app.is_kitty_supported = true;
-        app.rows = keyboard::build_keyboard_rows(app.layout);
-        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
         app.document = Some(Document::from_text("Hello").unwrap());
-        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Press)));
+        app.handle_event(shift(ShiftKind::Left, KeyEventKind::Press));
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
-        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Left, KeyEventKind::Release)));
+        app.handle_event(shift(ShiftKind::Left, KeyEventKind::Release));
         assert_eq!(app.correct_count, 1);
         assert_eq!(app.total_count, 1);
         assert!(app.last_correct);
@@ -1907,13 +1881,10 @@ mod tests {
         let mut app = App::new();
         app.error_stop = true;
         app.shift_error = true;
-        app.is_kitty_supported = true;
-        app.rows = keyboard::build_keyboard_rows(app.layout);
-        app.grid_map = keyboard::build_keycode_grid_map(&app.rows);
         app.document = Some(Document::from_text("Hello").unwrap());
-        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Press)));
+        app.handle_event(shift(ShiftKind::Right, KeyEventKind::Press));
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('H'))));
-        app.handle_event(InputEvent::Key(shift_event(ShiftKind::Right, KeyEventKind::Release)));
+        app.handle_event(shift(ShiftKind::Right, KeyEventKind::Release));
         assert_eq!(app.last_error_char, Some('H'));
         assert!(!app.last_correct);
         assert_eq!(app.total_count, 1);

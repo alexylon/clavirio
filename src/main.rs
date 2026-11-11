@@ -8,24 +8,22 @@ mod storage;
 mod ui;
 mod words;
 
-use std::collections::HashMap;
 use std::io::{Result, Stdout, Write, stdout};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::Parser;
-use crossterm::event::{
+use ratatui::crossterm::event::{
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
-use crossterm::terminal::supports_keyboard_enhancement;
-use ratatui::crossterm::event::KeyCode;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    supports_keyboard_enhancement,
 };
 use ratatui::prelude::*;
 
 use app::{App, append_line};
 use input::run_input_loop;
-use keyboard::{GridCoord, KeyDef, build_keyboard_rows, build_keycode_grid_map};
 use settings::{Settings, load_settings};
 use ui::{compute_regions, draw, keyboard_fits};
 
@@ -102,17 +100,6 @@ fn main() -> Result<()> {
         default_hook(info);
     }));
 
-    // Try to push the Kitty protocol flags to capture independent Shift key presses.
-    // A terminal will ignore the flags in case it doesn't support Kitty protocol.
-    let flags = KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
-        | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
-        | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
-    if let Err(e) = execute!(stdout(), PushKeyboardEnhancementFlags(flags)) {
-        let _ = execute!(stdout(), LeaveAlternateScreen);
-        let _ = disable_raw_mode();
-        return Err(e);
-    }
-
     // The input thread can hang reading a closed terminal, and dropping the
     // runtime would wait for it forever. So the runtime is shut down without
     // waiting, even after a panic, such as ratatui failing to write to that
@@ -132,11 +119,38 @@ fn main() -> Result<()> {
     session
 }
 
-/// Leaves the alternate screen, pops the keyboard enhanchement flags and exits raw mode.
-/// Errors are ignored, as the terminal may have closed, and what comes after must still run.
+/// Leaves the alternate screen and raw mode, and stops the terminal reporting
+/// each Shift key. Errors are ignored, as the terminal may have closed, and what
+/// comes after must still run.
 fn restore_terminal() {
-    let _ = execute!(stdout(), PopKeyboardEnhancementFlags, LeaveAlternateScreen);
+    let _ = report_shift_keys(false);
+    let _ = execute!(stdout(), LeaveAlternateScreen);
     let _ = disable_raw_mode();
+}
+
+/// Whether the terminal reports each Shift key, so `restore_terminal` can stop it
+static SHIFT_KEYS_REPORTED: AtomicBool = AtomicBool::new(false);
+
+/// Has the terminal report each Shift key on its own, as the shift error setting
+/// needs, or stop. The kitty keyboard protocol this uses changes how every key
+/// arrives, so it is only on while the shift error setting is.
+fn report_shift_keys(on: bool) -> Result<()> {
+    if SHIFT_KEYS_REPORTED.load(Ordering::Relaxed) == on {
+        return Ok(());
+    }
+
+    if on {
+        let flags = KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+            | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+            | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
+        execute!(stdout(), PushKeyboardEnhancementFlags(flags))?;
+    } else {
+        execute!(stdout(), PopKeyboardEnhancementFlags)?;
+    }
+
+    SHIFT_KEYS_REPORTED.store(on, Ordering::Relaxed);
+
+    Ok(())
 }
 
 async fn shutdown_signal() {
@@ -192,15 +206,8 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
             )),
         ),
     };
-    let mut rows = build_keyboard_rows(settings.keyboard.layout);
-    let mut grid_map = build_keycode_grid_map(&rows);
     let mut app = App::new();
-
-    app.is_kitty_supported = supports_keyboard_enhancement().unwrap_or(false);
-
-    app.layout = settings.keyboard.layout;
-    app.rows = rows.clone();
-    app.grid_map = grid_map.clone();
+    app.set_layout(settings.keyboard.layout);
     app.show_keyboard = settings.display.show_keyboard;
     app.show_hints = settings.display.show_hints;
     app.show_fingers = settings.display.show_fingers;
@@ -208,7 +215,9 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     app.include_punctuation = settings.display.include_punctuation;
     app.include_numbers = settings.display.include_numbers;
     app.error_stop = settings.display.error_stop;
-    app.shift_error = settings.display.shift_error && app.is_kitty_supported;
+    app.shift_error_supported = supports_keyboard_enhancement().unwrap_or(false);
+    app.shift_error = settings.display.shift_error && app.shift_error_supported;
+    report_shift_keys(app.shift_error)?;
     if settings.display.practice_mode {
         app.menu_mode = crate::app::MenuMode::Practice;
     }
@@ -248,7 +257,7 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
     // A failed draw, such as on a terminal that has closed, ends the session
     // here, so that it is still saved below
     let session: Result<()> = async {
-        app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+        app.keyboard_fits = draw_frame(&mut terminal, &app)?;
         drawn_error.clone_from(&app.error);
 
         // Created once, so a signal that arrives while an event is handled isn't missed
@@ -281,7 +290,9 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                 || (app.menu_mode == crate::app::MenuMode::Practice)
                     != settings.display.practice_mode
                 || app.error_stop != settings.display.error_stop
-                || app.shift_error != settings.display.shift_error;
+                // Turned off only for lack of support, it stays on in the settings
+                || (app.shift_error_supported
+                    && app.shift_error != settings.display.shift_error);
             let layout_changed = app.layout != settings.keyboard.layout;
 
             if layout_changed || display_changed {
@@ -294,9 +305,10 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                 settings.display.include_numbers = include_numbers;
                 settings.display.practice_mode = app.menu_mode == crate::app::MenuMode::Practice;
                 settings.display.error_stop = app.error_stop;
-                if app.is_kitty_supported {
+                if app.shift_error_supported {
                     settings.display.shift_error = app.shift_error;
                 }
+                report_shift_keys(app.shift_error)?;
                 if can_save_settings {
                     match settings::save_settings(&settings) {
                         Ok(Some(notice)) => app.show_error(notice),
@@ -304,16 +316,9 @@ async fn run_app(cli: Cli) -> Result<(Option<String>, Result<()>)> {
                         Err(e) => app.show_error(format!("Couldn't save the settings: {e}")),
                     }
                 }
-                if layout_changed {
-                    rows = build_keyboard_rows(settings.keyboard.layout);
-                    grid_map = build_keycode_grid_map(&rows);
-
-                    app.rows = rows.clone();
-                    app.grid_map = grid_map.clone();
-                }
             }
 
-            app.keyboard_fits = draw_frame(&mut terminal, &app, &rows, &grid_map)?;
+            app.keyboard_fits = draw_frame(&mut terminal, &app)?;
             drawn_error.clone_from(&app.error);
         }
         Ok(())
@@ -349,15 +354,10 @@ fn unseen_lines(shown: String, drawn: Option<String>) -> Option<String> {
 }
 
 /// Draws the app, and returns whether the keyboard fitted in the frame
-fn draw_frame(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    app: &App,
-    rows: &[Vec<KeyDef>],
-    grid_map: &HashMap<KeyCode, GridCoord>,
-) -> Result<bool> {
+fn draw_frame(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) -> Result<bool> {
     let frame = terminal.draw(|frame| {
         let regions = compute_regions(frame.area(), app.show_keyboard);
-        draw(frame, app, &regions, rows, grid_map);
+        draw(frame, app, &regions);
     })?;
     Ok(keyboard_fits(frame.area))
 }

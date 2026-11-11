@@ -369,6 +369,34 @@ pub fn shift_for(coord: GridCoord) -> ShiftKind {
     }
 }
 
+/// A layout's keys, and where each key code sits among them
+pub struct Keyboard {
+    pub rows: Vec<Vec<KeyDef>>,
+    pub grid_map: HashMap<KeyCode, GridCoord>,
+}
+
+impl Keyboard {
+    pub fn new(layout: KeyboardLayout) -> Self {
+        let rows = build_keyboard_rows(layout);
+        let grid_map = build_keycode_grid_map(&rows);
+
+        Self { rows, grid_map }
+    }
+
+    /// The key that types `ch`, and the Shift to hold with it, if any
+    pub fn key_for_char(&self, ch: char) -> Option<(GridCoord, Option<ShiftKind>)> {
+        let coord = *self.grid_map.get(&KeyCode::Char(ch.to_ascii_uppercase()))?;
+        let shifted = self
+            .rows
+            .get(coord.0)
+            .and_then(|keys| keys.get(coord.1))
+            .is_some_and(|key| key.secondary == Some(KeyCode::Char(ch)));
+        let shift = (ch.is_uppercase() || shifted).then(|| shift_for(coord));
+
+        Some((coord, shift))
+    }
+}
+
 pub fn build_keycode_grid_map(rows: &[Vec<KeyDef>]) -> HashMap<KeyCode, GridCoord> {
     let mut map = HashMap::new();
 

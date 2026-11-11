@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -30,10 +29,10 @@ const HEADER_SEPARATOR: &str = " \u{b7} ";
 const HEADER_STATS_TEMPLATE: &str = "000 wpm \u{b7} 100% acc \u{b7} 000 err \u{b7} 00:00 ";
 /// The blank row between the menu's items and its controls
 const MENU_GAP_ROWS: u16 = 1;
-/// The menu's controls and settings, when each fits on one row
-const MENU_FOOTER_MIN_ROWS: u16 = 2;
-/// The menu's rows around its items when its controls and settings each fit on
-/// one row
+/// The menu's controls and settings on the widest screen: the controls on one
+/// row, and the settings, with the practice ones, on two
+const MENU_FOOTER_MIN_ROWS: u16 = 3;
+/// The menu's rows around its items on the widest screen
 const MENU_CHROME_ROWS: u16 = PANEL_FRAME_ROWS + MENU_GAP_ROWS + MENU_FOOTER_MIN_ROWS;
 const MIN_MENU_ITEMS: u16 = 5;
 /// The typing panel's rows: its frame, the current line and the next 2
@@ -42,9 +41,9 @@ const ZEN_TEXT_ROWS: u16 = 3;
 /// Zen mode's rows below its text: a blank row, and the wpm and controls
 const ZEN_FOOTER_ROWS: u16 = 2;
 /// Enough for 5 menu items, the typing view, the results and the pause menu,
-/// but only 2 history sessions, when the menu's controls and settings each fit
-/// on one row. The keyboard is hidden on terminals too short for this, any rows
-/// those wrap onto, and the keyboard.
+/// but only 2 history sessions, on the widest screen. The keyboard is hidden on
+/// terminals too short for this, any more rows the menu's controls and settings
+/// wrap onto, and the keyboard.
 const MIN_BODY_ROWS: u16 = MENU_CHROME_ROWS + MIN_MENU_ITEMS;
 const WIDEST_ROW_KEYS: u16 = NUMBER_ROW_KEYS as u16;
 const MAX_KEY_WIDTH: u16 = 9;
@@ -347,14 +346,9 @@ fn bounding_rect(kbd_rects: &[Rc<[Rect]>]) -> Option<Rect> {
     Some(Rect::new(min_x, min_y, max_x - min_x, max_y - min_y))
 }
 
-pub fn draw(
-    frame: &mut Frame,
-    app: &App,
-    regions: &Regions,
-    rows: &[Vec<KeyDef>],
-    grid_map: &HashMap<KeyCode, GridCoord>,
-) {
+pub fn draw(frame: &mut Frame, app: &App, regions: &Regions) {
     let tc = ThemeColors::from_theme(app.theme);
+    let Keyboard { rows, grid_map } = &app.keyboard;
 
     let bg_block = Block::default().style(Style::default().bg(tc.bg));
     frame.render_widget(bg_block, frame.area());
@@ -369,23 +363,10 @@ pub fn draw(
             app.document
                 .as_ref()
                 .and_then(|d| d.expected_char())
-                .map(|ch| {
-                    let mut coords = Vec::new();
-                    let key = grid_map
-                        .get(&KeyCode::Char(ch.to_ascii_uppercase()))
-                        .copied();
-                    coords.extend(key);
-                    let shifted = |&(row, col): &GridCoord| {
-                        rows.get(row)
-                            .and_then(|keys| keys.get(col))
-                            .is_some_and(|key| key.secondary == Some(KeyCode::Char(ch)))
-                    };
-                    let needs_shift = ch.is_uppercase() || key.as_ref().is_some_and(shifted);
-                    if let Some(key) = key.filter(|_| needs_shift) {
-                        let key_code = shift_for(key).key_code();
-                        coords.extend(grid_map.get(&key_code).copied());
-                    }
-                    coords
+                .and_then(|ch| app.keyboard.key_for_char(ch))
+                .map(|(key, shift)| {
+                    let shift_key = shift.and_then(|shift| grid_map.get(&shift.key_code()));
+                    std::iter::once(key).chain(shift_key.copied()).collect()
                 })
                 .unwrap_or_default()
         }
@@ -1223,12 +1204,17 @@ fn menu_footer(
         toggle("2", "hints", app.show_hints, true),
         toggle("3", "keyboard", app.show_keyboard, keyboard_fits),
         toggle("4", "error stop", app.error_stop, true),
-        toggle("5", "shift error", app.shift_error, app.is_kitty_supported),
     ];
     if app.menu_mode == MenuMode::Practice {
-        settings.push(toggle("6", "punct", app.include_punctuation, true));
-        settings.push(toggle("7", "num", app.include_numbers, true));
+        settings.push(toggle("5", "punct", app.include_punctuation, true));
+        settings.push(toggle("6", "num", app.include_numbers, true));
     }
+    settings.push(toggle(
+        "7",
+        "shift error",
+        app.shift_error,
+        app.shift_error_supported,
+    ));
 
     let mut lines = wrap_groups(controls, width);
     lines.extend(wrap_groups(settings, width));
@@ -1682,7 +1668,7 @@ mod tests {
         let text = rows.join("\n");
 
         assert!(
-            text.contains("q/Esc quit") && text.contains("7 num off"),
+            text.contains("q/Esc quit") && text.contains("6 num off"),
             "{text}"
         );
     }
