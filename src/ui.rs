@@ -1411,6 +1411,117 @@ fn draw_history(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     frame.render_widget(Paragraph::new(lines).block(block), inner);
 }
 
+struct KeyboardState<'a> {
+    hint_coords: &'a [GridCoord],
+    highlight_coord: Option<GridCoord>,
+    highlight_color: Color,
+    show_fingers: bool,
+}
+
+fn draw_keyboard(
+    frame: &mut Frame,
+    rows: &[Vec<KeyDef>],
+    kbd_rects: &[Rc<[Rect]>],
+    state: &KeyboardState,
+    tc: &ThemeColors,
+) {
+    if let Some(outer) = bounding_rect(kbd_rects) {
+        let padded = outer.outer(Margin::new(KEYBOARD_FRAME_COLS, KEYBOARD_FRAME_ROWS));
+        frame.render_widget(
+            Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::new().fg(tc.dim_border)),
+            padded,
+        );
+    }
+
+    for (row_idx, row) in rows.iter().enumerate() {
+        let Some(row_rects) = kbd_rects.get(row_idx) else {
+            continue;
+        };
+
+        for (col_idx, key_def) in row.iter().enumerate() {
+            let Some(&cell) = row_rects.get(col_idx) else {
+                continue;
+            };
+
+            let is_hint = state.hint_coords.contains(&(row_idx, col_idx));
+            let is_highlight = state.highlight_coord == Some((row_idx, col_idx));
+
+            let border_color = if is_highlight {
+                state.highlight_color
+            } else if is_hint {
+                tc.correct
+            } else {
+                tc.dim_border
+            };
+            let block = Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::new().fg(border_color));
+
+            let inner = block.inner(cell);
+            frame.render_widget(block, cell);
+
+            if is_hint && state.show_fingers {
+                if let Some(finger) = finger_for_coord((row_idx, col_idx)) {
+                    frame.render_widget(
+                        Paragraph::new(Span::styled(
+                            finger.label(),
+                            Style::new().fg(tc.finger_label),
+                        ))
+                        .centered(),
+                        cell,
+                    );
+                }
+            }
+
+            let label = key_def.label;
+            let has_secondary = key_def.secondary.and_then(|s| match s {
+                KeyCode::Char(c) => Some(c),
+                _ => None,
+            });
+
+            let buf = frame.buffer_mut();
+            let label_w = label.chars().count() as u16;
+            let cx = inner.x + inner.width.saturating_sub(label_w) / 2;
+
+            let label_fg = if is_highlight {
+                tc.cursor_fg
+            } else if is_hint {
+                tc.correct
+            } else {
+                tc.key_label
+            };
+            let sec_fg = if is_highlight {
+                tc.cursor_fg
+            } else {
+                tc.dim_text
+            };
+
+            if let Some(sec_char) = has_secondary {
+                // A key with a shifted character shows the unshifted one at the bottom
+                let cy = inner.y + inner.height.saturating_sub(1);
+                if cx < inner.x + inner.width && cy < inner.y + inner.height {
+                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
+                }
+                let s = sec_char.to_string();
+                let sw = s.chars().count() as u16;
+                let sx = inner.x + inner.width.saturating_sub(sw) / 2;
+                if sx < inner.x + inner.width && inner.y < cy {
+                    buf.set_string(sx, inner.y, &s, Style::new().fg(sec_fg));
+                }
+            } else {
+                let cy = inner.y + inner.height / 2;
+                if cx < inner.x + inner.width && cy < inner.y + inner.height {
+                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1745,116 +1856,5 @@ mod tests {
         assert!(lines.iter().all(|line| line.width() <= 12));
         assert_eq!(squash(&lines.concat()), squash(message));
         assert!(lines.iter().any(|line| line.starts_with("Using")));
-    }
-}
-
-struct KeyboardState<'a> {
-    hint_coords: &'a [GridCoord],
-    highlight_coord: Option<GridCoord>,
-    highlight_color: Color,
-    show_fingers: bool,
-}
-
-fn draw_keyboard(
-    frame: &mut Frame,
-    rows: &[Vec<KeyDef>],
-    kbd_rects: &[Rc<[Rect]>],
-    state: &KeyboardState,
-    tc: &ThemeColors,
-) {
-    if let Some(outer) = bounding_rect(kbd_rects) {
-        let padded = outer.outer(Margin::new(KEYBOARD_FRAME_COLS, KEYBOARD_FRAME_ROWS));
-        frame.render_widget(
-            Block::new()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(tc.dim_border)),
-            padded,
-        );
-    }
-
-    for (row_idx, row) in rows.iter().enumerate() {
-        let Some(row_rects) = kbd_rects.get(row_idx) else {
-            continue;
-        };
-
-        for (col_idx, key_def) in row.iter().enumerate() {
-            let Some(&cell) = row_rects.get(col_idx) else {
-                continue;
-            };
-
-            let is_hint = state.hint_coords.contains(&(row_idx, col_idx));
-            let is_highlight = state.highlight_coord == Some((row_idx, col_idx));
-
-            let border_color = if is_highlight {
-                state.highlight_color
-            } else if is_hint {
-                tc.correct
-            } else {
-                tc.dim_border
-            };
-            let block = Block::new()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(border_color));
-
-            let inner = block.inner(cell);
-            frame.render_widget(block, cell);
-
-            if is_hint && state.show_fingers {
-                if let Some(finger) = finger_for_coord((row_idx, col_idx)) {
-                    frame.render_widget(
-                        Paragraph::new(Span::styled(
-                            finger.label(),
-                            Style::new().fg(tc.finger_label),
-                        ))
-                        .centered(),
-                        cell,
-                    );
-                }
-            }
-
-            let label = key_def.label;
-            let has_secondary = key_def.secondary.and_then(|s| match s {
-                KeyCode::Char(c) => Some(c),
-                _ => None,
-            });
-
-            let buf = frame.buffer_mut();
-            let label_w = label.chars().count() as u16;
-            let cx = inner.x + inner.width.saturating_sub(label_w) / 2;
-
-            let label_fg = if is_highlight {
-                tc.cursor_fg
-            } else if is_hint {
-                tc.correct
-            } else {
-                tc.key_label
-            };
-            let sec_fg = if is_highlight {
-                tc.cursor_fg
-            } else {
-                tc.dim_text
-            };
-
-            if let Some(sec_char) = has_secondary {
-                // A key with a shifted character shows the unshifted one at the bottom
-                let cy = inner.y + inner.height.saturating_sub(1);
-                if cx < inner.x + inner.width && cy < inner.y + inner.height {
-                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
-                }
-                let s = sec_char.to_string();
-                let sw = s.chars().count() as u16;
-                let sx = inner.x + inner.width.saturating_sub(sw) / 2;
-                if sx < inner.x + inner.width && inner.y < cy {
-                    buf.set_string(sx, inner.y, &s, Style::new().fg(sec_fg));
-                }
-            } else {
-                let cy = inner.y + inner.height / 2;
-                if cx < inner.x + inner.width && cy < inner.y + inner.height {
-                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
-                }
-            }
-        }
     }
 }

@@ -985,10 +985,10 @@ impl App {
                 KeyCode::Up | KeyCode::Char('k') => {
                     self.history_scroll = self.history_scroll.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if self.history_scroll + 1 < self.history.len() {
-                        self.history_scroll += 1;
-                    }
+                KeyCode::Down | KeyCode::Char('j')
+                    if self.history_scroll + 1 < self.history.len() =>
+                {
+                    self.history_scroll += 1;
                 }
                 _ => {}
             },
