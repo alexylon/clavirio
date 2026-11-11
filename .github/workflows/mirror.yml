@@ -42,5 +42,10 @@ jobs:
           # Branches and tags only, with deletions. GitHub's pull request refs
           # are left out, as Codeberg rejects them.
           REFS=('+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*')
-          git push --prune "${GITLAB_REPO_URL}" "${REFS[@]}"
-          git push --prune "${CODEBERG_REPO_URL}" "${REFS[@]}"
+
+          # One mirror rejecting the push mustn't keep the other from being
+          # updated; the run still fails if either push does
+          failed=0
+          git push --prune "${GITLAB_REPO_URL}" "${REFS[@]}" || { echo "::error::Push to GitLab failed"; failed=1; }
+          git push --prune "${CODEBERG_REPO_URL}" "${REFS[@]}" || { echo "::error::Push to Codeberg failed"; failed=1; }
+          exit "${failed}"
