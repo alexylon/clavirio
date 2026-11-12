@@ -85,6 +85,8 @@ jobs:
 
   snap:
     strategy:
+      # One architecture failing to reach the Snap Store shouldn't stop the other
+      fail-fast: false
       matrix:
         # The snap is built for the runner's architecture
         os: [ubuntu-latest, ubuntu-24.04-arm]
