@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-13
+
 ### Added
 - apt repository at `https://clavir.io/apt` for Debian and Ubuntu (amd64 and arm64), so clavirio installs and updates with apt
 - `.deb` packages in each GitHub release, with the man page
