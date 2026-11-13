@@ -24,6 +24,31 @@ include = [
     "/README.md",
 ]
 
+# The .deb attached to each GitHub release, built with cargo-deb
+[package.metadata.deb]
+maintainer = "Alexander Alexandrov <git@alexo.io>"
+copyright = "2026 Alexander Alexandrov and contributors"
+license-file = ["LICENSE", "0"]
+# No Debian revision (0.4.5, not 0.4.5-1), so these packages never share a
+# version with an official Debian package, which then sorts higher
+revision = ""
+section = "education"
+priority = "optional"
+extended-description = """\
+Clavirio teaches touch typing in the terminal. The lessons go through the \
+keyboard row by row for QWERTY, Dvorak and Colemak, then cover numbers and \
+symbols. A keyboard drawn on screen shows the next key and which finger to use.
+
+Besides the lessons, you can practice with random English words, code terms \
+for several programming languages, timed tests, quotes, and drills of the keys \
+you miss most. Speed and accuracy are shown as you type, and every session is \
+saved to a history."""
+assets = [
+    ["target/release/clavirio", "usr/bin/", "755"],
+    ["man/clavirio.1", "usr/share/man/man1/", "644"],
+    ["NOTICE", "usr/share/doc/clavirio/", "644"],
+]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.29"

@@ -38,11 +38,16 @@ This automatically:
 7. ✅ Creates Git tag: `v0.1.18`
 8. ✅ Pushes commits and tags to remote
 
-Pushing the tag starts `.github/workflows/release.yml`, which builds the GitHub Release binaries and publishes the snap (amd64 and arm64) to the Snap Store's `stable` channel. Publishing the snap needs the `SNAPCRAFT_STORE_CREDENTIALS` repository secret, created once with:
+Pushing the tag starts `.github/workflows/release.yml`, which builds the GitHub Release binaries and `.deb` packages, publishes the snap (amd64 and arm64) to the Snap Store's `stable` channel, and updates the apt repository at `https://clavir.io/apt`. Publishing the snap needs the `SNAPCRAFT_STORE_CREDENTIALS` repository secret, created once with:
 
 ```bash
 snapcraft export-login --snaps=clavirio --acls package_access,package_push,package_update,package_release -
 ```
+
+The apt repository is served from this repository's GitHub Pages, which the clavir.io website forwards `/apt` to (a rewrite in the clavir-io repository's `vercel.json`). It needs, once:
+
+- GitHub Pages turned on with GitHub Actions as the source, and a `v*` tag rule added to the `github-pages` environment, since releases run from a tag
+- The `APT_SIGNING_KEY` repository secret: the armored private key that signs the repository, without a passphrase (`gpg --armor --export-secret-keys <fingerprint>`). Users trust this key, so keep a backup; a new key means every user has to download it again
 
 ### 3. Release with Specific Version
 Bump to a specific version (major, minor, patch):

@@ -115,6 +115,22 @@ sudo snap install clavirio
 
 The snap keeps its settings and history in `~/snap/clavirio/current/.clavirio` instead of `~/.clavirio`.
 
+### Debian and Ubuntu (apt)
+
+Add the clavirio apt repository once, then install and update clavirio with apt like any other package:
+
+```bash
+sudo install -d /etc/apt/keyrings
+sudo wget -qO /etc/apt/keyrings/clavirio.gpg https://clavir.io/apt/clavirio.gpg
+echo "deb [signed-by=/etc/apt/keyrings/clavirio.gpg] https://clavir.io/apt stable main" | sudo tee /etc/apt/sources.list.d/clavirio.list
+sudo apt update
+sudo apt install clavirio
+```
+
+New versions then come with `sudo apt upgrade`. It works on Debian 12, Ubuntu 22.04 and newer, on `amd64` and `arm64`, and installs the man page too.
+
+You can also download the `.deb` from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest) and install it with `sudo apt install ./clavirio_*_amd64.deb`, but then updates don't come with apt.
+
 ### Prebuilt binary
 
 Download a standalone binary from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest). Builds are available for macOS (Intel and Apple Silicon), Linux (x86_64), and Windows (x86_64).

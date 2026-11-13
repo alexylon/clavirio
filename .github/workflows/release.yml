@@ -53,6 +53,36 @@ jobs:
           name: clavirio-${{ matrix.target }}
           path: clavirio-${{ matrix.target }}.*
 
+  deb:
+    strategy:
+      # One architecture failing mustn't cancel the other
+      fail-fast: false
+      matrix:
+        # Built on the oldest supported Ubuntu, so the package also runs on
+        # Debian 12, Ubuntu 22.04 and newer
+        os: [ubuntu-22.04, ubuntu-22.04-arm]
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned, so a new cargo-deb can't change the package between releases
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --version 3.8.0 --locked
+
+      - name: Build .deb
+        run: cargo deb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clavirio-deb-${{ matrix.os }}
+          path: target/debian/*.deb
+
   snap:
     strategy:
       matrix:
@@ -77,7 +107,10 @@ jobs:
           release: stable
 
   release:
-    needs: build
+    needs: [build, deb]
+    # A failed .deb build mustn't hold back the binaries; the release then
+    # goes out without the .deb files
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -92,3 +125,51 @@ jobs:
           files: |
             clavirio-*.tar.gz
             clavirio-*.zip
+            clavirio_*.deb
+
+  # The apt repository at https://clavir.io/apt, which the website forwards to
+  # this repository's GitHub Pages
+  apt:
+    needs: [deb, release]
+    # Two releases close together must publish one after the other
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    if: ${{ !cancelled() && needs.deb.result == 'success' && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: clavirio-deb-*
+          path: debs
+          merge-multiple: true
+
+      - name: Build apt repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y apt-utils
+          export GNUPGHOME="$(mktemp -d)"
+          echo "${APT_SIGNING_KEY}" | gpg --batch --import
+          .github/scripts/apt-repo.sh debs apt-repo
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-repo
+
+      - name: Publish to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
