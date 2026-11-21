@@ -9,7 +9,7 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::input::InputEvent;
-use crate::keyboard::{Keyboard, ShiftKind};
+use crate::keyboard::{GridCoord, Keyboard, ShiftKind};
 use crate::settings::{KeyboardLayout, Theme};
 use crate::words::WordList;
 
@@ -351,6 +351,11 @@ impl Document {
     }
 }
 
+/// `part` as a percentage of `whole`, or `None` when `whole` is 0
+fn percent(part: f64, whole: f64) -> Option<f64> {
+    (whole > 0.0).then(|| part / whole * 100.0)
+}
+
 fn weakest_chars(stats: &HashMap<char, (u32, u32)>, count: usize) -> Vec<(char, u32, u32)> {
     let mut keys: Vec<(char, u32, u32)> = stats
         .iter()
@@ -550,10 +555,7 @@ impl App {
     }
 
     pub fn accuracy(&self) -> f64 {
-        if self.total_count == 0 {
-            return 0.0;
-        }
-        self.correct_count as f64 / self.total_count as f64 * 100.0
+        percent(self.correct_count.into(), self.total_count.into()).unwrap_or(0.0)
     }
 
     /// Whether the lesson's accuracy passes it, or `None` outside lessons
@@ -616,6 +618,25 @@ impl App {
 
     pub fn worst_keys(&self, count: usize) -> Vec<(char, u32, u32)> {
         weakest_chars(&self.key_stats, count)
+    }
+
+    /// The session's accuracy, in percent, for each key typed, with capitals and
+    /// symbols counted for the key they are on
+    pub fn key_accuracy(&self) -> HashMap<GridCoord, f64> {
+        let mut by_key: HashMap<GridCoord, (u32, u32)> = HashMap::new();
+        for (&ch, &(hits, misses)) in &self.key_stats {
+            if let Some((coord, _)) = self.keyboard.key_for_char(ch) {
+                let entry = by_key.entry(coord).or_default();
+                entry.0 = entry.0.saturating_add(hits);
+                entry.1 = entry.1.saturating_add(misses);
+            }
+        }
+        by_key
+            .into_iter()
+            .filter_map(|(coord, (hits, misses))| {
+                percent(hits.into(), f64::from(hits) + f64::from(misses)).map(|acc| (coord, acc))
+            })
+            .collect()
     }
 
     const SPARKLINE_WIDTH: usize = 16;
@@ -1840,6 +1861,19 @@ mod tests {
         assert_eq!(worst[0].0, 'b'); // worst first
         assert_eq!(worst[1].0, 'a');
         assert_eq!(worst[2].0, 'c');
+    }
+
+    #[test]
+    fn key_accuracy_counts_capitals_and_symbols_for_their_key() {
+        let mut app = App::new();
+        app.key_stats.insert('k', (3, 0));
+        app.key_stats.insert('K', (0, 1));
+        app.key_stats.insert(':', (1, 1));
+        let key = |ch| app.keyboard.key_for_char(ch).unwrap().0;
+        let accuracy = app.key_accuracy();
+        assert_eq!(accuracy.len(), 2);
+        assert_eq!(accuracy[&key('k')], 75.0);
+        assert_eq!(accuracy[&key(';')], 50.0);
     }
 
     #[test]

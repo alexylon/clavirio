@@ -55,7 +55,7 @@ Clavirio's approach to practicing key movements; the study did not test these le
 - **Lessons:** 27 drills covering the home, top, and bottom rows, followed by numbers and symbols. Lessons 1–21 adapt to your layout; lessons 22–27 are shared.
 - **Practice:** Random words from the English 200 or 1k lists; code terms for Rust, Python, JavaScript, Go, C/C++, Java, and HTML/CSS; 30- or 60-second sessions; weak keys; common bigrams; quotes; and Zen mode for free typing.
 - **Punctuation and numbers:** Optionally add them to random word or code practice. Use `5` and `6` in the practice menu to toggle them.
-- **Live feedback:** WPM, accuracy, errors, time (elapsed, or remaining in timed sessions), and line progress appear in a single status row. The results screen shows a graph of WPM over time.
+- **Live feedback:** WPM, accuracy, errors, time (elapsed, or remaining in timed sessions), and line progress appear in a single status row. The results screen shows a graph of WPM over time, and colours each key typed by its accuracy: filled below 90%, orange below 95%, and blue from 95%, the mark a lesson is passed at.
 - **Keyboard and layouts:** Switch between QWERTY, Dvorak, and Colemak. The virtual keyboard highlights the next key and shows finger hints: **P**inky, **R**ing, **M**iddle, **I**ndex, and **T**humb.
 - **Error handling:** By default, typing continues after a mistake, and Backspace lets you correct it within the current word. Turn on error stop to require a correction before continuing.
 - **Weak key practice:** Accuracy for each key is saved across sessions. After a drill, press `w` to practice that session's weakest keys, or your saved weak keys if the session has none. Choose Weak Keys from the practice menu to use your cumulative stats.

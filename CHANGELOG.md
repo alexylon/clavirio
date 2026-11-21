@@ -4,9 +4,13 @@
 
 ### Added
 - `n` on the results screen of a practice starts the same practice with new text (after a weak-key drill, with the same keys); `r` still retypes the same text
+- The results screen colours each key on the keyboard by its accuracy in the session: filled below 90%, orange below the 95% pass mark, and blue from it; keys not typed are dim
 
 ### Changed
 - A lesson is passed at 95% accuracy, and the results screen says whether it was. Below that, the menu and the next start stay on the lesson instead of moving on; `n` still goes to the next one
+
+### Fixed
+- The keyboard on the results screen of a timed session highlighting the next key, as if the session went on
 
 ## [0.4.6] - 2026-11-13
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -51,6 +52,8 @@ const MAX_KEY_WIDTH: u16 = 9;
 const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const WEAKEST_KEYS_SHOWN: usize = 5;
+/// Below this accuracy, in percent as shown, a key is filled on the results keyboard
+const WEAK_KEY_ACCURACY: f64 = 90.0;
 const ELLIPSIS: &str = "\u{2026}";
 const PROMPT_CURSOR: &str = "\u{258c}";
 /// The columns before a menu item's label: its `▸` marker and a space each side
@@ -355,8 +358,11 @@ pub fn draw(frame: &mut Frame, app: &App, regions: &Regions) {
     frame.render_widget(bg_block, frame.area());
 
     let on_menu = !app.in_session() && app.error.is_none() && !app.searching;
+    // The results keyboard shows the session's accuracy instead of the hints
+    let finished = app.is_finished();
+    let show_hints = app.show_hints && !finished;
 
-    let hint_coords: Vec<GridCoord> = if app.show_hints {
+    let hint_coords: Vec<GridCoord> = if show_hints {
         if on_menu {
             // On the menu, Enter is highlighted to show what the display toggles do
             grid_map.get(&KeyCode::Enter).copied().into_iter().collect()
@@ -394,7 +400,7 @@ pub fn draw(frame: &mut Frame, app: &App, regions: &Regions) {
 
     if regions.keyboard_area.height > 0 {
         let kbd_rects = build_keyboard_rects(keys_area(regions.keyboard_area), rows);
-        let highlight_coord: Option<GridCoord> = if app.show_hints {
+        let highlight_coord: Option<GridCoord> = if show_hints {
             app.highlighted_key
                 .and_then(|code| grid_map.get(&code))
                 .copied()
@@ -406,6 +412,7 @@ pub fn draw(frame: &mut Frame, app: &App, regions: &Regions) {
         } else {
             tc.incorrect
         };
+        let key_accuracy = finished.then(|| app.key_accuracy());
         draw_keyboard(
             frame,
             rows,
@@ -415,6 +422,7 @@ pub fn draw(frame: &mut Frame, app: &App, regions: &Regions) {
                 highlight_coord,
                 highlight_color,
                 show_fingers: app.show_fingers,
+                key_accuracy: key_accuracy.as_ref(),
             },
             &tc,
         );
@@ -1439,6 +1447,62 @@ struct KeyboardState<'a> {
     highlight_coord: Option<GridCoord>,
     highlight_color: Color,
     show_fingers: bool,
+    /// The session's accuracy for each key typed, shown on the results screen
+    key_accuracy: Option<&'a HashMap<GridCoord, f64>>,
+}
+
+struct KeyColors {
+    border: Color,
+    label: Color,
+    secondary: Color,
+    fill: Option<Color>,
+}
+
+fn typing_key_colors(
+    is_highlight: bool,
+    is_hint: bool,
+    highlight: Color,
+    tc: &ThemeColors,
+) -> KeyColors {
+    let (border, label, secondary) = if is_highlight {
+        (highlight, tc.cursor_fg, tc.cursor_fg)
+    } else if is_hint {
+        (tc.correct, tc.correct, tc.dim_text)
+    } else {
+        (tc.dim_border, tc.key_label, tc.dim_text)
+    };
+    KeyColors {
+        border,
+        label,
+        secondary,
+        fill: None,
+    }
+}
+
+/// A badly typed key is filled, so it stands out without telling colours apart
+fn accuracy_key_colors(accuracy: Option<f64>, tc: &ThemeColors) -> KeyColors {
+    let outlined = |color| KeyColors {
+        border: color,
+        label: color,
+        secondary: tc.dim_text,
+        fill: None,
+    };
+    match accuracy {
+        None => KeyColors {
+            border: tc.dim_border,
+            label: tc.dim_text,
+            secondary: tc.dim_text,
+            fill: None,
+        },
+        Some(acc) if acc.round_ties_even() < WEAK_KEY_ACCURACY => KeyColors {
+            border: tc.incorrect,
+            label: tc.cursor_fg,
+            secondary: tc.cursor_fg,
+            fill: Some(tc.incorrect),
+        },
+        Some(acc) if crate::lessons::is_passed(acc) => outlined(tc.correct),
+        Some(_) => outlined(tc.incorrect),
+    }
 }
 
 fn draw_keyboard(
@@ -1469,26 +1533,30 @@ fn draw_keyboard(
                 continue;
             };
 
-            let is_hint = state.hint_coords.contains(&(row_idx, col_idx));
-            let is_highlight = state.highlight_coord == Some((row_idx, col_idx));
-
-            let border_color = if is_highlight {
-                state.highlight_color
-            } else if is_hint {
-                tc.correct
-            } else {
-                tc.dim_border
+            let coord = (row_idx, col_idx);
+            let is_hint = state.hint_coords.contains(&coord);
+            let colors = match state.key_accuracy {
+                Some(accuracy) => accuracy_key_colors(accuracy.get(&coord).copied(), tc),
+                None => typing_key_colors(
+                    state.highlight_coord == Some(coord),
+                    is_hint,
+                    state.highlight_color,
+                    tc,
+                ),
             };
-            let block = Block::new()
+            let mut block = Block::new()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(border_color));
+                .border_style(Style::new().fg(colors.border));
+            if let Some(fill) = colors.fill {
+                block = block.style(Style::new().bg(fill));
+            }
 
             let inner = block.inner(cell);
             frame.render_widget(block, cell);
 
             if is_hint && state.show_fingers {
-                if let Some(finger) = finger_for_coord((row_idx, col_idx)) {
+                if let Some(finger) = finger_for_coord(coord) {
                     frame.render_widget(
                         Paragraph::new(Span::styled(
                             finger.label(),
@@ -1510,35 +1578,22 @@ fn draw_keyboard(
             let label_w = label.chars().count() as u16;
             let cx = inner.x + inner.width.saturating_sub(label_w) / 2;
 
-            let label_fg = if is_highlight {
-                tc.cursor_fg
-            } else if is_hint {
-                tc.correct
-            } else {
-                tc.key_label
-            };
-            let sec_fg = if is_highlight {
-                tc.cursor_fg
-            } else {
-                tc.dim_text
-            };
-
             if let Some(sec_char) = has_secondary {
                 // A key with a shifted character shows the unshifted one at the bottom
                 let cy = inner.y + inner.height.saturating_sub(1);
                 if cx < inner.x + inner.width && cy < inner.y + inner.height {
-                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
+                    buf.set_string(cx, cy, label, Style::new().fg(colors.label));
                 }
                 let s = sec_char.to_string();
                 let sw = s.chars().count() as u16;
                 let sx = inner.x + inner.width.saturating_sub(sw) / 2;
                 if sx < inner.x + inner.width && inner.y < cy {
-                    buf.set_string(sx, inner.y, &s, Style::new().fg(sec_fg));
+                    buf.set_string(sx, inner.y, &s, Style::new().fg(colors.secondary));
                 }
             } else {
                 let cy = inner.y + inner.height / 2;
                 if cx < inner.x + inner.width && cy < inner.y + inner.height {
-                    buf.set_string(cx, cy, label, Style::new().fg(label_fg));
+                    buf.set_string(cx, cy, label, Style::new().fg(colors.label));
                 }
             }
         }
@@ -1629,6 +1684,41 @@ mod tests {
                 rows.join("\n")
             );
         }
+    }
+
+    #[test]
+    fn results_keyboard_shows_key_accuracy_instead_of_the_next_key() {
+        let mut app = App::new();
+        // Finished before its end, as a timed session is, so `f` is still next
+        let mut doc = crate::app::Document::from_text("fj").unwrap();
+        doc.progress = Progress::Finished;
+        app.document = Some(doc);
+        app.key_stats.insert('j', (1, 1));
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let area = Rect::new(0, 0, MAX_WIDTH, 60);
+        let regions = compute_regions(area, app.show_keyboard);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(area.width, area.height))
+                .unwrap();
+        terminal.draw(|frame| draw(frame, &app, &regions)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let keyboard = regions.keyboard_area;
+        let cells: Vec<_> = keyboard
+            .rows()
+            .flat_map(|row| row.columns())
+            .map(|pos| &buffer[(pos.x, pos.y)])
+            .collect();
+        assert!(
+            cells
+                .iter()
+                .any(|c| c.symbol() == "J" && c.bg == tc.incorrect)
+        );
+        assert!(
+            !cells
+                .iter()
+                .any(|c| c.fg == tc.correct || c.fg == tc.finger_label)
+        );
     }
 
     #[test]
