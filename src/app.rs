@@ -78,6 +78,15 @@ const ZEN: PracticeKind = PracticeKind {
     title: "Zen",
 };
 
+/// How a practice was started, so `n` can start it again with new text
+#[derive(Clone)]
+enum PracticeStart {
+    Words(WordList, usize),
+    Timed(u64, WordList),
+    WeakKeys(Vec<char>),
+    Special(StartFn),
+}
+
 const WORD_PRACTICE_PREFIX: &str = "words_";
 const TIMED_PRACTICE_PREFIX: &str = "timed_";
 /// Between the seconds and the word list in a timed practice id
@@ -437,6 +446,8 @@ pub struct App {
     pub time_limit: Option<u64>,
     pub menu_mode: MenuMode,
     pub selected_practice: usize,
+    /// `None` for lessons, files and zen, which have no new text to start
+    practice_start: Option<PracticeStart>,
     pub wpm_samples: Vec<f64>,
     last_sample_count: u32,
     last_sample_time: Option<Instant>,
@@ -498,6 +509,7 @@ impl App {
             time_limit: None,
             menu_mode: MenuMode::Lessons,
             selected_practice: 0,
+            practice_start: None,
             wpm_samples: Vec::new(),
             last_sample_count: 0,
             last_sample_time: None,
@@ -672,6 +684,20 @@ impl App {
 
     pub fn has_next_lesson(&self) -> bool {
         self.find_next_lesson().is_some()
+    }
+
+    pub fn has_new_text(&self) -> bool {
+        self.practice_start.is_some()
+    }
+
+    fn start_new_text(&mut self) {
+        match self.practice_start.clone() {
+            Some(PracticeStart::Words(list, count)) => self.start_word_practice(list, count),
+            Some(PracticeStart::Timed(secs, list)) => self.start_timed_practice(secs, list),
+            Some(PracticeStart::WeakKeys(weak)) => self.drill_weak_keys(weak),
+            Some(PracticeStart::Special(start)) => start(self),
+            None => {}
+        }
     }
 
     fn current_lesson_index(&self) -> Option<usize> {
@@ -1028,6 +1054,9 @@ impl App {
             (KeyCode::Char('n'), _) if self.is_finished() && self.has_next_lesson() => {
                 self.next_lesson();
             }
+            (KeyCode::Char('n'), _) if self.is_finished() && self.has_new_text() => {
+                self.start_new_text();
+            }
             _ if self.is_finished() => {}
             (KeyCode::Char(typed), _) if self.last_error_char.is_none() || !self.error_stop => {
                 self.handle_typed_char(typed);
@@ -1176,6 +1205,7 @@ impl App {
                 self.reset_session();
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Lessons;
+                self.practice_start = None;
                 self.lesson_id = lesson.id.to_string();
                 self.lesson_title = lesson.title.to_string();
             }
@@ -1193,6 +1223,7 @@ impl App {
                 self.reset_session();
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Practice;
+                self.practice_start = None;
                 self.lesson_id = Path::new(path)
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -1204,7 +1235,13 @@ impl App {
         }
     }
 
-    fn start_practice_from_text(&mut self, text: &str, id: &str, title: &str) {
+    fn start_practice_from_text(
+        &mut self,
+        text: &str,
+        id: &str,
+        title: &str,
+        start: PracticeStart,
+    ) {
         match Document::from_text(text) {
             Ok(doc) => {
                 self.document = Some(doc);
@@ -1212,6 +1249,7 @@ impl App {
                 self.reset_session();
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Practice;
+                self.practice_start = Some(start);
                 self.lesson_id = id.into();
                 self.lesson_title = title.into();
             }
@@ -1221,7 +1259,12 @@ impl App {
 
     pub fn start_word_practice(&mut self, list: WordList, count: usize) {
         let text = self.generate_word_text(list, count);
-        self.start_practice_from_text(&text, &word_practice_id(list), &word_practice_title(list));
+        self.start_practice_from_text(
+            &text,
+            &word_practice_id(list),
+            &word_practice_title(list),
+            PracticeStart::Words(list, count),
+        );
     }
 
     pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
@@ -1233,6 +1276,7 @@ impl App {
             &text,
             &timed_practice_id(secs, list),
             &timed_practice_title(secs, list),
+            PracticeStart::Timed(secs, list),
         );
         self.time_limit = Some(secs);
     }
@@ -1248,7 +1292,12 @@ impl App {
 
     pub fn start_bigram_practice(&mut self) {
         let text = crate::words::generate_bigram_text(Self::DEFAULT_WORD_COUNT);
-        self.start_practice_from_text(&text, BIGRAMS.id, BIGRAMS.title);
+        self.start_practice_from_text(
+            &text,
+            BIGRAMS.id,
+            BIGRAMS.title,
+            PracticeStart::Special(Self::start_bigram_practice),
+        );
     }
 
     fn handle_zen_key(&mut self, code: KeyCode) {
@@ -1319,6 +1368,7 @@ impl App {
         self.reset_session();
         self.time_limit = None;
         self.menu_mode = MenuMode::Practice;
+        self.practice_start = None;
         self.lesson_id = ZEN.id.into();
         self.lesson_title = ZEN.title.into();
         self.zen_mode = true;
@@ -1328,7 +1378,12 @@ impl App {
 
     pub fn start_quote_practice(&mut self) {
         let text = crate::words::generate_quote_text(Self::DEFAULT_WORD_COUNT);
-        self.start_practice_from_text(&text, QUOTES.id, QUOTES.title);
+        self.start_practice_from_text(
+            &text,
+            QUOTES.id,
+            QUOTES.title,
+            PracticeStart::Special(Self::start_quote_practice),
+        );
     }
 
     pub fn start_weak_key_practice(&mut self) {
@@ -1343,8 +1398,17 @@ impl App {
             self.show_error("No weak keys yet — keep practicing".into());
             return;
         }
+        self.drill_weak_keys(weak);
+    }
+
+    fn drill_weak_keys(&mut self, weak: Vec<char>) {
         let text = crate::words::generate_weak_key_text(&weak, Self::DEFAULT_WORD_COUNT);
-        self.start_practice_from_text(&text, WEAK_KEYS.id, WEAK_KEYS.title);
+        self.start_practice_from_text(
+            &text,
+            WEAK_KEYS.id,
+            WEAK_KEYS.title,
+            PracticeStart::WeakKeys(weak),
+        );
     }
 
     /// Whether `typed` needed a Shift and the one on its own hand was held. With
@@ -2990,6 +3054,53 @@ mod tests {
         app.handle_event(InputEvent::Key(key_event(KeyCode::Char('n'))));
         assert_eq!(app.selected_lesson, last);
         assert!(!app.has_next_lesson());
+    }
+
+    fn finish_and_press_n(app: &mut App) {
+        app.document.as_mut().unwrap().progress = Progress::Finished;
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('n'))));
+    }
+
+    #[test]
+    fn n_after_practice_starts_it_again_with_new_text() {
+        const WORDS: usize = 30;
+        const SECS: u64 = 30;
+        let mut app = App::new();
+        app.start_word_practice(WordList::English1k, WORDS);
+        finish_and_press_n(&mut app);
+        let doc = app.document.as_ref().unwrap();
+        assert!(!app.is_finished());
+        let word_count: usize = doc.lines.iter().map(|l| l.split_whitespace().count()).sum();
+        assert_eq!(word_count, WORDS);
+
+        app.start_timed_practice(SECS, WordList::English200);
+        finish_and_press_n(&mut app);
+        assert!(!app.is_finished());
+        assert_eq!(app.time_limit, Some(SECS));
+    }
+
+    #[test]
+    fn n_after_weak_keys_drills_the_same_keys() {
+        let mut app = App::new();
+        app.key_stats.insert('q', (1, 1));
+        app.start_weak_key_practice();
+        // What `w` would drill instead
+        app.key_stats.insert('z', (1, 1));
+        finish_and_press_n(&mut app);
+        assert!(!app.is_finished());
+        assert!(
+            matches!(&app.practice_start, Some(PracticeStart::WeakKeys(keys)) if keys == &['q'])
+        );
+    }
+
+    #[test]
+    fn n_after_a_file_does_nothing() {
+        let mut app = App::new();
+        // A practice first, so the file has to clear what `n` would start
+        app.start_quote_practice();
+        app.load_file("sample.txt");
+        finish_and_press_n(&mut app);
+        assert!(app.is_finished());
     }
 
     #[test]

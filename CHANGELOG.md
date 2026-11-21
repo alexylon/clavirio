@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `n` on the results screen of a practice starts the same practice with new text (after a weak-key drill, with the same keys); `r` still retypes the same text
+
 ### Changed
 - A lesson is passed at 95% accuracy, and the results screen says whether it was. Below that, the menu and the next start stay on the lesson instead of moving on; `n` still goes to the next one
 

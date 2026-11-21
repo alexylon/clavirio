@@ -720,9 +720,16 @@ fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
         Span::styled("w", Style::new().fg(tc.accent).bold()),
         Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
     ];
-    if app.has_next_lesson() {
+    let n_action = if app.has_next_lesson() {
+        Some(" next  ")
+    } else if app.has_new_text() {
+        Some(" new text  ")
+    } else {
+        None
+    };
+    if let Some(label) = n_action {
         actions.push(Span::styled("n", Style::new().fg(tc.accent).bold()));
-        actions.push(Span::styled(" next  ", Style::new().fg(tc.dim_text)));
+        actions.push(Span::styled(label, Style::new().fg(tc.dim_text)));
     }
     actions.extend_from_slice(&[
         Span::styled("Esc", Style::new().fg(tc.accent).bold()),

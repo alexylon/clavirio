@@ -231,7 +231,7 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 |-----|--------|
 | `r` | Restart |
 | `w` | Practice weak keys |
-| `n` | Next lesson (lessons mode) |
+| `n` | Next lesson, or the same practice with new text (not after the last lesson or a file) |
 | `Esc` | Back to menu |
 
 ### Pause Menu
