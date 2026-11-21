@@ -228,9 +228,10 @@ impl Document {
         Ok(doc)
     }
 
-    pub fn load(raw_path: &str) -> Result<Self, String> {
-        let (_, text) = read_text_file(raw_path)?;
-        Self::from_text(&text)
+    /// The text of the file at `raw_path`, and the file's full path
+    pub fn load(raw_path: &str) -> Result<(Self, String), String> {
+        let file = read_text_file(raw_path)?;
+        Ok((Self::from_text(&file.text)?, file.full_path))
     }
 
     pub fn reset(&mut self) {
@@ -312,9 +313,16 @@ impl Document {
     }
 }
 
-/// The full path and the text of a file the user gave, which must be an
-/// ordinary UTF-8 text file of up to 1 MB
-fn read_text_file(raw_path: &str) -> Result<(PathBuf, String), String> {
+/// A text file the user gave
+struct TextFile {
+    /// With links followed, so it tells files of the same name apart in the
+    /// history, and one file reached by other paths, such as `..`, keeps one best
+    full_path: String,
+    text: String,
+}
+
+/// The file at `raw_path`, which must be an ordinary UTF-8 text file of up to 1 MB
+fn read_text_file(raw_path: &str) -> Result<TextFile, String> {
     if raw_path.is_empty() {
         return Err("No file path given".into());
     }
@@ -363,7 +371,11 @@ fn read_text_file(raw_path: &str) -> Result<(PathBuf, String), String> {
         return Err(not_text());
     }
 
-    Ok((resolved, content))
+    let full_path = fs::canonicalize(&resolved).unwrap_or(resolved);
+    Ok(TextFile {
+        full_path: full_path.to_string_lossy().into_owned(),
+        text: content,
+    })
 }
 
 /// The file name in `path`, which names the sessions typed from the file
@@ -378,27 +390,22 @@ fn file_label(path: &str) -> String {
 /// The words of a text file, split at spaces and line breaks and cleaned as a
 /// loaded file is, for random words and timed practice named after the file
 pub fn load_word_list(path: &str) -> Result<WordSource, String> {
-    let (resolved, text) = read_text_file(path)?;
-    // One file reached by other paths, such as `..` or a link, keeps one best
-    let full_path = fs::canonicalize(&resolved).unwrap_or(resolved);
-    let words: Vec<String> = text
+    let file = read_text_file(path)?;
+    let words: Vec<String> = file
+        .text
         .split_whitespace()
         .map(Document::typable_line)
         .collect();
     let has_words = words.iter().any(|word| word.width() > 0);
-    CustomList::new(
-        file_label(path),
-        full_path.to_string_lossy().into_owned(),
-        words,
-    )
-    .map(WordSource::Custom)
-    .ok_or_else(|| {
-        if has_words {
-            format!("Every word in the file is wider than a line ({MAX_WORD_WIDTH} columns)")
-        } else {
-            "The file has no words".to_string()
-        }
-    })
+    CustomList::new(file_label(path), file.full_path, words)
+        .map(WordSource::Custom)
+        .ok_or_else(|| {
+            if has_words {
+                format!("Every word in the file is wider than a line ({MAX_WORD_WIDTH} columns)")
+            } else {
+                "The file has no words".to_string()
+            }
+        })
 }
 
 /// `part` as a percentage of `whole`, or `None` when `whole` is 0
@@ -1296,7 +1303,7 @@ impl App {
     pub fn load_file(&mut self, path: &str) {
         let path = path.trim();
         match Document::load(path) {
-            Ok(doc) => {
+            Ok((doc, full_path)) => {
                 self.save_before_leaving();
                 self.document = Some(doc);
                 self.error = None;
@@ -1304,8 +1311,8 @@ impl App {
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Practice;
                 self.practice_start = None;
-                self.lesson_id = file_label(path);
-                self.lesson_title = self.lesson_id.clone();
+                self.lesson_id = full_path;
+                self.lesson_title = file_label(path);
             }
             Err(e) => self.error = Some(e),
         }
@@ -1828,15 +1835,20 @@ mod tests {
     }
 
     #[test]
-    fn load_file_names_the_session_without_spaces_around_the_path() {
+    fn load_file_keys_the_session_by_full_path_without_spaces_around_it() {
         let path = std::env::temp_dir().join(format!("clavirio-test-{}.txt", std::process::id()));
         fs::write(&path, "abc").unwrap();
+        let full_path = fs::canonicalize(&path).unwrap();
         let mut app = App::new();
         app.load_file(&format!(" {} ", path.display()));
         let _ = fs::remove_file(&path);
 
         assert!(app.document.is_some());
-        assert_eq!(app.lesson_id, path.file_name().unwrap().to_string_lossy());
+        assert_eq!(app.lesson_id, full_path.to_string_lossy());
+        assert_eq!(
+            app.lesson_title,
+            path.file_name().unwrap().to_string_lossy()
+        );
 
         app.load_file("  ");
         assert_eq!(app.error.as_deref(), Some("No file path given"));
@@ -2238,7 +2250,7 @@ mod tests {
     fn load_real_file() {
         let result = Document::load("sample.txt");
         assert!(result.is_ok());
-        let doc = result.unwrap();
+        let (doc, _) = result.unwrap();
         assert_eq!(doc.progress, Progress::Active);
         assert!(!doc.current_line.is_empty());
     }
@@ -2658,7 +2670,7 @@ mod tests {
         assert!(!app.searching);
         assert!(app.error.is_none());
         assert!(app.document.is_some());
-        assert_eq!(app.lesson_id, "sample.txt");
+        assert_eq!(app.lesson_title, "sample.txt");
     }
 
     // --- errors shown over a session ---
