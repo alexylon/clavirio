@@ -31,10 +31,16 @@ use ui::{compute_regions, draw, keyboard_fits};
 // is generated
 const MAX_WORDS: u64 = 10_000;
 const MAX_SECONDS: u64 = 3_600;
+/// `-w` and `-t`, one of which `-l` needs
+const PRACTICE_ARGS: &str = "practice";
 
 /// A terminal typing tutor with virtual keyboard, built-in lessons, and session tracking
 #[derive(Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about,
+    group(clap::ArgGroup::new(PRACTICE_ARGS).args(["words", "time"]).multiple(true))
+)]
 struct Cli {
     /// File path to load as typing text
     #[arg(short, long)]
@@ -52,9 +58,15 @@ struct Cli {
     #[arg(short, long, value_parser = clap::value_parser!(u64).range(1..=MAX_SECONDS))]
     time: Option<u64>,
 
-    /// Word list: "200", "1k", "rust", "python", "javascript"/"js", "go", "c"/"cpp", "java", "html"/"css"
-    #[arg(short, long, default_value = "200", value_parser = parse_word_list)]
-    list: words::WordList,
+    #[arg(
+        short,
+        long,
+        default_value = "200",
+        value_parser = parse_word_list,
+        requires = PRACTICE_ARGS,
+        help = list_help()
+    )]
+    list: words::WordSource,
 
     /// Include punctuation in word practice (this run only)
     #[arg(short, long)]
@@ -65,21 +77,35 @@ struct Cli {
     numbers: bool,
 }
 
-fn parse_word_list(s: &str) -> std::result::Result<words::WordList, String> {
-    match s {
-        "200" => Ok(words::WordList::English200),
-        "1k" => Ok(words::WordList::English1k),
-        "rust" => Ok(words::WordList::Rust),
-        "python" => Ok(words::WordList::Python),
-        "javascript" | "js" => Ok(words::WordList::JavaScript),
-        "go" => Ok(words::WordList::Go),
-        "c" | "cpp" | "c++" => Ok(words::WordList::CCpp),
-        "java" => Ok(words::WordList::Java),
-        "html" | "css" => Ok(words::WordList::HtmlCss),
-        _ => Err(format!(
-            "Unknown word list '{s}'. Use '200', '1k', 'rust', 'python', 'javascript', 'go', 'c', 'java', or 'html'."
-        )),
+/// The built-in lists, each by the names `names_of` gives, quoted and joined by
+/// slashes
+fn list_names(names_of: impl Fn(words::WordList) -> &'static [&'static str]) -> String {
+    words::WordList::all()
+        .iter()
+        .map(|&list| {
+            let quoted: Vec<String> = names_of(list).iter().map(|n| format!("\"{n}\"")).collect();
+            quoted.join("/")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn list_help() -> String {
+    format!(
+        "Word list for -w or -t: {}, or the path of a file of words",
+        list_names(words::WordList::names)
+    )
+}
+
+/// A built-in list by its name, or else the words of the file at that path
+fn parse_word_list(s: &str) -> std::result::Result<words::WordSource, String> {
+    if let Some(list) = words::WordList::from_name(s) {
+        return Ok(list.into());
     }
+    app::load_word_list(s).map_err(|e| {
+        let main_name = |list: words::WordList| list.names().get(..1).unwrap_or_default();
+        format!("{e}\nThe built-in lists are {}", list_names(main_name))
+    })
 }
 
 fn main() -> Result<()> {
@@ -376,6 +402,27 @@ mod tests {
         assert!(parses("-w", MAX_WORDS) && parses("-t", MAX_SECONDS));
         assert!(!parses("-w", 0) && !parses("-w", MAX_WORDS + 1));
         assert!(!parses("-t", 0) && !parses("-t", MAX_SECONDS + 1));
+    }
+
+    #[test]
+    fn list_needs_words_or_time() {
+        let parses = |args: &[&str]| Cli::try_parse_from([&["clavirio"], args].concat()).is_ok();
+
+        assert!(parses(&[]) && parses(&["-w", "-l", "1k"]) && parses(&["-t", "30", "-l", "go"]));
+        assert!(!parses(&["-l", "1k"]) && !parses(&["-f", "notes.txt", "-l", "1k"]));
+    }
+
+    #[test]
+    fn word_list_names_come_before_paths() {
+        assert!(matches!(
+            parse_word_list("js"),
+            Ok(words::WordSource::BuiltIn(words::WordList::JavaScript))
+        ));
+        let error = parse_word_list("no-such-list").err().unwrap_or_default();
+        assert!(error.starts_with("File not found"), "{error}");
+        let (_, names) = error.split_once('\n').unwrap_or_default();
+        let shown = words::WordList::all().len();
+        assert_eq!(names.matches('"').count(), shown * 2, "{error}");
     }
 
     #[test]

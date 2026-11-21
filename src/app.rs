@@ -11,7 +11,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use crate::input::InputEvent;
 use crate::keyboard::{GridCoord, Keyboard, ShiftKind};
 use crate::settings::{KeyboardLayout, Theme};
-use crate::words::WordList;
+use crate::words::{CustomList, MAX_WORD_WIDTH, WordList, WordSource};
 
 fn chrono_now() -> String {
     let now = OffsetDateTime::now_utc()
@@ -81,8 +81,8 @@ const ZEN: PracticeKind = PracticeKind {
 /// How a practice was started, so `n` can start it again with new text
 #[derive(Clone)]
 enum PracticeStart {
-    Words(WordList, usize),
-    Timed(u64, WordList),
+    Words(WordSource, usize),
+    Timed(u64, WordSource),
     WeakKeys(Vec<char>),
     Special(StartFn),
 }
@@ -91,27 +91,31 @@ const WORD_PRACTICE_PREFIX: &str = "words_";
 const TIMED_PRACTICE_PREFIX: &str = "timed_";
 /// Between the seconds and the word list in a timed practice id
 const TIMED_PRACTICE_SEPARATOR: &str = "s_";
-
-fn list_slug(list: WordList) -> String {
-    list.label().replace(['/', ' '], "_")
+/// The list in a practice id: a custom one by its full path, which no built-in
+/// slug can be
+fn list_slug(list: &WordSource) -> String {
+    match list {
+        WordSource::BuiltIn(list) => list.label().replace(['/', ' '], "_"),
+        WordSource::Custom(custom) => custom.path.clone(),
+    }
 }
 
-fn word_practice_id(list: WordList) -> String {
+fn word_practice_id(list: &WordSource) -> String {
     format!("{WORD_PRACTICE_PREFIX}{}", list_slug(list))
 }
 
-fn timed_practice_id(secs: u64, list: WordList) -> String {
+fn timed_practice_id(secs: u64, list: &WordSource) -> String {
     format!(
         "{TIMED_PRACTICE_PREFIX}{secs}{TIMED_PRACTICE_SEPARATOR}{}",
         list_slug(list)
     )
 }
 
-fn word_practice_title(list: WordList) -> String {
+fn word_practice_title(list: &WordSource) -> String {
     format!("{} ({})", list.category(), list.label())
 }
 
-fn timed_practice_title(secs: u64, list: WordList) -> String {
+fn timed_practice_title(secs: u64, list: &WordSource) -> String {
     format!("{} ({secs}s · {})", list.category(), list.label())
 }
 
@@ -121,20 +125,20 @@ pub fn practice_title(id: &str) -> Option<String> {
     let list_with_slug = |slug: &str| {
         WordList::all()
             .iter()
-            .copied()
-            .find(|&list| list_slug(list) == slug)
+            .map(|&list| WordSource::from(list))
+            .find(|list| list_slug(list) == slug)
     };
     if let Some((kind, _)) = App::SPECIAL_PRACTICE.iter().find(|(kind, _)| kind.id == id) {
         return Some(kind.title.to_string());
     }
     if let Some(slug) = id.strip_prefix(WORD_PRACTICE_PREFIX) {
-        return list_with_slug(slug).map(word_practice_title);
+        return list_with_slug(slug).map(|list| word_practice_title(&list));
     }
     let (secs, slug) = id
         .strip_prefix(TIMED_PRACTICE_PREFIX)?
         .split_once(TIMED_PRACTICE_SEPARATOR)?;
     let secs = secs.parse().ok()?;
-    list_with_slug(slug).map(|list| timed_practice_title(secs, list))
+    list_with_slug(slug).map(|list| timed_practice_title(secs, &list))
 }
 
 #[derive(Debug, Clone)]
@@ -189,22 +193,25 @@ impl Document {
         }
     }
 
+    /// `raw`, a line without its line break, as it is typed
+    fn typable_line(raw: &str) -> String {
+        let mut line = String::new();
+        for ch in raw.chars() {
+            match Self::typed_form(ch) {
+                Some(typed) => line.push_str(typed),
+                None if !ch.is_control() => line.push(ch),
+                None => {}
+            }
+        }
+        // A letter and an accent written apart, as some macOS files do, become
+        // the one character a keyboard types
+        line.trim_end().nfc().collect()
+    }
+
     pub fn from_text(text: &str) -> Result<Self, String> {
         let lines: Vec<String> = text
             .split(['\n', '\r', Self::LINE_SEPARATOR, Self::PARAGRAPH_SEPARATOR])
-            .map(|raw| {
-                let mut line = String::new();
-                for ch in raw.chars() {
-                    match Self::typed_form(ch) {
-                        Some(typed) => line.push_str(typed),
-                        None if !ch.is_control() => line.push(ch),
-                        None => {}
-                    }
-                }
-                // A letter and an accent written apart, as some macOS files
-                // do, become the one character a keyboard types
-                line.trim_end().nfc().collect()
-            })
+            .map(Self::typable_line)
             .collect();
         if lines.iter().all(String::is_empty) {
             return Err("Text is empty".into());
@@ -222,54 +229,8 @@ impl Document {
     }
 
     pub fn load(raw_path: &str) -> Result<Self, String> {
-        if raw_path.is_empty() {
-            return Err("No file path given".into());
-        }
-        let expanded = expand_home(raw_path);
-        let resolved = if expanded.is_absolute() {
-            expanded
-        } else {
-            std::env::current_dir()
-                .map_err(|e| format!("Cannot resolve working directory: {e}"))?
-                .join(expanded)
-        };
-
-        let meta = fs::metadata(&resolved).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => format!("File not found: {}", resolved.display()),
-            _ => format!("Cannot read file: {e}"),
-        })?;
-        if meta.is_dir() {
-            return Err(format!("Not a file but a folder: {}", resolved.display()));
-        }
-        // A device or pipe, such as /dev/zero, could be read forever
-        if !meta.is_file() {
-            return Err(format!("Not an ordinary file: {}", resolved.display()));
-        }
-
-        const MAX_FILE_SIZE: u64 = 1_000_000;
-        if meta.len() > MAX_FILE_SIZE {
-            return Err(format!(
-                "File too large ({:.1} MB, max 1 MB)",
-                meta.len() as f64 / MAX_FILE_SIZE as f64
-            ));
-        }
-
-        let not_text = || {
-            format!(
-                "Not a text file, or not saved as UTF-8: {}",
-                resolved.display()
-            )
-        };
-        let content = fs::read_to_string(&resolved).map_err(|e| match e.kind() {
-            std::io::ErrorKind::InvalidData => not_text(),
-            _ => format!("Cannot read file: {e}"),
-        })?;
-        // Text never holds a NUL, but binary files that are valid UTF-8 often do
-        if content.contains('\0') {
-            return Err(not_text());
-        }
-
-        Self::from_text(&content)
+        let (_, text) = read_text_file(raw_path)?;
+        Self::from_text(&text)
     }
 
     pub fn reset(&mut self) {
@@ -349,6 +310,95 @@ impl Document {
             }
         }
     }
+}
+
+/// The full path and the text of a file the user gave, which must be an
+/// ordinary UTF-8 text file of up to 1 MB
+fn read_text_file(raw_path: &str) -> Result<(PathBuf, String), String> {
+    if raw_path.is_empty() {
+        return Err("No file path given".into());
+    }
+    let expanded = expand_home(raw_path);
+    let resolved = if expanded.is_absolute() {
+        expanded
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Cannot resolve working directory: {e}"))?
+            .join(expanded)
+    };
+
+    let meta = fs::metadata(&resolved).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => format!("File not found: {}", resolved.display()),
+        _ => format!("Cannot read file: {e}"),
+    })?;
+    if meta.is_dir() {
+        return Err(format!("Not a file but a folder: {}", resolved.display()));
+    }
+    // A device or pipe, such as /dev/zero, could be read forever
+    if !meta.is_file() {
+        return Err(format!("Not an ordinary file: {}", resolved.display()));
+    }
+
+    const BYTES_PER_MB: u64 = 1_000_000;
+    const MAX_FILE_MB: u64 = 1;
+    if meta.len() > MAX_FILE_MB * BYTES_PER_MB {
+        return Err(format!(
+            "File too large ({:.1} MB, max {MAX_FILE_MB} MB)",
+            meta.len() as f64 / BYTES_PER_MB as f64
+        ));
+    }
+
+    let not_text = || {
+        format!(
+            "Not a text file, or not saved as UTF-8: {}",
+            resolved.display()
+        )
+    };
+    let content = fs::read_to_string(&resolved).map_err(|e| match e.kind() {
+        std::io::ErrorKind::InvalidData => not_text(),
+        _ => format!("Cannot read file: {e}"),
+    })?;
+    // Text never holds a NUL, but binary files that are valid UTF-8 often do
+    if content.contains('\0') {
+        return Err(not_text());
+    }
+
+    Ok((resolved, content))
+}
+
+/// The file name in `path`, which names the sessions typed from the file
+fn file_label(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// The words of a text file, split at spaces and line breaks and cleaned as a
+/// loaded file is, for random words and timed practice named after the file
+pub fn load_word_list(path: &str) -> Result<WordSource, String> {
+    let (resolved, text) = read_text_file(path)?;
+    // One file reached by other paths, such as `..` or a link, keeps one best
+    let full_path = fs::canonicalize(&resolved).unwrap_or(resolved);
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(Document::typable_line)
+        .collect();
+    let has_words = words.iter().any(|word| word.width() > 0);
+    CustomList::new(
+        file_label(path),
+        full_path.to_string_lossy().into_owned(),
+        words,
+    )
+    .map(WordSource::Custom)
+    .ok_or_else(|| {
+        if has_words {
+            format!("Every word in the file is wider than a line ({MAX_WORD_WIDTH} columns)")
+        } else {
+            "The file has no words".to_string()
+        }
+    })
 }
 
 /// `part` as a percentage of `whole`, or `None` when `whole` is 0
@@ -1254,11 +1304,7 @@ impl App {
                 self.time_limit = None;
                 self.menu_mode = MenuMode::Practice;
                 self.practice_start = None;
-                self.lesson_id = Path::new(path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(path)
-                    .to_string();
+                self.lesson_id = file_label(path);
                 self.lesson_title = self.lesson_id.clone();
             }
             Err(e) => self.error = Some(e),
@@ -1287,31 +1333,33 @@ impl App {
         }
     }
 
-    pub fn start_word_practice(&mut self, list: WordList, count: usize) {
-        let text = self.generate_word_text(list, count);
+    pub fn start_word_practice(&mut self, list: impl Into<WordSource>, count: usize) {
+        let list = list.into();
+        let text = self.generate_word_text(&list, count);
         self.start_practice_from_text(
             &text,
-            &word_practice_id(list),
-            &word_practice_title(list),
+            &word_practice_id(&list),
+            &word_practice_title(&list),
             PracticeStart::Words(list, count),
         );
     }
 
-    pub fn start_timed_practice(&mut self, secs: u64, list: WordList) {
+    pub fn start_timed_practice(&mut self, secs: u64, list: impl Into<WordSource>) {
         const FASTEST_WPM: usize = 200;
         const SPARE_WORDS: usize = 20;
+        let list = list.into();
         let estimated_words = secs as usize * FASTEST_WPM / 60 + SPARE_WORDS;
-        let text = self.generate_word_text(list, estimated_words);
+        let text = self.generate_word_text(&list, estimated_words);
         self.start_practice_from_text(
             &text,
-            &timed_practice_id(secs, list),
-            &timed_practice_title(secs, list),
+            &timed_practice_id(secs, &list),
+            &timed_practice_title(secs, &list),
             PracticeStart::Timed(secs, list),
         );
         self.time_limit = Some(secs);
     }
 
-    fn generate_word_text(&self, list: WordList, count: usize) -> String {
+    fn generate_word_text(&self, list: &WordSource, count: usize) -> String {
         crate::words::generate_text_mixed(
             list,
             count,
@@ -1792,6 +1840,46 @@ mod tests {
 
         app.load_file("  ");
         assert_eq!(app.error.as_deref(), Some("No file path given"));
+    }
+
+    #[test]
+    fn word_list_file_is_practised_under_its_name_from_its_cleaned_words() {
+        let path =
+            std::env::temp_dir().join(format!("clavirio-test-words-{}.txt", std::process::id()));
+        fs::write(
+            &path,
+            "\u{feff}\n\u{201c}eins\u{201d}  zwei\n\u{ad}\ndrei\tvier\n",
+        )
+        .unwrap();
+        let list = load_word_list(&path.to_string_lossy());
+        let full_path = fs::canonicalize(&path).unwrap();
+        fs::write(&path, "\u{ad} \u{200b} \u{200d}\n").unwrap();
+        let empty = load_word_list(&path.to_string_lossy());
+        let _ = fs::remove_file(&path);
+        let name = path.file_name().unwrap().to_string_lossy();
+        let words_typed = |app: &App| -> Vec<String> {
+            let lines = &app.document.as_ref().unwrap().lines;
+            lines
+                .iter()
+                .flat_map(|l| l.split(' '))
+                .map(String::from)
+                .collect()
+        };
+
+        let mut app = App::new();
+        app.start_word_practice(list.unwrap(), 50);
+        assert_eq!(app.lesson_id, format!("words_{}", full_path.display()));
+        assert_eq!(app.lesson_title, format!("Random Words ({name})"));
+        app.start_new_text();
+        let typed = words_typed(&app);
+        assert_eq!(typed.len(), 50);
+        assert!(
+            typed
+                .iter()
+                .all(|w| ["\"eins\"", "zwei", "drei", "vier"].contains(&w.as_str())),
+            "{typed:?}"
+        );
+        assert_eq!(empty.err().as_deref(), Some("The file has no words"));
     }
 
     #[test]

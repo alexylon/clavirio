@@ -33,8 +33,8 @@ Below that, the menu and the next start stay on the lesson, and
 .B n
 on the finished screen still goes on to the next one.
 .PP
-Practice modes offer random words from the English 200 or 1k lists, code terms
-for several programming languages, timed sessions, your weak keys, common
+Practice modes offer random words from the English 200 or 1k lists or a file of
+your own, code terms for several programming languages, timed sessions, your weak keys, common
 bigrams, quotes, and Zen mode for free typing.
 .PP
 Without options,
@@ -77,6 +77,21 @@ and
 .BR java ,
 or
 .BR html " (or " css ).
+It needs
+.B \-w
+or
+.BR \-t .
+Any other
+.I list
+is read as the path of a UTF-8 text file of up to 1 MB, with words separated by
+spaces or new lines.
+Its words are picked at random like those of a built-in list and cleaned as for
+.BR \-f ;
+words wider than a line, 60 columns, are left out.
+The history names the session after the file, and the finished screen
+compares it with earlier sessions of the file at the same path.
+A file named like a built-in list needs a path, such as
+.IR ./go .
 .TP
 .BR \-p ", " \-\-punctuation
 Add punctuation to word or code practice, for this run only.
@@ -248,6 +263,10 @@ The folder that holds
 .TP
 .B clavirio \-t 30 \-l python
 A 30-second session with Python terms.
+.TP
+.B clavirio \-t 60 \-l words.txt
+A 60-second session with random words from
+.IR words.txt .
 .TP
 .B clavirio \-w \-p \-n
 100 random words with punctuation and numbers.

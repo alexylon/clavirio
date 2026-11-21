@@ -35,7 +35,7 @@ cargo test test_name           # Run a single test by name
 
 **Settings** (`settings.rs`): TOML config at `~/.clavirio/settings.toml`. Uses `#[serde(default)]` for backward compatibility. If the file can't be read at startup, the defaults are used and settings aren't saved during that run.
 
-**Words** (`words.rs`): English word lists (200 and 1k) embedded via `include_str!()`. Xorshift64 PRNG for random word selection, text generation with line wrapping. `WordList::all()` provides the menu entries.
+**Words** (`words.rs`): English word lists (200 and 1k) embedded via `include_str!()`. Xorshift64 PRNG for random word selection, text generation with line wrapping. `WordList::all()` provides the menu entries. `WordSource` is a built-in `WordList` or a `CustomList` of words read from a file given to `-l`.
 
 **History** (`history.rs`): JSON array of `SessionRecord` at `~/.clavirio/history.json`. Tracks WPM, accuracy, duration, completion status, lesson ID.
 

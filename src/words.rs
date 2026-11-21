@@ -9,6 +9,14 @@ const JAVA: &str = include_str!("../assets/words/java.txt");
 const HTML_CSS: &str = include_str!("../assets/words/html_css.txt");
 const QUOTES: &str = include_str!("../assets/quotes/english.txt");
 
+use std::sync::Arc;
+
+use unicode_normalization::char::is_combining_mark;
+use unicode_width::UnicodeWidthStr;
+
+const WORDS_CATEGORY: &str = "Random Words";
+const CODE_CATEGORY: &str = "Code";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WordList {
     English200,
@@ -52,15 +60,37 @@ impl WordList {
         }
     }
 
+    /// The names `-l` takes for the list, the first being the one shown in messages
+    pub fn names(self) -> &'static [&'static str] {
+        match self {
+            Self::English200 => &["200"],
+            Self::English1k => &["1k"],
+            Self::Rust => &["rust"],
+            Self::Python => &["python"],
+            Self::JavaScript => &["javascript", "js"],
+            Self::Go => &["go"],
+            Self::CCpp => &["c", "cpp", "c++"],
+            Self::Java => &["java"],
+            Self::HtmlCss => &["html", "css"],
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::all()
+            .iter()
+            .copied()
+            .find(|list| list.names().contains(&name))
+    }
+
     pub fn is_code(self) -> bool {
         !matches!(self, Self::English200 | Self::English1k)
     }
 
     pub fn category(self) -> &'static str {
         if self.is_code() {
-            "Code"
+            CODE_CATEGORY
         } else {
-            "Random Words"
+            WORDS_CATEGORY
         }
     }
 
@@ -76,6 +106,78 @@ impl WordList {
             Self::Java,
             Self::HtmlCss,
         ]
+    }
+}
+
+/// Words loaded from a file for random words and timed practice
+#[derive(Debug, Clone)]
+pub struct CustomList {
+    /// The file name, shown as the list's label
+    name: String,
+    /// The file's full path, which tells files of the same name apart in the history
+    pub path: String,
+    /// Shared, as `n` starts the practice again from the same words
+    words: Arc<[String]>,
+}
+
+/// The widest word a custom list keeps, as a file in a language written without
+/// spaces would give a whole line as one word
+pub const MAX_WORD_WIDTH: usize = LINE_WIDTH;
+
+impl CustomList {
+    /// Words that can't be seen, such as a lone joiner, or are wider than
+    /// `MAX_WORD_WIDTH` are left out; `None` if no word is left
+    pub fn new(name: String, path: String, words: Vec<String>) -> Option<Self> {
+        let words: Vec<String> = words
+            .into_iter()
+            .filter(|word| (1..=MAX_WORD_WIDTH).contains(&word.width()))
+            .collect();
+        (!words.is_empty()).then(|| Self {
+            name,
+            path,
+            words: words.into(),
+        })
+    }
+}
+
+/// Where random words and timed practice take their words from
+#[derive(Debug, Clone)]
+pub enum WordSource {
+    BuiltIn(WordList),
+    Custom(CustomList),
+}
+
+impl From<WordList> for WordSource {
+    fn from(list: WordList) -> Self {
+        Self::BuiltIn(list)
+    }
+}
+
+impl WordSource {
+    fn words(&self) -> Vec<&str> {
+        match self {
+            Self::BuiltIn(list) => list.words(),
+            Self::Custom(list) => list.words.iter().map(String::as_str).collect(),
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            Self::BuiltIn(list) => list.label(),
+            Self::Custom(list) => &list.name,
+        }
+    }
+
+    /// A custom list counts as words, not code
+    fn is_code(&self) -> bool {
+        matches!(self, Self::BuiltIn(list) if list.is_code())
+    }
+
+    pub fn category(&self) -> &'static str {
+        match self {
+            Self::BuiltIn(list) => list.category(),
+            Self::Custom(_) => WORDS_CATEGORY,
+        }
     }
 }
 
@@ -110,15 +212,20 @@ const LINE_WIDTH: usize = 60;
 fn wrap_words<I: IntoIterator<Item = S>, S: AsRef<str>>(words: I) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut current_line = String::new();
+    let mut current_width = 0;
     for word in words {
         let word = word.as_ref();
-        if !current_line.is_empty() && current_line.len() + 1 + word.len() > LINE_WIDTH {
+        let width = word.width();
+        if !current_line.is_empty() && current_width + 1 + width > LINE_WIDTH {
             lines.push(std::mem::take(&mut current_line));
+            current_width = 0;
         }
         if !current_line.is_empty() {
             current_line.push(' ');
+            current_width += 1;
         }
         current_line.push_str(word);
+        current_width += width;
     }
     if !current_line.is_empty() {
         lines.push(current_line);
@@ -186,7 +293,7 @@ const NUMBER_CHANCE_PCT: usize = 15;
 const PUNCTUATION_CHANCE_PCT: usize = 20;
 
 pub fn generate_text_mixed(
-    list: WordList,
+    list: &WordSource,
     word_count: usize,
     punctuation: bool,
     numbers: bool,
@@ -206,16 +313,23 @@ pub fn generate_text_mixed(
             }
 
             if punctuation && is_plain(word) && rng.usize(PCT_BASE) < PUNCTUATION_CHANCE_PCT {
-                // A hyphen joins two English words, as often as each mark is
-                // added, but would give nonsense like `fn-impl` in code
-                if !list.is_code() && rng.usize(PUNCTUATION_MARKS.len() + 1) == 0 {
-                    let other = base_pool[rng.usize(base_pool.len())];
-                    return format!("{word}{HYPHEN}{other}");
+                // A hyphen joins two words, as often as each mark is added, but
+                // would give nonsense like `fn-impl` in code
+                let joined = (!list.is_code() && rng.usize(PUNCTUATION_MARKS.len() + 1) == 0)
+                    .then(|| base_pool[rng.usize(base_pool.len())])
+                    .filter(|other| is_plain(other))
+                    .map(|other| format!("{word}{HYPHEN}{other}"))
+                    .filter(|joined| joined.width() <= LINE_WIDTH);
+                let punctuated = joined.unwrap_or_else(|| {
+                    match PUNCTUATION_MARKS[rng.usize(PUNCTUATION_MARKS.len())] {
+                        Mark::After(mark) => format!("{word}{mark}"),
+                        Mark::Around(punct) => with_punctuation(word, punct),
+                    }
+                });
+                // A word from a custom list can be nearly as wide as a line
+                if punctuated.width() <= LINE_WIDTH {
+                    return punctuated;
                 }
-                return match PUNCTUATION_MARKS[rng.usize(PUNCTUATION_MARKS.len())] {
-                    Mark::After(mark) => format!("{word}{mark}"),
-                    Mark::Around(punct) => with_punctuation(word, punct),
-                };
             }
 
             word.to_string()
@@ -225,9 +339,12 @@ pub fn generate_text_mixed(
     wrap_words(words)
 }
 
-/// A word or identifier, not a code symbol such as `+=`, which is left as it is
+/// A word or identifier in any script, not a code symbol such as `+=` or a word
+/// that has punctuation already, which is left as it is. Marks such as accents
+/// written apart count, as some scripts have no other way to write them.
 fn is_plain(word: &str) -> bool {
-    word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    word.chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || is_combining_mark(c))
 }
 
 const BIGRAMS: &[&str] = &[
@@ -649,7 +766,7 @@ mod tests {
 
     #[test]
     fn mixed_text_produces_correct_word_count() {
-        let text = generate_text_mixed(WordList::English200, 50, true, true);
+        let text = generate_text_mixed(&WordList::English200.into(), 50, true, true);
         let count: usize = text.lines().map(|l| l.split_whitespace().count()).sum();
         assert_eq!(count, 50);
     }
@@ -658,7 +775,7 @@ mod tests {
     fn mixed_text_punctuates_only_plain_words() {
         for list in [WordList::English200, WordList::Rust] {
             let pool = list.words();
-            let text = generate_text_mixed(list, 500, true, false);
+            let text = generate_text_mixed(&list.into(), 500, true, false);
             assert!(text.split_whitespace().any(|token| !pool.contains(&token)));
             for token in text.split_whitespace() {
                 if pool.contains(&token) {
@@ -675,8 +792,56 @@ mod tests {
     }
 
     #[test]
+    fn custom_list_text_wraps_by_width() {
+        let words = ["слово", "дом"];
+        let too_wide = "x".repeat(MAX_WORD_WIDTH + 1);
+        let given = [words[0], words[1], "", "\u{200d}", &too_wide].map(String::from);
+        let list = WordSource::Custom(
+            CustomList::new("w.txt".into(), "/w.txt".into(), given.to_vec()).unwrap(),
+        );
+
+        let text = generate_text_mixed(&list, 200, false, false);
+        assert!(text.split_whitespace().all(|w| words.contains(&w)));
+        let lines: Vec<&str> = text.lines().collect();
+        let longest_word = words.iter().map(|w| w.width()).max().unwrap();
+        for line in &lines[..lines.len() - 1] {
+            assert!(line.width() <= LINE_WIDTH);
+            assert!(line.width() + 1 + longest_word > LINE_WIDTH, "{line}");
+        }
+        assert!(CustomList::new("w.txt".into(), "/w.txt".into(), vec![too_wide]).is_none());
+
+        let widest = "x".repeat(MAX_WORD_WIDTH);
+        let list = WordSource::Custom(
+            CustomList::new("w.txt".into(), "/w.txt".into(), vec![widest]).unwrap(),
+        );
+        let text = generate_text_mixed(&list, 50, true, false);
+        assert!(text.lines().all(|line| line.width() <= LINE_WIDTH));
+    }
+
+    #[test]
+    fn custom_list_punctuates_words_in_any_script_but_not_punctuated_ones() {
+        const HINDI: &str = "\u{915}\u{94d}\u{92f}\u{93e}";
+        const QUOTED: &str = "\u{bf}eins";
+        let words = [HINDI, QUOTED].map(String::from).to_vec();
+        let list =
+            WordSource::Custom(CustomList::new("w.txt".into(), "/w.txt".into(), words).unwrap());
+
+        let text = generate_text_mixed(&list, 500, true, false);
+        assert!(
+            text.split_whitespace()
+                .any(|w| w != HINDI && w.contains(HINDI))
+        );
+        let with_quoted: Vec<&str> = text
+            .split_whitespace()
+            .filter(|w| w.contains(QUOTED))
+            .collect();
+        assert!(!with_quoted.is_empty());
+        assert!(with_quoted.iter().all(|&w| w == QUOTED));
+    }
+
+    #[test]
     fn mixed_text_injects_punctuation_and_numbers() {
-        let text = generate_text_mixed(WordList::English200, 200, true, true);
+        let text = generate_text_mixed(&WordList::English200.into(), 200, true, true);
         let has_punct = text
             .chars()
             .any(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '"' | '-'));

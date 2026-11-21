@@ -53,7 +53,7 @@ Clavirio's approach to practicing key movements; the study did not test these le
 ## Features
 
 - **Lessons:** 27 drills covering the home, top, and bottom rows, followed by numbers and symbols. Lessons 1–21 adapt to your layout; lessons 22–27 are shared.
-- **Practice:** Random words from the English 200 or 1k lists; code terms for Rust, Python, JavaScript, Go, C/C++, Java, and HTML/CSS; 30- or 60-second sessions; weak keys; common bigrams; quotes; and Zen mode for free typing.
+- **Practice:** Random words from the English 200 or 1k lists, or from a file of your own with `-l`; code terms for Rust, Python, JavaScript, Go, C/C++, Java, and HTML/CSS; 30- or 60-second sessions; weak keys; common bigrams; quotes; and Zen mode for free typing.
 - **Punctuation and numbers:** Optionally add them to random word or code practice. Use `5` and `6` in the practice menu to toggle them.
 - **Live feedback:** WPM, accuracy, errors, time (elapsed, or remaining in timed sessions), and line progress appear in a single status row. The results screen shows a graph of WPM over time, and colours each key typed by its accuracy: filled below 90%, orange below 95%, and blue from 95%, the mark a lesson is passed at.
 - **Keyboard and layouts:** Switch between QWERTY, Dvorak, and Colemak. The virtual keyboard highlights the next key and shows finger hints: **P**inky, **R**ing, **M**iddle, **I**ndex, and **T**humb.
@@ -176,6 +176,7 @@ clavirio -w 50 -l 1k            # 50 random words (english 1k)
 clavirio -w -l rust             # 100 code tokens (rust)
 clavirio -t 60                  # 60-second timed session
 clavirio -t 30 -l python        # 30-second timed (python)
+clavirio -t 60 -l words.txt     # 60-second timed, with your own words
 clavirio -w -p -n               # words with punctuation and numbers
 clavirio -f path/to/file.txt    # custom file
 ```
@@ -184,7 +185,7 @@ clavirio -f path/to/file.txt    # custom file
 |------|-------------|
 | `-w, --words [N]` | Practice with 1–10,000 random words (default: 100) |
 | `-t, --time N` | Practice for 1–3,600 seconds |
-| `-l, --list LIST` | Choose a word or code list (default: `200`) |
+| `-l, --list LIST` | Choose a word or code list, or a file of your own words, for `-w` or `-t` (default: `200`) |
 | `-p, --punctuation` | Add punctuation to word or code practice for this run |
 | `-n, --numbers` | Add numbers to word or code practice for this run |
 | `-f, --file FILE` | Load a custom text file |
@@ -192,6 +193,8 @@ clavirio -f path/to/file.txt    # custom file
 | `-V, --version` | Print version |
 
 Lists: `200`, `1k`, `rust`, `python`, `javascript` (`js`), `go`, `c` (`cpp`, `c++`), `java`, and `html` (`css`). Names in parentheses are aliases.
+
+Any other value is read as the path of a UTF-8 text file of up to 1 MB, with words separated by spaces or new lines. Its words are picked at random like a built-in list's, work with `-p` and `-n`, and are cleaned like a custom text file; words wider than a line (60 columns) are left out. The history names the session after the file, and the results screen compares it with earlier sessions of the file at the same path. A file named like a built-in list needs a path, such as `./go`.
 
 Only one of `-t`, `-w` and `-f` is used: `-t` wins over `-w`, and `-w` over `-f`.
 
