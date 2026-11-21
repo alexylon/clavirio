@@ -4,7 +4,7 @@
 
 ### Added
 - `n` on the results screen of a practice starts the same practice with new text (after a weak-key drill, with the same keys); `r` still retypes the same text
-- The results screen colours each key on the keyboard by its accuracy in the session: filled below 90%, orange below the 95% pass mark, and blue from it; keys not typed are dim
+- The results screen colours each key on the keyboard by its accuracy in the session, blue from the 95% pass mark and orange below it, with a legend under the results; keys not typed are dim, and the weakest keys listed are coloured the same way
 - The results screen shows the best earlier wpm for the same lesson or practice on the same layout, or "New best!" when it is beaten; a lesson attempt counts only when it is passed, and a file loaded with `-f` or `Ctrl-F` is compared only with the file at the same path. History records now keep the layout, and older ones, typed on a layout that isn't known, aren't compared
 - `-l` also takes the path of a text file of words separated by spaces or new lines, for random words and timed practice in any language, for example `clavirio -t 60 -l words.txt`. The words are picked like a built-in list's, work with `-p` and `-n`, and are cleaned like a custom text file, which can be up to 1 MB; words wider than a line (60 columns) are left out. The history names the session after the file, and the results screen compares it with earlier sessions of the file at the same path
 

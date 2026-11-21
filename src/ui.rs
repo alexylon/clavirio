@@ -52,8 +52,6 @@ const MAX_KEY_WIDTH: u16 = 9;
 const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
 const WEAKEST_KEYS_SHOWN: usize = 5;
-/// Below this accuracy, in percent as shown, a key is filled on the results keyboard
-const WEAK_KEY_ACCURACY: f64 = 90.0;
 const ELLIPSIS: &str = "\u{2026}";
 const PROMPT_CURSOR: &str = "\u{258c}";
 /// The columns before a menu item's label: its `▸` marker and a space each side
@@ -727,7 +725,21 @@ fn best_line(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
     Some(line)
 }
 
-fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
+/// What the colours of the results keyboard mean
+fn key_accuracy_legend(tc: &ThemeColors) -> Line<'static> {
+    let pass = crate::lessons::PASS_ACCURACY;
+    Line::from(vec![
+        Span::styled("Key accuracy: ", Style::new().fg(tc.dim_text)),
+        Span::styled(format!("{pass:.0}%+"), Style::new().fg(tc.correct).bold()),
+        Span::styled("  ", Style::new().fg(tc.dim_text)),
+        Span::styled(
+            format!("below {pass:.0}%"),
+            Style::new().fg(tc.incorrect).bold(),
+        ),
+    ])
+}
+
+fn results_lines(app: &App, tc: &ThemeColors, keyboard_shown: bool) -> Vec<Line<'static>> {
     let score = Line::from(vec![
         Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
         Span::styled(
@@ -788,13 +800,20 @@ fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
             } else {
                 ch.to_string()
             };
-            spans.push(Span::styled(label, Style::new().fg(tc.incorrect).bold()));
+            let accuracy = f64::from(*correct) * 100.0 / f64::from(*total);
+            spans.push(Span::styled(
+                label,
+                Style::new().fg(accuracy_color(accuracy, tc)).bold(),
+            ));
             spans.push(Span::styled(
                 format!(" {correct}/{total}"),
                 Style::new().fg(tc.dim_text),
             ));
         }
         lines.push(Line::from(spans));
+    }
+    if keyboard_shown {
+        lines.push(key_accuracy_legend(tc));
     }
     lines
 }
@@ -830,7 +849,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
         TYPING_PANEL_ROWS
     };
     let results = if app.is_finished() {
-        results_lines(app, tc)
+        results_lines(app, tc, app.show_keyboard && keyboard_fits(frame.area()))
     } else {
         Vec::new()
     };
@@ -1477,7 +1496,6 @@ struct KeyColors {
     border: Color,
     label: Color,
     secondary: Color,
-    fill: Option<Color>,
 }
 
 fn typing_key_colors(
@@ -1497,33 +1515,31 @@ fn typing_key_colors(
         border,
         label,
         secondary,
-        fill: None,
     }
 }
 
-/// A badly typed key is filled, so it stands out without telling colours apart
+/// Blue from the pass mark, orange below it, as the results legend says
+fn accuracy_color(accuracy: f64, tc: &ThemeColors) -> Color {
+    if crate::lessons::is_passed(accuracy) {
+        tc.correct
+    } else {
+        tc.incorrect
+    }
+}
+
 fn accuracy_key_colors(accuracy: Option<f64>, tc: &ThemeColors) -> KeyColors {
     let outlined = |color| KeyColors {
         border: color,
         label: color,
         secondary: tc.dim_text,
-        fill: None,
     };
     match accuracy {
         None => KeyColors {
             border: tc.dim_border,
             label: tc.dim_text,
             secondary: tc.dim_text,
-            fill: None,
         },
-        Some(acc) if acc.round_ties_even() < WEAK_KEY_ACCURACY => KeyColors {
-            border: tc.incorrect,
-            label: tc.cursor_fg,
-            secondary: tc.cursor_fg,
-            fill: Some(tc.incorrect),
-        },
-        Some(acc) if crate::lessons::is_passed(acc) => outlined(tc.correct),
-        Some(_) => outlined(tc.incorrect),
+        Some(acc) => outlined(accuracy_color(acc, tc)),
     }
 }
 
@@ -1566,13 +1582,10 @@ fn draw_keyboard(
                     tc,
                 ),
             };
-            let mut block = Block::new()
+            let block = Block::new()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::new().fg(colors.border));
-            if let Some(fill) = colors.fill {
-                block = block.style(Style::new().bg(fill));
-            }
 
             let inner = block.inner(cell);
             frame.render_widget(block, cell);
@@ -1734,13 +1747,22 @@ mod tests {
         assert!(
             cells
                 .iter()
-                .any(|c| c.symbol() == "J" && c.bg == tc.incorrect)
+                .any(|c| c.symbol() == "J" && c.fg == tc.incorrect)
         );
         assert!(
             !cells
                 .iter()
-                .any(|c| c.fg == tc.correct || c.fg == tc.finger_label)
+                .any(|c| c.fg == tc.correct || c.fg == tc.finger_label || c.bg != Color::Reset)
         );
+        let shows_legend = |app: &App| {
+            let regions = compute_regions(area, app.show_keyboard);
+            let rows = render(area.width, area.height, |frame| draw(frame, app, &regions));
+            rows.iter()
+                .any(|row| row.contains("Key accuracy: 95%+  below 95%"))
+        };
+        assert!(shows_legend(&app));
+        app.show_keyboard = false;
+        assert!(!shows_legend(&app));
     }
 
     #[test]
