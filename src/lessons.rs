@@ -140,6 +140,10 @@ pub fn is_passed(accuracy: f64) -> bool {
     accuracy.round_ties_even() >= PASS_ACCURACY
 }
 
+pub fn is_lesson_id(id: &str) -> bool {
+    LESSON_META.iter().any(|&(lesson_id, _)| lesson_id == id)
+}
+
 pub fn lessons_for_layout(layout: KeyboardLayout) -> Vec<&'static Lesson> {
     let specific = match layout {
         KeyboardLayout::Qwerty => QWERTY_LESSONS,

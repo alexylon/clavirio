@@ -458,6 +458,8 @@ pub struct App {
     last_sample_time: Option<Instant>,
     ignore_keys_until: Option<Instant>,
     save_message: Option<String>,
+    /// The best wpm of the earlier sessions the finished one is compared with
+    pub earlier_best_wpm: Option<f64>,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
     /// For each zen line, whether it was started by a line break of its own
@@ -520,6 +522,7 @@ impl App {
             last_sample_time: None,
             ignore_keys_until: None,
             save_message: None,
+            earlier_best_wpm: None,
             zen_mode: false,
             zen_lines: Vec::new(),
             zen_wrapped: Vec::new(),
@@ -585,7 +588,7 @@ impl App {
             return;
         }
         let elapsed = self.elapsed_secs();
-        let session = crate::history::save_session(crate::history::SessionRecord {
+        let saved = crate::history::save_session(crate::history::SessionRecord {
             timestamp: chrono_now(),
             wpm: self.wpm(),
             accuracy: self.accuracy(),
@@ -595,8 +598,13 @@ impl App {
             completed,
             id: self.lesson_id.clone(),
             title: self.lesson_title.clone(),
+            layout: self.layout,
+        })
+        .map(|saved| {
+            self.earlier_best_wpm = saved.earlier_best_wpm;
+            saved.notice
         });
-        self.note_save(session, "this session");
+        self.note_save(saved, "this session");
         self.save_key_stats();
     }
 
@@ -758,6 +766,7 @@ impl App {
         self.last_sample_count = 0;
         self.last_sample_time = None;
         self.ignore_keys_until = None;
+        self.earlier_best_wpm = None;
         self.zen_mode = false;
         self.zen_lines.clear();
         self.zen_wrapped.clear();
@@ -2242,6 +2251,7 @@ mod tests {
                 completed: true,
                 id: String::new(),
                 title: String::new(),
+                layout: KeyboardLayout::default(),
             },
             crate::history::SessionRecord {
                 timestamp: "t2".into(),
@@ -2253,6 +2263,7 @@ mod tests {
                 completed: true,
                 id: String::new(),
                 title: String::new(),
+                layout: KeyboardLayout::default(),
             },
         ];
         app.history_scroll = 1;
@@ -2351,6 +2362,32 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert!(history[0].completed);
         assert_eq!(history[0].duration_secs, 1.0);
+    }
+
+    #[test]
+    fn finished_session_compared_with_the_earlier_ones_on_its_layout() {
+        let _data_dir = TestDataDir::new();
+        let mut app = App::new();
+        app.document = Some(Document::from_text("ab").unwrap());
+        app.lesson_id = "test".into();
+        let finish = |app: &mut App| {
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char('a'))));
+            app.start_time = Some(Instant::now() - std::time::Duration::from_secs(60));
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char('b'))));
+            assert!(app.is_finished());
+            let best = app.earlier_best_wpm;
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
+            best
+        };
+
+        let first = finish(&mut app);
+        let second = finish(&mut app);
+        app.set_layout(KeyboardLayout::Dvorak);
+        let other_layout = finish(&mut app);
+
+        assert_eq!(first, None);
+        assert!(second.is_some_and(|wpm| wpm > 0.0));
+        assert_eq!(other_layout, None);
     }
 
     #[test]

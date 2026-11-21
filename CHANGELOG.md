@@ -5,6 +5,7 @@
 ### Added
 - `n` on the results screen of a practice starts the same practice with new text (after a weak-key drill, with the same keys); `r` still retypes the same text
 - The results screen colours each key on the keyboard by its accuracy in the session: filled below 90%, orange below the 95% pass mark, and blue from it; keys not typed are dim
+- The results screen shows the best earlier wpm for the same lesson or practice on the same layout, or "New best!" when it is beaten; a lesson attempt counts only when it is passed. History records now keep the layout, and older ones count as QWERTY
 
 ### Changed
 - A lesson is passed at 95% accuracy, and the results screen says whether it was. Below that, the menu and the next start stay on the lesson instead of moving on; `n` still goes to the next one

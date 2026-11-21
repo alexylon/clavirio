@@ -706,6 +706,27 @@ fn lesson_verdict(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
     Some(line)
 }
 
+/// How the session compares with the best earlier one, or `None` if there is none
+fn best_line(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
+    let best = app.earlier_best_wpm?;
+    // Compared as shown, so a new best is never shown as equal to the old one
+    let line = if app.wpm().round_ties_even() > best.round_ties_even() {
+        Line::from(vec![
+            Span::styled("New best! ", Style::new().fg(tc.correct).bold()),
+            Span::styled(
+                format!("previous {best:.0} wpm"),
+                Style::new().fg(tc.dim_text),
+            ),
+        ])
+    } else {
+        Line::from(Span::styled(
+            format!("Best {best:.0} wpm"),
+            Style::new().fg(tc.dim_text),
+        ))
+    };
+    Some(line)
+}
+
 fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
     let score = Line::from(vec![
         Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
@@ -744,6 +765,7 @@ fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
         Span::styled(" menu", Style::new().fg(tc.dim_text)),
     ]);
     let mut lines = vec![score];
+    lines.extend(best_line(app, tc));
     lines.extend(lesson_verdict(app, tc));
     lines.push(Line::from(actions));
     if let Some((spark, min, max)) = app.sparkline() {
@@ -1722,6 +1744,22 @@ mod tests {
     }
 
     #[test]
+    fn results_compare_with_the_best_as_shown() {
+        let mut app = App::new();
+        let start = std::time::Instant::now();
+        app.start_time = Some(start);
+        app.end_time = Some(start + std::time::Duration::from_secs(60));
+        app.earlier_best_wpm = Some(9.6);
+        let tc = ThemeColors::from_theme(Theme::Dark);
+        let shown = |app: &App| best_line(app, &tc).map(|line| line.to_string());
+
+        app.correct_count = 52; // 10.4 wpm, shown as 10 as the best is
+        assert_eq!(shown(&app).as_deref(), Some("Best 10 wpm"));
+        app.correct_count = 54;
+        assert_eq!(shown(&app).as_deref(), Some("New best! previous 10 wpm"));
+    }
+
+    #[test]
     fn keyboard_leaves_room_for_wrapped_menu_controls() {
         let mut app = App::new();
         app.menu_mode = MenuMode::Practice;
@@ -1754,6 +1792,7 @@ mod tests {
             completed: true,
             id: "home_row".into(),
             title: "Home Row".into(),
+            layout: KeyboardLayout::default(),
         }];
         let tc = ThemeColors::from_theme(Theme::Dark);
         let screen = render(80, 20, |frame| draw_history(frame, &app, frame.area(), &tc));

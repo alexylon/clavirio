@@ -7,6 +7,7 @@ const MAX_HISTORY_RECORDS: usize = 10_000;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::settings::KeyboardLayout;
 use crate::storage::{Loaded, file_name};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +25,27 @@ pub struct SessionRecord {
     /// Empty in records saved before titles were kept
     #[serde(default)]
     pub title: String,
+    /// QWERTY, the default, in records saved before layouts were kept
+    #[serde(default)]
+    pub layout: KeyboardLayout,
+}
+
+impl SessionRecord {
+    /// Completed with a speed, as one under a second has none, and passed if it is
+    /// a lesson, so a faster attempt that failed isn't held up as the one to beat
+    fn can_be_best(&self) -> bool {
+        self.completed
+            && self.wpm > 0.0
+            && (!crate::lessons::is_lesson_id(&self.id) || crate::lessons::is_passed(self.accuracy))
+    }
+}
+
+/// What saving a session found
+pub struct SavedSession {
+    /// The best wpm of the earlier sessions to compare this one with
+    pub earlier_best_wpm: Option<f64>,
+    /// Where the old file was kept if it couldn't be parsed
+    pub notice: Option<String>,
 }
 
 fn history_path() -> PathBuf {
@@ -47,22 +69,38 @@ fn load_json<T: DeserializeOwned + Default>(path: &Path) -> Result<T, String> {
     }
 }
 
-/// Adds `record` to the history, and returns a message saying where the old file
-/// was kept if it couldn't be parsed.
-pub fn save_session(record: SessionRecord) -> io::Result<Option<String>> {
+pub fn save_session(record: SessionRecord) -> io::Result<SavedSession> {
     let path = history_path();
     let (mut records, backup) = load_json_for_rewrite::<Vec<SessionRecord>>(&path)?;
 
+    let earlier_best_wpm = earlier_best_wpm(&records, &record);
     records.push(record);
     if records.len() > MAX_HISTORY_RECORDS {
         records.drain(..records.len() - MAX_HISTORY_RECORDS);
     }
 
     let json = serde_json::to_string_pretty(&records)?;
-    crate::storage::finish_rewrite(&path, &json, backup)
+    let notice = crate::storage::finish_rewrite(&path, &json, backup)?;
+    Ok(SavedSession {
+        earlier_best_wpm,
+        notice,
+    })
 }
 
-pub fn resume_lesson(layout: crate::settings::KeyboardLayout) -> Result<usize, String> {
+/// The best wpm in `records` of the same lesson or practice as `record`, on the
+/// same layout; `None` if there is none, or `record` can't be a best itself
+fn earlier_best_wpm(records: &[SessionRecord], record: &SessionRecord) -> Option<f64> {
+    if !record.can_be_best() {
+        return None;
+    }
+    records
+        .iter()
+        .filter(|r| r.id == record.id && r.layout == record.layout && r.can_be_best())
+        .map(|r| r.wpm)
+        .reduce(f64::max)
+}
+
+pub fn resume_lesson(layout: KeyboardLayout) -> Result<usize, String> {
     let lessons = crate::lessons::lessons_for_layout(layout);
     load_history().map(|history| resume_lesson_from(&history, &lessons))
 }
@@ -142,6 +180,7 @@ mod tests {
             completed: true,
             id: "home_row".into(),
             title: "Home Row".into(),
+            layout: KeyboardLayout::default(),
         };
         let json = serde_json::to_string(&record).unwrap();
         let deserialized: SessionRecord = serde_json::from_str(&json).unwrap();
@@ -168,6 +207,7 @@ mod tests {
         let record: SessionRecord = serde_json::from_str(json).unwrap();
         assert!(!record.completed); // default
         assert!(record.id.is_empty()); // default
+        assert_eq!(record.layout, KeyboardLayout::Qwerty);
     }
 
     // --- resume_lesson_from ---
@@ -183,6 +223,7 @@ mod tests {
             completed,
             id: id.into(),
             title: String::new(),
+            layout: KeyboardLayout::default(),
         }
     }
 
@@ -258,6 +299,43 @@ mod tests {
         let dvorak = crate::lessons::lessons_for_layout(crate::settings::KeyboardLayout::Dvorak);
         let history = vec![record(qwerty[3].id, true)];
         assert_eq!(resume_lesson_from(&history, &dvorak), 4);
+    }
+
+    #[test]
+    fn earlier_best_is_of_the_same_session_and_layout_that_could_be_a_best() {
+        let id = qwerty_lessons()[0].id;
+        let lesson = |wpm, accuracy, completed, layout| SessionRecord {
+            wpm,
+            accuracy,
+            layout,
+            ..record(id, completed)
+        };
+        let practice = |wpm, accuracy| SessionRecord {
+            wpm,
+            accuracy,
+            ..record("words_english_200", true)
+        };
+        let records = [
+            lesson(30.0, 100.0, true, KeyboardLayout::Qwerty),
+            lesson(50.0, 100.0, true, KeyboardLayout::Dvorak),
+            lesson(60.0, 100.0, false, KeyboardLayout::Qwerty),
+            lesson(70.0, 90.0, true, KeyboardLayout::Qwerty),
+            practice(80.0, 50.0),
+            practice(0.0, 100.0),
+        ];
+
+        let passed = lesson(40.0, 100.0, true, KeyboardLayout::Qwerty);
+        let failed = lesson(40.0, 90.0, true, KeyboardLayout::Qwerty);
+        assert_eq!(earlier_best_wpm(&records, &passed), Some(30.0));
+        assert_eq!(earlier_best_wpm(&records, &failed), None);
+        assert_eq!(
+            earlier_best_wpm(&[practice(0.0, 100.0)], &practice(10.0, 50.0)),
+            None
+        );
+        assert_eq!(
+            earlier_best_wpm(&records, &practice(10.0, 50.0)),
+            Some(80.0)
+        );
     }
 
     #[test]
