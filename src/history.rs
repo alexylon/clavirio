@@ -25,9 +25,9 @@ pub struct SessionRecord {
     /// Empty in records saved before titles were kept
     #[serde(default)]
     pub title: String,
-    /// QWERTY, the default, in records saved before layouts were kept
-    #[serde(default)]
-    pub layout: KeyboardLayout,
+    /// `None` in records saved before layouts were kept
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<KeyboardLayout>,
 }
 
 impl SessionRecord {
@@ -88,9 +88,10 @@ pub fn save_session(record: SessionRecord) -> io::Result<SavedSession> {
 }
 
 /// The best wpm in `records` of the same lesson or practice as `record`, on the
-/// same layout; `None` if there is none, or `record` can't be a best itself
+/// same layout; `None` if there is none, or `record` can't be a best itself. A
+/// record whose layout isn't known is left out, as it could be of any layout
 fn earlier_best_wpm(records: &[SessionRecord], record: &SessionRecord) -> Option<f64> {
-    if !record.can_be_best() {
+    if record.layout.is_none() || !record.can_be_best() {
         return None;
     }
     records
@@ -180,7 +181,7 @@ mod tests {
             completed: true,
             id: "home_row".into(),
             title: "Home Row".into(),
-            layout: KeyboardLayout::default(),
+            layout: Some(KeyboardLayout::default()),
         };
         let json = serde_json::to_string(&record).unwrap();
         let deserialized: SessionRecord = serde_json::from_str(&json).unwrap();
@@ -207,7 +208,7 @@ mod tests {
         let record: SessionRecord = serde_json::from_str(json).unwrap();
         assert!(!record.completed); // default
         assert!(record.id.is_empty()); // default
-        assert_eq!(record.layout, KeyboardLayout::Qwerty);
+        assert_eq!(record.layout, None);
     }
 
     // --- resume_lesson_from ---
@@ -223,7 +224,7 @@ mod tests {
             completed,
             id: id.into(),
             title: String::new(),
-            layout: KeyboardLayout::default(),
+            layout: Some(KeyboardLayout::default()),
         }
     }
 
@@ -316,16 +317,17 @@ mod tests {
             ..record("words_english_200", true)
         };
         let records = [
-            lesson(30.0, 100.0, true, KeyboardLayout::Qwerty),
-            lesson(50.0, 100.0, true, KeyboardLayout::Dvorak),
-            lesson(60.0, 100.0, false, KeyboardLayout::Qwerty),
-            lesson(70.0, 90.0, true, KeyboardLayout::Qwerty),
+            lesson(30.0, 100.0, true, Some(KeyboardLayout::Qwerty)),
+            lesson(50.0, 100.0, true, Some(KeyboardLayout::Dvorak)),
+            lesson(55.0, 100.0, true, None),
+            lesson(60.0, 100.0, false, Some(KeyboardLayout::Qwerty)),
+            lesson(70.0, 90.0, true, Some(KeyboardLayout::Qwerty)),
             practice(80.0, 50.0),
             practice(0.0, 100.0),
         ];
 
-        let passed = lesson(40.0, 100.0, true, KeyboardLayout::Qwerty);
-        let failed = lesson(40.0, 90.0, true, KeyboardLayout::Qwerty);
+        let passed = lesson(40.0, 100.0, true, Some(KeyboardLayout::Qwerty));
+        let failed = lesson(40.0, 90.0, true, Some(KeyboardLayout::Qwerty));
         assert_eq!(earlier_best_wpm(&records, &passed), Some(30.0));
         assert_eq!(earlier_best_wpm(&records, &failed), None);
         assert_eq!(

@@ -655,7 +655,7 @@ impl App {
             completed,
             id: self.lesson_id.clone(),
             title: self.lesson_title.clone(),
-            layout: self.layout,
+            layout: Some(self.layout),
         })
         .map(|saved| {
             self.earlier_best_wpm = saved.earlier_best_wpm;
@@ -2351,7 +2351,7 @@ mod tests {
                 completed: true,
                 id: String::new(),
                 title: String::new(),
-                layout: KeyboardLayout::default(),
+                layout: Some(KeyboardLayout::default()),
             },
             crate::history::SessionRecord {
                 timestamp: "t2".into(),
@@ -2363,7 +2363,7 @@ mod tests {
                 completed: true,
                 id: String::new(),
                 title: String::new(),
-                layout: KeyboardLayout::default(),
+                layout: Some(KeyboardLayout::default()),
             },
         ];
         app.history_scroll = 1;

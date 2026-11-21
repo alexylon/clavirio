@@ -1792,7 +1792,7 @@ mod tests {
             completed: true,
             id: "home_row".into(),
             title: "Home Row".into(),
-            layout: KeyboardLayout::default(),
+            layout: Some(KeyboardLayout::default()),
         }];
         let tc = ThemeColors::from_theme(Theme::Dark);
         let screen = render(80, 20, |frame| draw_history(frame, &app, frame.area(), &tc));
