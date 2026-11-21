@@ -537,6 +537,18 @@ impl App {
         (self.correct_count as f64 / 5.0) / (secs / 60.0)
     }
 
+    pub fn accuracy(&self) -> f64 {
+        if self.total_count == 0 {
+            return 0.0;
+        }
+        self.correct_count as f64 / self.total_count as f64 * 100.0
+    }
+
+    /// Whether the lesson's accuracy passes it, or `None` outside lessons
+    pub fn lesson_passed(&self) -> Option<bool> {
+        (!self.is_practice_mode()).then(|| crate::lessons::is_passed(self.accuracy()))
+    }
+
     pub fn elapsed_secs(&self) -> f64 {
         match self.start_time {
             Some(t) => {
@@ -559,11 +571,10 @@ impl App {
             return;
         }
         let elapsed = self.elapsed_secs();
-        let accuracy = self.correct_count as f64 / self.total_count as f64 * 100.0;
         let session = crate::history::save_session(crate::history::SessionRecord {
             timestamp: chrono_now(),
             wpm: self.wpm(),
-            accuracy,
+            accuracy: self.accuracy(),
             correct: self.correct_count,
             total: self.total_count,
             duration_secs: elapsed,
@@ -663,13 +674,20 @@ impl App {
         self.find_next_lesson().is_some()
     }
 
-    fn find_next_lesson(&self) -> Option<(usize, &'static crate::lessons::Lesson)> {
+    fn current_lesson_index(&self) -> Option<usize> {
         if self.is_practice_mode() {
             return None;
         }
-        let lessons = crate::lessons::lessons_for_layout(self.layout);
-        let next = lessons.iter().position(|l| l.id == self.lesson_id)? + 1;
-        lessons.get(next).map(|&lesson| (next, lesson))
+        crate::lessons::lessons_for_layout(self.layout)
+            .iter()
+            .position(|l| l.id == self.lesson_id)
+    }
+
+    fn find_next_lesson(&self) -> Option<(usize, &'static crate::lessons::Lesson)> {
+        let next = self.current_lesson_index()? + 1;
+        crate::lessons::lessons_for_layout(self.layout)
+            .get(next)
+            .map(|&lesson| (next, lesson))
     }
 
     /// Saves a session that hasn't finished, and returns what to tell the user
@@ -1418,8 +1436,12 @@ impl App {
                     self.end_time = Some(Instant::now());
                     self.wpm_samples.push(self.wpm());
                     self.save_history(true);
-                    if let Some((next, _)) = self.find_next_lesson() {
-                        self.selected_lesson = next;
+                    // Back to this lesson when a retry after a pass fails
+                    if let Some(current) = self.current_lesson_index() {
+                        self.selected_lesson = match self.find_next_lesson() {
+                            Some((next, _)) if self.lesson_passed() == Some(true) => next,
+                            _ => current,
+                        };
                     }
                 }
             }
@@ -2920,6 +2942,27 @@ mod tests {
         assert!(app.paused_at.is_none());
         assert!(app.document.is_some());
         assert_eq!(app.document.as_ref().unwrap().expected_char(), Some('e'));
+    }
+
+    #[test]
+    fn menu_moves_on_only_after_a_passed_lesson() {
+        let _data_dir = TestDataDir::new();
+        let mut app = App::new();
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
+        app.document = Some(Document::from_text("ab").unwrap());
+        let mut finish = |typed: &str| {
+            for ch in typed.chars() {
+                app.handle_event(InputEvent::Key(key_event(KeyCode::Char(ch))));
+            }
+            assert!(app.is_finished());
+            let result = (app.lesson_passed(), app.selected_lesson);
+            app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
+            result
+        };
+
+        assert_eq!(finish("xb"), (Some(false), 0));
+        assert_eq!(finish("ab"), (Some(true), 1));
+        assert_eq!(finish("xb"), (Some(false), 0));
     }
 
     #[test]

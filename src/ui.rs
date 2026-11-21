@@ -50,6 +50,7 @@ const MAX_KEY_WIDTH: u16 = 9;
 /// Wide enough for the widest keys inside the keyboard frame
 const MAX_WIDTH: u16 = WIDEST_ROW_KEYS * MAX_KEY_WIDTH + 2 * KEYBOARD_FRAME_COLS;
 const SPACE_ERROR_SYMBOL: &str = "\u{2423}";
+const WEAKEST_KEYS_SHOWN: usize = 5;
 const ELLIPSIS: &str = "\u{2026}";
 const PROMPT_CURSOR: &str = "\u{258c}";
 /// The columns before a menu item's label: its `▸` marker and a space each side
@@ -449,11 +450,7 @@ fn draw_header(
 
     let wpm = app.wpm();
     let started = app.start_time.is_some();
-    let acc_pct = if app.total_count > 0 {
-        app.correct_count as f64 / app.total_count as f64 * 100.0
-    } else {
-        0.0
-    };
+    let acc_pct = app.accuracy();
     let err = app.error_count();
 
     let (wpm_str, wpm_fg) = if started {
@@ -684,6 +681,87 @@ fn draw_error(frame: &mut Frame, message: &str, area: Rect, block: Block, tc: &T
     );
 }
 
+/// Whether a lesson is passed, or how to pass it; `None` outside lessons
+fn lesson_verdict(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
+    let line = if app.lesson_passed()? {
+        Line::from(Span::styled("Lesson passed", Style::new().fg(tc.correct)))
+    } else {
+        Line::from(vec![
+            Span::styled(
+                format!("Aim for {:.0}%, press ", crate::lessons::PASS_ACCURACY),
+                Style::new().fg(tc.text),
+            ),
+            Span::styled("r", Style::new().fg(tc.accent).bold()),
+            Span::styled(" to try again", Style::new().fg(tc.text)),
+        ])
+    };
+    Some(line)
+}
+
+fn results_lines(app: &App, tc: &ThemeColors) -> Vec<Line<'static>> {
+    let score = Line::from(vec![
+        Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
+        Span::styled(
+            format!("{:.0} wpm", app.wpm()),
+            Style::new().fg(tc.accent).bold(),
+        ),
+        Span::styled(
+            format!("  {:.0}% accuracy", app.accuracy()),
+            Style::new().fg(tc.text),
+        ),
+        Span::styled(
+            format!("  ({}/{})", app.correct_count, app.total_count),
+            Style::new().fg(tc.dim_text),
+        ),
+    ]);
+    let mut actions = vec![
+        Span::styled("r", Style::new().fg(tc.accent).bold()),
+        Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
+        Span::styled("w", Style::new().fg(tc.accent).bold()),
+        Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
+    ];
+    if app.has_next_lesson() {
+        actions.push(Span::styled("n", Style::new().fg(tc.accent).bold()));
+        actions.push(Span::styled(" next  ", Style::new().fg(tc.dim_text)));
+    }
+    actions.extend_from_slice(&[
+        Span::styled("Esc", Style::new().fg(tc.accent).bold()),
+        Span::styled(" menu", Style::new().fg(tc.dim_text)),
+    ]);
+    let mut lines = vec![score];
+    lines.extend(lesson_verdict(app, tc));
+    lines.push(Line::from(actions));
+    if let Some((spark, min, max)) = app.sparkline() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
+        lines.push(Line::from(Span::styled(
+            format!("{:.0} min - {:.0} max wpm", min, max),
+            Style::new().fg(tc.dim_text),
+        )));
+    }
+    let worst = app.worst_keys(WEAKEST_KEYS_SHOWN);
+    if !worst.is_empty() {
+        let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(tc.dim_text))];
+        for (i, (ch, correct, total)) in worst.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::styled("  ", Style::new().fg(tc.dim_text)));
+            }
+            let label = if *ch == ' ' {
+                "space".to_string()
+            } else {
+                ch.to_string()
+            };
+            spans.push(Span::styled(label, Style::new().fg(tc.incorrect).bold()));
+            spans.push(Span::styled(
+                format!(" {correct}/{total}"),
+                Style::new().fg(tc.dim_text),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+    lines
+}
+
 fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     if app.searching {
         return;
@@ -714,14 +792,12 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
     } else {
         TYPING_PANEL_ROWS
     };
-    let ideal_height = if app.is_finished() {
-        let has_spark = app.sparkline().is_some();
-        let has_worst = !app.worst_keys(5).is_empty();
-        let content = 2 + if has_spark { 3 } else { 0 } + if has_worst { 1 } else { 0 };
-        ideal_height.max(content + PANEL_FRAME_ROWS)
+    let results = if app.is_finished() {
+        results_lines(app, tc)
     } else {
-        ideal_height
+        Vec::new()
     };
+    let ideal_height = ideal_height.max(results.len() as u16 + PANEL_FRAME_ROWS);
     let inner = panel_area(area, ideal_height);
 
     if app.zen_mode {
@@ -914,67 +990,7 @@ fn draw_text_panel(frame: &mut Frame, app: &App, area: Rect, tc: &ThemeColors) {
             frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
         }
         Some(doc) if doc.progress == Progress::Finished => {
-            let pct = if app.total_count > 0 {
-                (app.correct_count as f32 / app.total_count as f32) * 100.0
-            } else {
-                0.0
-            };
-            let score = Line::from(vec![
-                Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
-                Span::styled(
-                    format!("{:.0} wpm", app.wpm()),
-                    Style::new().fg(tc.accent).bold(),
-                ),
-                Span::styled(format!("  {:.0}% accuracy", pct), Style::new().fg(tc.text)),
-                Span::styled(
-                    format!("  ({}/{})", app.correct_count, app.total_count),
-                    Style::new().fg(tc.dim_text),
-                ),
-            ]);
-            let mut actions = vec![
-                Span::styled("r", Style::new().fg(tc.accent).bold()),
-                Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
-                Span::styled("w", Style::new().fg(tc.accent).bold()),
-                Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
-            ];
-            if app.has_next_lesson() {
-                actions.push(Span::styled("n", Style::new().fg(tc.accent).bold()));
-                actions.push(Span::styled(" next  ", Style::new().fg(tc.dim_text)));
-            }
-            actions.extend_from_slice(&[
-                Span::styled("Esc", Style::new().fg(tc.accent).bold()),
-                Span::styled(" menu", Style::new().fg(tc.dim_text)),
-            ]);
-            let mut lines = vec![score, Line::from(actions)];
-            if let Some((spark, min, max)) = app.sparkline() {
-                lines.push(Line::from(""));
-                lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
-                lines.push(Line::from(Span::styled(
-                    format!("{:.0} min - {:.0} max wpm", min, max),
-                    Style::new().fg(tc.dim_text),
-                )));
-            }
-            let worst = app.worst_keys(5);
-            if !worst.is_empty() {
-                let mut spans = vec![Span::styled("Weakest: ", Style::new().fg(tc.dim_text))];
-                for (i, (ch, correct, total)) in worst.iter().enumerate() {
-                    if i > 0 {
-                        spans.push(Span::styled("  ", Style::new().fg(tc.dim_text)));
-                    }
-                    let label = if *ch == ' ' {
-                        "space".to_string()
-                    } else {
-                        ch.to_string()
-                    };
-                    spans.push(Span::styled(label, Style::new().fg(tc.incorrect).bold()));
-                    spans.push(Span::styled(
-                        format!(" {correct}/{total}"),
-                        Style::new().fg(tc.dim_text),
-                    ));
-                }
-                lines.push(Line::from(spans));
-            }
-            frame.render_widget(Paragraph::new(lines).block(block).centered(), inner);
+            frame.render_widget(Paragraph::new(results).block(block).centered(), inner);
         }
         Some(doc) => {
             let text_width = block.inner(inner).width as usize;

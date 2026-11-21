@@ -74,7 +74,7 @@ fn resume_lesson_from(history: &[SessionRecord], lessons: &[&crate::lessons::Les
         }
         let idx = lessons.iter().position(|l| l.id == entry.id);
         match idx {
-            Some(i) if entry.completed => {
+            Some(i) if entry.completed && crate::lessons::is_passed(entry.accuracy) => {
                 return (i + 1).min(lessons.len().saturating_sub(1));
             }
             Some(i) => return i,
@@ -176,7 +176,7 @@ mod tests {
         SessionRecord {
             timestamp: String::new(),
             wpm: 0.0,
-            accuracy: 0.0,
+            accuracy: 100.0,
             correct: 0,
             total: 1,
             duration_secs: 0.0,
@@ -207,6 +207,17 @@ mod tests {
         let lessons = qwerty_lessons();
         let history = vec![record(lessons[0].id, true)];
         assert_eq!(resume_lesson_from(&history, &lessons), 1);
+    }
+
+    #[test]
+    fn resume_stays_on_completed_lesson_below_pass_mark() {
+        let lessons = qwerty_lessons();
+        let mut failed = record(lessons[0].id, true);
+        failed.accuracy = 94.4;
+        let mut passed = record(lessons[1].id, true);
+        passed.accuracy = 94.6;
+        assert_eq!(resume_lesson_from(&[failed], &lessons), 0);
+        assert_eq!(resume_lesson_from(&[passed], &lessons), 2);
     }
 
     #[test]

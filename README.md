@@ -70,6 +70,10 @@ bottom rows. The first five lessons in each row add two keys at a time; the last
 two practice the full row and Shift. Lessons 22–27 cover numbers and symbols and
 are the same for every layout.
 
+A lesson is passed at 95% accuracy. Below that, the results screen suggests
+trying again, and the menu and the next start of Clavirio stay on the lesson;
+`n` still goes on to the next one.
+
 | # | Lesson | QWERTY | Dvorak | Colemak |
 |---|--------|--------|--------|---------|
 | 1 | Home: Index | f j | u h | t n |

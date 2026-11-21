@@ -132,6 +132,14 @@ const SHARED_LESSONS: &[Lesson] = layout_lessons![
     [26] ""                       => "../assets/lessons/shared/27_review.txt",
 ];
 
+/// The accuracy, in percent, a lesson needs before the next one is suggested
+pub const PASS_ACCURACY: f64 = 95.0;
+
+/// Rounded with ties to even, as `{:.0}` shows it, so a lesson shown at 95% passes
+pub fn is_passed(accuracy: f64) -> bool {
+    accuracy.round_ties_even() >= PASS_ACCURACY
+}
+
 pub fn lessons_for_layout(layout: KeyboardLayout) -> Vec<&'static Lesson> {
     let specific = match layout {
         KeyboardLayout::Qwerty => QWERTY_LESSONS,
@@ -146,6 +154,13 @@ mod tests {
     use super::*;
 
     const LAYOUT_LESSON_COUNT: usize = 21;
+
+    #[test]
+    fn pass_mark_rounds_as_shown() {
+        assert!(is_passed(94.6));
+        assert!(!is_passed(94.5)); // shown as 94%
+        assert!(!is_passed(94.4));
+    }
 
     #[test]
     fn all_layouts_have_same_lesson_count() {

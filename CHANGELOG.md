@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- A lesson is passed at 95% accuracy, and the results screen says whether it was. Below that, the menu and the next start stay on the lesson instead of moving on; `n` still goes to the next one
+
 ## [0.4.6] - 2026-11-13
 
 ### Added
