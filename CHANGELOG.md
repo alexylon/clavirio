@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
 ### Added
 - `n` on the results screen of a practice starts the same practice with new text (after a weak-key drill, with the same keys); `r` still retypes the same text
 - The results screen colours each key on the keyboard by its accuracy in the session, blue from the 95% pass mark and orange below it, with a legend under the results; keys not typed are dim, and the weakest keys listed are coloured the same way
