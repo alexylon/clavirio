@@ -19,6 +19,8 @@ virtual keyboard, and saves your session history. It is built with Rust and
 
 <div align="center"><img src="/assets/images/screenshot_dark_2.webp" style="width: 800px;" alt="clavirio"></div>
 
+<div align="center"><img src="/assets/images/screenshot_dark_3.webp" style="width: 800px;" alt="clavirio"></div>
+
 <div align="center"><img src="/assets/images/screenshot_light.webp" style="width: 800px;" alt="clavirio"></div>
 
 ## Table of Contents
@@ -59,7 +61,7 @@ Clavirio's approach to practicing key movements; the study did not test these le
 - **Keyboard and layouts:** Switch between QWERTY, Dvorak, and Colemak. The virtual keyboard highlights the next key and shows finger hints: **P**inky, **R**ing, **M**iddle, **I**ndex, and **T**humb.
 - **Error handling:** By default, typing continues after a mistake, and Backspace lets you correct it within the current word. Turn on error stop to require a correction before continuing.
 - **Weak key practice:** Accuracy for each key is saved across sessions. After a drill, press `w` to practice that session's weakest keys, or your saved weak keys if the session has none. Choose Weak Keys from the practice menu to use your cumulative stats.
-- **History and progress:** Sessions are saved to `~/.clavirio/history.json`, with per-lesson tracking and averages. The results screen shows your best earlier speed for the same lesson or practice on the same layout, or "New best!" when you beat it; a lesson attempt counts only when it is passed. Clavirio also remembers your lesson and whether you last used the lessons or practice menu.
+- **History and progress:** Sessions are saved to `~/.clavirio/history.json`, with per-lesson tracking and averages. The results screen shows your best earlier speed for the same lesson or practice on the same layout, or "New best!" when you beat it; a lesson attempt counts only when it is passed, though a failed one still shows the best to aim for. Clavirio also remembers your lesson and whether you last used the lessons or practice menu.
 - **Custom text:** Load a file with `Ctrl-F` or `--file`. Curly quotes, dashes, and ellipses are converted to characters you can type (`'`, `"`, `-`, `--`, `...`). Separately stored accents are joined to their letters, tabs become four spaces, and invisible characters such as soft hyphens are removed. The results screen compares a session only with earlier ones of the file at the same path.
 - **Themes:** Choose a dark or light theme.
 

@@ -517,6 +517,9 @@ pub struct App {
     save_message: Option<String>,
     /// The best wpm of the earlier sessions the finished one is compared with
     pub earlier_best_wpm: Option<f64>,
+    /// Whether the finished session can be a new best, which a failed lesson
+    /// attempt can't
+    pub can_be_best: bool,
     pub zen_mode: bool,
     pub zen_lines: Vec<String>,
     /// For each zen line, whether it was started by a line break of its own
@@ -580,6 +583,7 @@ impl App {
             ignore_keys_until: None,
             save_message: None,
             earlier_best_wpm: None,
+            can_be_best: false,
             zen_mode: false,
             zen_lines: Vec::new(),
             zen_wrapped: Vec::new(),
@@ -659,6 +663,7 @@ impl App {
         })
         .map(|saved| {
             self.earlier_best_wpm = saved.earlier_best_wpm;
+            self.can_be_best = saved.can_be_best;
             saved.notice
         });
         self.note_save(saved, "this session");
@@ -824,6 +829,7 @@ impl App {
         self.last_sample_time = None;
         self.ignore_keys_until = None;
         self.earlier_best_wpm = None;
+        self.can_be_best = false;
         self.zen_mode = false;
         self.zen_lines.clear();
         self.zen_wrapped.clear();

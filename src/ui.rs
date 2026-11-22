@@ -687,18 +687,23 @@ fn draw_error(frame: &mut Frame, message: &str, area: Rect, block: Block, tc: &T
     );
 }
 
-/// Whether a lesson is passed, or how to pass it; `None` outside lessons
+/// Whether a lesson is passed, or how to pass it, in the colours of the key
+/// accuracy legend; `None` outside lessons
 fn lesson_verdict(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
     let line = if app.lesson_passed()? {
-        Line::from(Span::styled("Lesson passed", Style::new().fg(tc.correct)))
+        Line::from(Span::styled(
+            "Lesson passed",
+            Style::new().fg(tc.correct).bold(),
+        ))
     } else {
+        let failed = Style::new().fg(tc.incorrect).bold();
         Line::from(vec![
             Span::styled(
                 format!("Aim for {:.0}%, press ", crate::lessons::PASS_ACCURACY),
-                Style::new().fg(tc.text),
+                failed,
             ),
             Span::styled("r", Style::new().fg(tc.accent).bold()),
-            Span::styled(" to try again", Style::new().fg(tc.text)),
+            Span::styled(" to try again", failed),
         ])
     };
     Some(line)
@@ -708,7 +713,7 @@ fn lesson_verdict(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
 fn best_line(app: &App, tc: &ThemeColors) -> Option<Line<'static>> {
     let best = app.earlier_best_wpm?;
     // Compared as shown, so a new best is never shown as equal to the old one
-    let line = if app.wpm().round_ties_even() > best.round_ties_even() {
+    let line = if app.can_be_best && app.wpm().round_ties_even() > best.round_ties_even() {
         Line::from(vec![
             Span::styled("New best! ", Style::new().fg(tc.correct).bold()),
             Span::styled(
@@ -740,8 +745,11 @@ fn key_accuracy_legend(tc: &ThemeColors) -> Line<'static> {
 }
 
 fn results_lines(app: &App, tc: &ThemeColors, keyboard_shown: bool) -> Vec<Line<'static>> {
-    let score = Line::from(vec![
-        Span::styled("Done! ", Style::new().fg(tc.correct).bold()),
+    let verdict = lesson_verdict(app, tc);
+    let heading = verdict
+        .is_none()
+        .then(|| Span::styled("Done! ", Style::new().fg(tc.correct).bold()));
+    let score = Line::from_iter(heading.into_iter().chain([
         Span::styled(
             format!("{:.0} wpm", app.wpm()),
             Style::new().fg(tc.accent).bold(),
@@ -754,7 +762,7 @@ fn results_lines(app: &App, tc: &ThemeColors, keyboard_shown: bool) -> Vec<Line<
             format!("  ({}/{})", app.correct_count, app.total_count),
             Style::new().fg(tc.dim_text),
         ),
-    ]);
+    ]));
     let mut actions = vec![
         Span::styled("r", Style::new().fg(tc.accent).bold()),
         Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
@@ -776,15 +784,15 @@ fn results_lines(app: &App, tc: &ThemeColors, keyboard_shown: bool) -> Vec<Line<
         Span::styled("Esc", Style::new().fg(tc.accent).bold()),
         Span::styled(" menu", Style::new().fg(tc.dim_text)),
     ]);
-    let mut lines = vec![score];
+    let mut lines: Vec<Line<'static>> = verdict.into_iter().collect();
+    lines.push(score);
     lines.extend(best_line(app, tc));
-    lines.extend(lesson_verdict(app, tc));
     lines.push(Line::from(actions));
     if let Some((spark, min, max)) = app.sparkline() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(spark, Style::new().fg(tc.accent))));
         lines.push(Line::from(Span::styled(
-            format!("{:.0} min - {:.0} max wpm", min, max),
+            format!("min {min:.0}{HEADER_SEPARATOR}max {max:.0} wpm"),
             Style::new().fg(tc.dim_text),
         )));
     }
@@ -1772,6 +1780,7 @@ mod tests {
         app.start_time = Some(start);
         app.end_time = Some(start + std::time::Duration::from_secs(60));
         app.earlier_best_wpm = Some(9.6);
+        app.can_be_best = true;
         let tc = ThemeColors::from_theme(Theme::Dark);
         let shown = |app: &App| best_line(app, &tc).map(|line| line.to_string());
 
@@ -1779,6 +1788,8 @@ mod tests {
         assert_eq!(shown(&app).as_deref(), Some("Best 10 wpm"));
         app.correct_count = 54;
         assert_eq!(shown(&app).as_deref(), Some("New best! previous 10 wpm"));
+        app.can_be_best = false;
+        assert_eq!(shown(&app).as_deref(), Some("Best 10 wpm"));
     }
 
     #[test]

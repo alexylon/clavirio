@@ -44,6 +44,8 @@ impl SessionRecord {
 pub struct SavedSession {
     /// The best wpm of the earlier sessions to compare this one with
     pub earlier_best_wpm: Option<f64>,
+    /// Whether this session can be a best, which a failed lesson attempt can't
+    pub can_be_best: bool,
     /// Where the old file was kept if it couldn't be parsed
     pub notice: Option<String>,
 }
@@ -74,6 +76,7 @@ pub fn save_session(record: SessionRecord) -> io::Result<SavedSession> {
     let (mut records, backup) = load_json_for_rewrite::<Vec<SessionRecord>>(&path)?;
 
     let earlier_best_wpm = earlier_best_wpm(&records, &record);
+    let can_be_best = record.can_be_best();
     records.push(record);
     if records.len() > MAX_HISTORY_RECORDS {
         records.drain(..records.len() - MAX_HISTORY_RECORDS);
@@ -83,15 +86,17 @@ pub fn save_session(record: SessionRecord) -> io::Result<SavedSession> {
     let notice = crate::storage::finish_rewrite(&path, &json, backup)?;
     Ok(SavedSession {
         earlier_best_wpm,
+        can_be_best,
         notice,
     })
 }
 
 /// The best wpm in `records` of the same lesson or practice as `record`, on the
-/// same layout; `None` if there is none, or `record` can't be a best itself. A
-/// record whose layout isn't known is left out, as it could be of any layout
+/// same layout; `None` if there is none, or `record` wasn't finished. A record
+/// whose layout isn't known is left out, as it could be of any layout
 fn earlier_best_wpm(records: &[SessionRecord], record: &SessionRecord) -> Option<f64> {
-    if record.layout.is_none() || !record.can_be_best() {
+    record.layout?;
+    if !record.completed {
         return None;
     }
     records
@@ -329,7 +334,7 @@ mod tests {
         let passed = lesson(40.0, 100.0, true, Some(KeyboardLayout::Qwerty));
         let failed = lesson(40.0, 90.0, true, Some(KeyboardLayout::Qwerty));
         assert_eq!(earlier_best_wpm(&records, &passed), Some(30.0));
-        assert_eq!(earlier_best_wpm(&records, &failed), None);
+        assert_eq!(earlier_best_wpm(&records, &failed), Some(30.0));
         assert_eq!(
             earlier_best_wpm(&[practice(0.0, 100.0)], &practice(10.0, 50.0)),
             None
