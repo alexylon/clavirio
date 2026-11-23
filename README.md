@@ -200,6 +200,17 @@ Any other value is read as the path of a UTF-8 text file of up to 1 MB, with wor
 
 Only one of `-t`, `-w` and `-f` is used: `-t` wins over `-w`, and `-w` over `-f`.
 
+### Words in other languages
+
+`-l` takes a list in any language written left to right with spaces between words. [ttyper](https://github.com/max-niederman/ttyper/tree/main/resources/runtime/language) has plain lists, mostly one word per line, for German, French, Spanish, Portuguese, Russian, Norwegian and more. Save one and give its path (in Windows PowerShell, type `curl.exe`):
+
+```bash
+curl -fo german1000.txt https://raw.githubusercontent.com/max-niederman/ttyper/main/resources/runtime/language/german1000
+clavirio -t 60 -l german1000.txt
+```
+
+Letters such as `ä`, `é` or `ж` are typed with your system keyboard layout, for example with a dead key or a layout for the language. The virtual keyboard shows only QWERTY, Dvorak and Colemak, so it shows no key or finger for them; if your system layout is a different one, such as QWERTZ or a Cyrillic one, turn the keyboard off with `3` in the menu. Keep shift error (`7`) off, as it is by default: it judges Shift by the virtual keyboard's layout and changes how the terminal sends keys.
+
 ## Controls
 
 A maximized terminal gives the text, keyboard, and stats more room. The virtual keyboard hides automatically when the terminal is shorter than 36 rows, or when a narrow window needs extra rows for the menu.
