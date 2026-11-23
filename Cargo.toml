@@ -12,11 +12,11 @@ documentation = "https://docs.rs/clavirio"
 keywords = ["typing", "tutor", "keyboard", "tui", "ratatui"]
 categories = ["command-line-utilities"]
 include = [
-    "/src/",
-    "/assets/lessons/",
-    "/assets/quotes/",
-    "/assets/words/",
-    "/man/",
+    "/src/**/*.rs",
+    "/assets/lessons/**/*.txt",
+    "/assets/quotes/**/*.txt",
+    "/assets/words/**/*.txt",
+    "/man/clavirio.1",
     "/sample.txt",
     "/CHANGELOG.md",
     "/LICENSE",
