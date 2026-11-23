@@ -234,6 +234,24 @@ impl Document {
         Ok((Self::from_text(&file.text)?, file.full_path))
     }
 
+    /// Puts the lines between the first and the last typed ones in a random
+    /// order, and starts again from the first
+    pub fn shuffle_lines(&mut self) {
+        let typed = |line: &String| !line.is_empty();
+        let (Some(first), Some(last)) = (
+            self.lines.iter().position(typed),
+            self.lines.iter().rposition(typed),
+        ) else {
+            return;
+        };
+
+        if let Some(middle) = self.lines.get_mut(first + 1..last) {
+            crate::words::shuffle(middle);
+        }
+
+        self.reset();
+    }
+
     pub fn reset(&mut self) {
         self.line_idx = self.lines.iter().position(|l| !l.is_empty()).unwrap_or(0);
         self.char_idx = 0;
@@ -762,6 +780,12 @@ impl App {
         self.menu_mode == MenuMode::Practice
     }
 
+    /// Whether `r` on the results screen puts the lines in a new order, as it
+    /// does for a lesson but not for a practice
+    pub fn try_again_shuffles(&self) -> bool {
+        self.current_lesson_index().is_some()
+    }
+
     /// A lesson, practice or zen session is open, finished or not
     pub fn in_session(&self) -> bool {
         self.document.is_some() || self.zen_mode
@@ -857,6 +881,19 @@ impl App {
             doc.reset();
         }
         self.reset_session();
+    }
+
+    /// Restarts a finished session. A lesson comes back with its lines in a new
+    /// order, so that it isn't typed from memory, but still starts with its
+    /// first line and ends with its last.
+    fn try_again(&mut self) {
+        if self.try_again_shuffles() {
+            if let Some(doc) = self.document.as_mut() {
+                doc.shuffle_lines();
+            }
+        }
+
+        self.restart();
     }
 
     fn resume(&mut self) {
@@ -1139,7 +1176,7 @@ impl App {
                 self.handle_menu_key(key.code);
             }
             (KeyCode::Char('r'), _) if self.is_finished() => {
-                self.restart();
+                self.try_again();
             }
             (KeyCode::Char('w'), _) if self.is_finished() => {
                 self.start_weak_key_practice();
@@ -3217,6 +3254,63 @@ mod tests {
         let lessons = crate::lessons::lessons_for_layout(app.layout);
         assert_eq!(app.lesson_id, lessons[1].id);
         assert_eq!(app.selected_lesson, 1);
+    }
+
+    #[test]
+    fn trying_a_finished_lesson_again_shuffles_the_lines_between_first_and_last() {
+        let mut app = App::new();
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Enter)));
+        let mut written = app.document.as_ref().unwrap().lines.clone();
+        app.document.as_mut().unwrap().progress = Progress::Finished;
+
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
+
+        assert!(!app.is_finished());
+        let doc = app.document.as_ref().unwrap();
+        assert_eq!(doc.expected_char(), written[0].chars().next());
+        assert_eq!(doc.lines.first(), written.first());
+        assert_eq!(doc.lines.last(), written.last());
+        // The first lesson has 13 different lines in between, so the written
+        // order comes back once in 13! (over six billion) shuffles
+        assert_ne!(doc.lines, written);
+
+        let mut shuffled = doc.lines.clone();
+        shuffled.sort();
+        written.sort();
+        assert_eq!(shuffled, written);
+    }
+
+    #[test]
+    fn trying_a_practice_again_keeps_its_order() {
+        let mut app = App::new();
+        app.menu_mode = MenuMode::Practice;
+        let text: Vec<String> = (1..=10).map(|n| n.to_string()).collect();
+        app.document = Some(Document::from_text(&text.join("\n")).unwrap());
+        app.document.as_mut().unwrap().progress = Progress::Finished;
+
+        app.handle_event(InputEvent::Key(key_event(KeyCode::Char('r'))));
+
+        assert!(!app.is_finished());
+        assert_eq!(app.document.as_ref().unwrap().lines, text);
+    }
+
+    #[test]
+    fn shuffle_lines_keeps_the_first_and_last_typed_lines() {
+        let mut doc = Document::from_text("\nfirst\nb\nc\nd\nlast\n").unwrap();
+        doc.shuffle_lines();
+
+        let mut typed: Vec<&str> = doc
+            .lines
+            .iter()
+            .map(String::as_str)
+            .filter(|line| !line.is_empty())
+            .collect();
+        assert_eq!(typed.first(), Some(&"first"));
+        assert_eq!(typed.last(), Some(&"last"));
+        assert_eq!(doc.expected_char(), Some('f'));
+
+        typed.sort();
+        assert_eq!(typed, ["b", "c", "d", "first", "last"]);
     }
 
     #[test]

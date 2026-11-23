@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `r` on the results screen of a lesson restarts it with the lines between its first and last in a new order, so it isn't typed from memory, and its hint reads "shuffle"; a lesson started from the menu or with `n` comes in the written order, `Ctrl-R` and the pause menu restart in the order on screen, and `r` after a practice still retypes the same text
+
 ### Fixed
 - Broken or cut-off words and drills in the lessons of all three layouts and the shared symbol lessons
 - Lesson lines that stopped mid-sentence or ended in a stray word or a doubled `;`; the new text uses only the keys taught so far

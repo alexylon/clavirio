@@ -763,9 +763,15 @@ fn results_lines(app: &App, tc: &ThemeColors, keyboard_shown: bool) -> Vec<Line<
             Style::new().fg(tc.dim_text),
         ),
     ]));
+
+    let r_label = if app.try_again_shuffles() {
+        " shuffle  "
+    } else {
+        " restart  "
+    };
     let mut actions = vec![
         Span::styled("r", Style::new().fg(tc.accent).bold()),
-        Span::styled(" restart  ", Style::new().fg(tc.dim_text)),
+        Span::styled(r_label, Style::new().fg(tc.dim_text)),
         Span::styled("w", Style::new().fg(tc.accent).bold()),
         Span::styled(" weak keys  ", Style::new().fg(tc.dim_text)),
     ];

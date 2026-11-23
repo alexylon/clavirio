@@ -225,14 +225,14 @@ A maximized terminal gives the text, keyboard, and stats more room. The virtual 
 |-----|--------|
 | `Backspace` | Correct mistake |
 | `Esc` | Pause menu (in zen mode, stop) |
-| `Ctrl-R` | Restart (not in zen mode) |
+| `Ctrl-R` | Restart in the order on screen (not in zen mode) |
 | `Ctrl-F` | Load file |
 
 ### Finished Screen
 
 | Key | Action |
 |-----|--------|
-| `r` | Restart |
+| `r` | Restart; a lesson comes back with the lines between its first and last in a new order (shown as "shuffle") |
 | `w` | Practice weak keys |
 | `n` | Next lesson, or the same practice with new text (not after the last lesson or a file) |
 | `Esc` | Back to menu |

@@ -205,6 +205,16 @@ impl Rng {
     fn usize(&mut self, bound: usize) -> usize {
         (self.next() % bound as u64) as usize
     }
+
+    fn shuffle<T>(&mut self, items: &mut [T]) {
+        for i in (1..items.len()).rev() {
+            items.swap(i, self.usize(i + 1));
+        }
+    }
+}
+
+pub fn shuffle<T>(items: &mut [T]) {
+    Rng::from_time().shuffle(items);
 }
 
 const LINE_WIDTH: usize = 60;
@@ -523,9 +533,7 @@ pub fn generate_quote_text(word_count: usize) -> String {
 
     while total_words < word_count {
         if pos >= indices.len() {
-            for i in (1..indices.len()).rev() {
-                indices.swap(i, rng.usize(i + 1));
-            }
+            rng.shuffle(&mut indices);
             pos = 0;
         }
         let quote = quotes[indices[pos]];
