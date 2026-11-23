@@ -8,13 +8,16 @@ Run from the repository root on macOS, after `cargo build --release`:
 It opens the same Ghostty window as assets/demo.py, with a fresh home folder,
 and takes four screenshots: a Quotes practice halfway through, its results, the
 lesson menu, and the practice menu in the light theme. Each is saved in
-assets/images as a PNG with the window's shadow and as a WebP. It takes about 3
+assets/images as a PNG and as a WebP, with the window's shadow. The PNG, for
+the Snap Store, which doesn't take WebP, loses the shadow's faint outer rows to
+fit the store's 2160 pixel height. It takes about 3
 minutes, during which the Mac shouldn't be used. It needs what assets/demo.py
 needs, and cwebp.
 """
 
 import json
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -28,6 +31,7 @@ import demo  # noqa: E402
 IMAGES = Path("assets/images")
 WEBP_QUALITY = 85
 SETTLE = 1
+SNAP_STORE_HEIGHT = 2160
 
 # An earlier Quotes session, slower than the one typed here, so the results
 # show "New best!"
@@ -91,7 +95,17 @@ def shot(window_id, name):
     subprocess.run(["screencapture", "-x", f"-l{window_id}", str(png)], check=True)
     subprocess.run(["cwebp", "-quiet", "-q", str(WEBP_QUALITY), str(png),
                     "-o", str(png.with_suffix(".webp"))], check=True)
+    fit_snap_store(png)
     print(f"Took {png}")
+
+
+def fit_snap_store(png):
+    """Trims the shadow's outer rows, which are almost transparent, top and
+    bottom, until the PNG is no higher than the Snap Store allows"""
+    width, height = struct.unpack(">II", png.read_bytes()[16:24])
+    if height > SNAP_STORE_HEIGHT:
+        subprocess.run(["sips", "--cropToHeightWidth", str(SNAP_STORE_HEIGHT), str(width), str(png)],
+                       check=True, capture_output=True)
 
 
 def press(key, times=1):
