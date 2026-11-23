@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- `cargo binstall clavirio` installs the prebuilt binary for macOS, Linux (x86_64) or Windows (x86_64) from GitHub Releases instead of building it, with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall)
+
 ### Changed
 - `r` on the results screen of a lesson restarts it with the lines between its first and last in a new order, so it isn't typed from memory, and its hint reads "shuffle"; a lesson started from the menu or with `n` comes in the written order, `Ctrl-R` and the pause menu restart in the order on screen, and `r` after a practice still retypes the same text
 
 ### Fixed
+- The prebuilt Linux binary is built on Ubuntu 22.04, like the `.deb`, so it also runs on Debian 12 and Ubuntu 22.04; it needed glibc 2.39
 - Broken or cut-off words and drills in the lessons of all three layouts and the shared symbol lessons
 - Lesson lines that stopped mid-sentence or ended in a stray word or a doubled `;`; the new text uses only the keys taught so far
 - Double spaces in the symbol lessons, which had to be typed as two spaces

@@ -137,7 +137,7 @@ You can also download the `.deb` from [GitHub Releases](https://github.com/alexy
 
 ### Prebuilt binary
 
-Download a standalone binary from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest). Builds are available for macOS (Intel and Apple Silicon), Linux (x86_64), and Windows (x86_64).
+Download a standalone binary from [GitHub Releases](https://github.com/alexylon/clavirio/releases/latest). Builds are available for macOS (Intel and Apple Silicon), Linux (x86_64), and Windows (x86_64). The Linux build runs on Debian 12, Ubuntu 22.04 and newer.
 
 ```bash
 # macOS / Linux
@@ -154,6 +154,8 @@ sudo mv clavirio /usr/local/bin/
 ```bash
 cargo install clavirio
 ```
+
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), `cargo binstall clavirio` downloads the prebuilt binary for macOS, Linux (x86_64) or Windows (x86_64) from GitHub Releases instead of building it.
 
 ### From source
 

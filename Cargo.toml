@@ -49,6 +49,16 @@ assets = [
     ["NOTICE", "usr/share/doc/clavirio/", "644"],
 ]
 
+# Where `cargo binstall clavirio` finds the binary of each GitHub release
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+# The Windows build is released only as a .zip
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.29"
