@@ -1,6 +1,6 @@
 <p align="center"><img src="/assets/images/readme_banner.png" alt="clavirio: learn touch typing in your terminal"></p>
 
-![](https://github.com/alexylon/clavirio/actions/workflows/rust.yml/badge.svg) &nbsp; [![Crates.io](https://img.shields.io/crates/v/clavirio.svg?color=blue)](https://crates.io/crates/clavirio)
+![](https://github.com/alexylon/clavirio/actions/workflows/rust.yml/badge.svg) &nbsp; [![Crates.io](https://img.shields.io/crates/v/clavirio.svg?color=blue)](https://crates.io/crates/clavirio) &nbsp; ![Made in the EU](https://img.shields.io/badge/made_in-the_EU-003399)
 
 [clavir.io](https://clavir.io)
 
