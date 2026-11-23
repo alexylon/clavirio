@@ -13,7 +13,7 @@ virtual keyboard, and saves your session history. It is built with Rust and
 
 *clavirio* — from Latin *clavis* (key).
 
-<div align="center"><img src="/assets/images/demo.webp" style="width: 800px;" alt="clavirio: typing a lesson"></div>
+<div align="center"><img src="/assets/images/demo.gif" style="width: 800px;" alt="clavirio: typing a lesson"></div>
 
 <div align="center"><img src="/assets/images/screenshot_dark.webp" style="width: 800px;" alt="clavirio"></div>
 

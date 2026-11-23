@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Records the animated demo at the top of the README.
+"""Records the animated demo, assets/images/demo.webp.
 
 Run from the repository root on macOS, after `cargo build --release`:
 
@@ -8,8 +8,9 @@ Run from the repository root on macOS, after `cargo build --release`:
 It opens a Ghostty window on a tmux session, types QWERTY lesson 14 into
 clavirio with a fresh home folder, records the window with screencapture and
 makes the animated assets/images/demo.webp with ffmpeg and img2webp, leaving
-out the middle of the lesson. WebP keeps the app's colours, which a GIF's
-palette washes out.
+out the middle of the lesson. The README and the website show demo.gif
+instead, made by hand from the same frames, as Safari plays this WebP very
+slowly.
 It takes about 3 minutes, during which the Mac shouldn't be used: the window
 must stay in front and on screen. It needs Ghostty, tmux, ffmpeg and img2webp,
 and Screen Recording permission for the terminal that runs it.
