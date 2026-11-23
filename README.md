@@ -74,7 +74,9 @@ are the same for every layout.
 
 A lesson is passed at 95% accuracy. Below that, the results screen suggests
 trying again, and the menu and the next start of Clavirio stay on the lesson;
-`n` still goes on to the next one.
+`n` still goes on to the next one. Trying a lesson again with `r` brings the
+lines between its first and last back in a new order, so it isn't typed from
+memory.
 
 | # | Lesson | QWERTY | Dvorak | Colemak |
 |---|--------|--------|--------|---------|
