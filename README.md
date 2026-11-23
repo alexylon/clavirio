@@ -1,6 +1,4 @@
-<div align="center"><img src="/assets/images/icon_gunmetal_scanlines_512.png" style="width: 85px;" alt="clavirio"></div>
-
-<h1 align="center"><code>clavirio</code></h1>
+<p align="center"><img src="/assets/images/readme_banner.png" alt="clavirio: learn touch typing in your terminal"></p>
 
 ![](https://github.com/alexylon/clavirio/actions/workflows/rust.yml/badge.svg) &nbsp; [![Crates.io](https://img.shields.io/crates/v/clavirio.svg?color=blue)](https://crates.io/crates/clavirio)
 
