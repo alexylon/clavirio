@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Broken or cut-off words in the lesson text: QWERTY lessons 4, 8, 9 and 18, Dvorak lessons 3, 6, 11 and 14, and Colemak lesson 5
+
 ## [0.5.0] - 2026-11-22
 
 ### Added
