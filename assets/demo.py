@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Records the animated demo, assets/images/demo.webp.
+"""Records the animated demo at the top of the README.
 
 Run from the repository root on macOS, after `cargo build --release`:
 
@@ -7,13 +7,13 @@ Run from the repository root on macOS, after `cargo build --release`:
 
 It opens a Ghostty window on a tmux session, types QWERTY lesson 14 into
 clavirio with a fresh home folder, records the window with screencapture and
-makes the animated assets/images/demo.webp with ffmpeg and img2webp, leaving
-out the middle of the lesson. The README and the website show demo.gif
-instead, made by hand from the same frames, as Safari plays this WebP very
-slowly.
-It takes about 3 minutes, during which the Mac shouldn't be used: the window
-must stay in front and on screen. It needs Ghostty, tmux, ffmpeg and img2webp,
-and Screen Recording permission for the terminal that runs it.
+makes the animated assets/images/demo.gif with ffmpeg and ImageMagick, leaving
+out the middle of the lesson. It's a GIF because Safari plays an animated WebP
+this large very slowly, and the Snap Store doesn't take WebP.
+The recording takes about 3 minutes, during which the Mac shouldn't be used:
+the window must stay in front and on screen. Making the GIF takes about 4 more.
+It needs Ghostty, tmux, ffmpeg and ImageMagick, and Screen Recording permission
+for the terminal that runs it.
 """
 
 import json
@@ -21,11 +21,12 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 LESSON = Path("assets/lessons/qwerty/14_top_shift.txt")
 LESSON_INDEX = 13
-OUTPUT = Path("assets/images/demo.webp")
+OUTPUT = Path("assets/images/demo.gif")
 APP = Path("target/release/clavirio").resolve()
 
 TMUX = [shutil.which("tmux") or "tmux", "-L", "clavirio-demo", "-f", "/dev/null"]
@@ -43,7 +44,19 @@ RECORDING_LIMIT = 165
 
 WIDTH = 1600
 FPS = 20
-QUALITY = 80
+COLOURS = 256
+FRAME_NAMES = "%05d.png"
+
+# The recording's noise, which would change most of every GIF frame: a pixel
+# that changes by less than this in each colour is kept as it was
+NOISE = "3%"
+# A screen that stays the same for this many frames or more is shown as its
+# last frame throughout, as the recording gets sharper while the screen is still
+STILL_FRAMES = 8
+# The biggest change between two frames, colour by colour, as a black and white
+# image of the pixels that changed for real
+REAL_CHANGES = ["-compose", "difference", "-composite", "-separate",
+                "-evaluate-sequence", "max", "-threshold", NOISE]
 
 # Mistakes typed on purpose, in every line, as a learner makes them: mostly a
 # neighbouring key, sometimes a capital typed without Shift. Q, W and P are
@@ -177,19 +190,74 @@ def record(region, movie):
     return shown_until, results_from
 
 
-def make_webp(movie, shown_until, results_from):
-    frames = movie.parent / "frames"
-    frames.mkdir(exist_ok=True)
-    cut = (
+def ffmpeg(*args):
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *args], check=True)
+
+
+def cut(movie, shown_until, results_from, frames):
+    """Saves the recording as frames, without the middle of the lesson"""
+    keep = (
         f"[0:v]trim=0:{shown_until},setpts=PTS-STARTPTS[a];"
         f"[0:v]trim={results_from}:{results_from + RESULTS_SHOWN},setpts=PTS-STARTPTS[b];"
         f"[a][b]concat=n=2:v=1,fps={FPS},scale={WIDTH}:-1:flags=lanczos"
     )
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(movie),
-                    "-filter_complex", cut, str(frames / "%05d.png")], check=True)
-    subprocess.run(["img2webp", "-loop", "0", "-lossy", "-sharp_yuv", "-q", str(QUALITY),
-                    "-d", str(round(1000 / FPS))] + [str(f) for f in sorted(frames.glob("*.png"))]
-                   + ["-o", str(OUTPUT)], check=True, capture_output=True)
+    ffmpeg("-i", str(movie), "-filter_complex", keep, str(frames / FRAME_NAMES))
+
+
+def changes(before, after):
+    """Whether any pixel changes for real from one frame to the next"""
+    result = subprocess.run(["magick", str(before), str(after), *REAL_CHANGES,
+                             "-format", "%[fx:mean>0]", "info:"],
+                            check=True, capture_output=True, text=True)
+    return result.stdout.strip() == "1"
+
+
+def hold(previous, frame, steady):
+    """Saves the frame where it changes for real from the previous steady frame,
+    and a little around, and the previous steady frame everywhere else"""
+    subprocess.run(["magick", str(previous), str(frame),
+                    "(", "-clone", "0", "-clone", "1", *REAL_CHANGES,
+                    "-morphology", "Dilate", "Square:2", ")",
+                    "-compose", "over", "-composite", f"PNG24:{steady}"], check=True)
+
+
+def steady(frames, steadied):
+    """Saves the frames without the recording's noise, so that each GIF frame
+    holds only what changed on the screen"""
+    paths = sorted(frames.glob("*.png"))
+    with ThreadPoolExecutor() as pool:
+        changed = [True] + list(pool.map(changes, paths, paths[1:]))
+
+    start = 0
+    while start < len(paths):
+        end = start
+        while end + 1 < len(paths) and not changed[end + 1]:
+            end += 1
+
+        # The first frames have no steady frame before them to hold
+        still = start == 0 or end - start + 1 >= STILL_FRAMES
+        for index in range(start, end + 1):
+            target = steadied / paths[index].name
+            if still:
+                shutil.copy(paths[end], target)
+            else:
+                hold(steadied / paths[index - 1].name, paths[index], target)
+
+        start = end + 1
+
+
+def make_gif(frames, work):
+    steadied = work / "steadied"
+    steadied.mkdir(exist_ok=True)
+    steady(frames, steadied)
+
+    palette = work / "palette.png"
+    steady_frames = ["-framerate", str(FPS), "-i", str(steadied / FRAME_NAMES)]
+    # The palette favours the colours of what changes, such as the keys lighting
+    # up, and there's no dithering, whose dots would differ from frame to frame
+    ffmpeg(*steady_frames, "-vf", f"palettegen=max_colors={COLOURS}:stats_mode=diff", str(palette))
+    ffmpeg(*steady_frames, "-i", str(palette), "-lavfi",
+           "[0:v][1:v]paletteuse=dither=none:diff_mode=rectangle", "-loop", "0", str(OUTPUT))
 
 
 def main():
@@ -206,7 +274,10 @@ def main():
     finally:
         subprocess.run(TMUX + ["kill-server"], capture_output=True)
 
-    make_webp(movie, shown_until, results_from)
+    frames = tmp / "frames"
+    frames.mkdir()
+    cut(movie, shown_until, results_from, frames)
+    make_gif(frames, tmp)
     print(f"Made {OUTPUT} from {movie}")
 
 
