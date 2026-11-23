@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-23
+
 ### Added
 - `cargo binstall clavirio` installs the prebuilt binary for macOS, Linux (x86_64) or Windows (x86_64) from GitHub Releases instead of building it, with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall)
 
