@@ -3,7 +3,10 @@
 ## [Unreleased]
 
 ### Fixed
-- Broken or cut-off words in the lesson text: QWERTY lessons 4, 8, 9 and 18, Dvorak lessons 3, 6, 11 and 14, and Colemak lesson 5
+- Broken or cut-off words and drills in the lessons of all three layouts and the shared symbol lessons
+- Lesson lines that stopped mid-sentence or ended in a stray word or a doubled `;`; the new text uses only the keys taught so far
+- Double spaces in the symbol lessons, which had to be typed as two spaces
+- Lessons that never used one of their own keys: `K` in QWERTY lesson 7, `/` in QWERTY lesson 20, `O` in Colemak lesson 7, `U` in Dvorak lesson 7 and Colemak lesson 14, and `Z` and `X` in QWERTY and Colemak lesson 21
 
 ## [0.5.0] - 2026-11-22
 

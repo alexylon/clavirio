@@ -188,4 +188,59 @@ mod tests {
         assert_eq!(lessons[0].id, "lesson_01");
         assert_eq!(lessons[26].id, "lesson_27");
     }
+
+    const LAYOUTS: [KeyboardLayout; 3] = [
+        KeyboardLayout::Qwerty,
+        KeyboardLayout::Dvorak,
+        KeyboardLayout::Colemak,
+    ];
+
+    // Typed as two spaces, which is hard to see on screen; trailing spaces are
+    // trimmed when a lesson is loaded
+    const DOUBLE_SPACE: &str = "  ";
+
+    #[test]
+    fn lesson_lines_have_no_double_or_leading_spaces() {
+        for layout in LAYOUTS {
+            for lesson in lessons_for_layout(layout) {
+                for (index, line) in lesson.text.lines().enumerate() {
+                    assert!(
+                        !line.contains(DOUBLE_SPACE) && !line.starts_with(' '),
+                        "{layout:?} {} line {}: extra spaces in {line:?}",
+                        lesson.id,
+                        index + 1
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lessons_use_their_keys_and_only_keys_taught_so_far() {
+        for layout in LAYOUTS {
+            let mut taught = std::collections::HashSet::from([' ']);
+
+            for lesson in lessons_for_layout(layout) {
+                let keys: Vec<char> = lesson.keys.chars().filter(|c| !c.is_whitespace()).collect();
+                let unused: String = keys.iter().filter(|&&c| !lesson.text.contains(c)).collect();
+                assert!(
+                    unused.is_empty(),
+                    "{layout:?} {} never uses {unused:?}",
+                    lesson.id
+                );
+
+                taught.extend(keys);
+
+                for (index, line) in lesson.text.lines().enumerate() {
+                    let untaught: String = line.chars().filter(|c| !taught.contains(c)).collect();
+                    assert!(
+                        untaught.is_empty(),
+                        "{layout:?} {} line {}: {untaught:?} isn't taught yet",
+                        lesson.id,
+                        index + 1
+                    );
+                }
+            }
+        }
+    }
 }
