@@ -1,0 +1,184 @@
+<!doctype html>
+<!--
+  clavirio's banner. At 1500 by 500 it is the Snap Store's featured banner
+  (assets/images/snap_banner.png, drawn at twice that size) and the banner at the top of the
+  README (assets/images/readme_banner.png). With #og at the end of its address it is the
+  1200 by 630 image shown when clavir.io is shared (public/images/og.png in clavir-io).
+
+  The same page is assets/banner.html in clavirio and scripts/banner.html in clavir-io: change
+  both together. assets/banners.py and clavir-io's scripts/og-image.mjs render it, with the
+  icon beside it as icon.png. JetBrains Mono comes from Google Fonts.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=block" rel="stylesheet">
+<style>
+  :root {
+    --green: #2ad05c;
+    --blue: #64b4ff;
+    --yellow: #f2c94c;
+    --dim: #5d6166;
+    --key: #8a8e93;
+    --text: #e8e8e6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1500px; height: 500px; overflow: hidden; }
+  body {
+    font-family: "JetBrains Mono", Menlo, monospace;
+    color: var(--text);
+    background:
+      radial-gradient(ellipse 520px 380px at 250px 250px, rgba(42, 208, 92, 0.13), transparent 70%),
+      radial-gradient(ellipse 900px 600px at 1100px 260px, rgba(100, 180, 255, 0.05), transparent 70%),
+      linear-gradient(180deg, #17191b 0%, #0f1011 100%);
+    position: relative;
+  }
+  body::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0 1px, transparent 1px 4px);
+    pointer-events: none;
+  }
+
+  .brand {
+    position: absolute; left: 88px; top: 0; bottom: 0;
+    display: flex; align-items: center; gap: 40px;
+  }
+  .brand img {
+    width: 176px; height: 176px;
+    filter: drop-shadow(0 18px 30px rgba(0,0,0,0.55)) drop-shadow(0 0 40px rgba(42,208,92,0.18));
+  }
+  .name {
+    font-size: 76px; font-weight: 800; letter-spacing: -2px;
+    color: var(--green);
+    text-shadow: 0 0 28px rgba(42, 208, 92, 0.35);
+    line-height: 1;
+  }
+  .name .caret {
+    display: inline-block; width: 0.42em; height: 0.86em; margin-left: 8px;
+    background: var(--green); vertical-align: -0.1em; opacity: 0.85;
+  }
+  .tagline {
+    margin-top: 18px;
+    font-size: 23px; font-weight: 500; color: var(--text);
+  }
+  .tags {
+    margin-top: 22px; font-size: 16px; color: #9aa0a6; letter-spacing: 0.2px;
+  }
+  .tags b { color: var(--green); font-weight: 500; margin: 0 8px; }
+
+  .term {
+    position: absolute; right: 88px; top: 50%; transform: translateY(-50%);
+    width: 520px;
+    border: 1.5px solid #3a3d41; border-radius: 14px;
+    background: rgba(20, 18, 16, 0.92);
+    box-shadow: 0 30px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03) inset;
+    padding: 18px 22px 26px;
+  }
+  .stats {
+    display: flex; justify-content: space-between;
+    font-size: 14px; color: var(--dim);
+    padding-bottom: 12px; border-bottom: 1px solid #2c2e31;
+  }
+  .stats .n1 { color: #7fc8c8; }
+  .stats .n2 { color: var(--text); font-weight: 700; }
+  .stats .n3 { color: var(--yellow); }
+  .stats .fg { color: var(--yellow); font-weight: 700; }
+  .line {
+    margin: 28px 0 30px; text-align: center;
+    font-size: 19px; letter-spacing: 0.2px; white-space: pre;
+  }
+  .typed { color: var(--blue); }
+  .cur { background: var(--text); color: #111; }
+  .rest { color: var(--dim); }
+
+  .kb { display: flex; flex-direction: column; gap: 6px; width: fit-content; margin: 0 auto; }
+  .row { display: flex; gap: 6px; }
+  .k {
+    position: relative;
+    width: 34px; height: 34px;
+    border: 1.2px solid #4a4d51; border-radius: 4px;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 4px;
+    font-size: 12px; color: var(--key);
+  }
+  .k.on { border-color: var(--blue); color: var(--blue); }
+  .k.on::before {
+    content: "I"; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; font-weight: 700; color: var(--yellow);
+    background: rgba(20, 18, 16, 1); padding: 0 3px; line-height: 16px;
+  }
+  .k.home { color: #c9ccd0; }
+  .space { width: 214px; }
+
+  .og-br { display: none; }
+  .og, .og body { width: 1200px; height: 630px; }
+  .og body {
+    background:
+      radial-gradient(ellipse 460px 420px at 200px 315px, rgba(42, 208, 92, 0.13), transparent 70%),
+      radial-gradient(ellipse 700px 600px at 880px 320px, rgba(100, 180, 255, 0.05), transparent 70%),
+      linear-gradient(180deg, #17191b 0%, #0f1011 100%);
+  }
+  .og .brand { left: 72px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 30px; }
+  .og .brand img { width: 132px; height: 132px; }
+  .og .name { font-size: 70px; }
+  .og .tagline { font-size: 26px; line-height: 1.35; }
+  .og .og-br { display: inline; }
+  .og .tags { font-size: 15px; }
+  .og .tags b { margin: 0 6px; }
+  .og .term { right: 72px; width: 560px; }
+  .og .line { margin: 44px 0 46px; }
+  .og .k { width: 36px; height: 36px; }
+  .og .space { width: 226px; }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <img src="icon.png" alt="">
+    <div>
+      <div class="name">clavirio<span class="caret"></span></div>
+      <div class="tagline">Learn touch typing<br class="og-br"> in your terminal</div>
+      <div class="tags">QWERTY<b>·</b>Dvorak<b>·</b>Colemak<b>·</b>Code<b>·</b>Quotes</div>
+    </div>
+  </div>
+
+  <div class="term">
+    <div class="stats">
+      <span>Lessons · 6/21</span>
+      <span><span class="fg">I</span> index</span>
+      <span><span class="n1">64</span> wpm · <span class="n2">98%</span> acc · <span class="n3">1</span> err</span>
+    </div>
+    <div class="line"><span class="typed">accuracy first, </span><span class="cur">t</span><span class="rest">hen speed</span></div>
+    <div class="kb" id="kb"></div>
+  </div>
+
+<script>
+  if (location.hash === "#og") document.documentElement.classList.add("og");
+  const rows = [
+    ["Q","W","E","R","T","Y","U","I","O","P","[","]"],
+    ["A","S","D","F","G","H","J","K","L",";","'"],
+    ["Z","X","C","V","B","N","M",",",".","/"],
+  ];
+  const kb = document.getElementById("kb");
+  rows.forEach((r, i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.style.marginLeft = ["0px", "12px", "30px"][i];
+    r.forEach(c => {
+      const k = document.createElement("div");
+      k.className = "k" + (c === "T" ? " on" : "") + ("FJ".includes(c) ? " home" : "");
+      k.textContent = c;
+      row.appendChild(k);
+    });
+    kb.appendChild(row);
+  });
+  const sp = document.createElement("div");
+  sp.className = "row";
+  sp.style.marginLeft = "120px";
+  const s = document.createElement("div");
+  s.className = "k space";
+  sp.appendChild(s);
+  kb.appendChild(sp);
+</script>
+</body>
+</html>
